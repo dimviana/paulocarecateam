@@ -56,12 +56,26 @@ const simulateDelay = <T,>(data: T): Promise<T> =>
   new Promise(resolve => setTimeout(() => resolve(data), 500));
 
 export const api = {
-  login: (email: string, pass: string): Promise<User | null> => {
+  login: (email: string, pass: string): Promise<{ token: string | null }> => {
+    let user: User | undefined;
     if (email === 'androiddiviana@gmail.com' && pass === 'dvsviana') {
-        return simulateDelay(users.find(u => u.email === email) || null);
+        user = users.find(u => u.email === email);
+    } else {
+        user = users.find(u => u.email === email);
     }
-    const user = users.find(u => u.email === email);
-    return simulateDelay(user || null);
+    
+    if (user) {
+        // Simulate JWT generation. In a real app, this is done on the backend with a secret key.
+        const payload = {
+            userId: user.id,
+            iat: Date.now(),
+            exp: Date.now() + 1000 * 60 * 60 * 24, // 24 hour expiration
+        };
+        const token = btoa(JSON.stringify(payload));
+        return simulateDelay({ token });
+    }
+
+    return simulateDelay({ token: null });
   },
   getStudents: () => simulateDelay(students),
   getAcademies: () => simulateDelay(academies),

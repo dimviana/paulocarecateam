@@ -30,6 +30,12 @@ const SettingsPage: React.FC = () => {
             [name]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value) || 0 : value)
         }));
     };
+    
+    const handleGenerateSecret = () => {
+        if(window.confirm('Gerar uma nova chave irá invalidar todas as sessões ativas. Deseja continuar?')){
+            setSettings(prev => ({...prev, jwtSecret: crypto.randomUUID()}));
+        }
+    };
 
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
@@ -97,6 +103,16 @@ const SettingsPage: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <Input label="Dias para lembrete (antes do venc.)" name="reminderDaysBeforeDue" type="number" min="0" value={settings.reminderDaysBeforeDue} onChange={handleChange} />
                                 <Input label="Dias para cobrança (após venc.)" name="overdueDaysAfterDue" type="number" min="0" value={settings.overdueDaysAfterDue} onChange={handleChange} />
+                            </div>
+
+                            <h2 className="text-xl font-bold text-red-500 border-b border-gray-200 dark:border-gray-700 pb-2 pt-4">API & Segurança</h2>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Chave Secreta JWT</label>
+                                <div className="flex items-center gap-2">
+                                    <Input name="jwtSecret" value={settings.jwtSecret} readOnly className="flex-grow font-mono" />
+                                    <Button type="button" variant="secondary" onClick={handleGenerateSecret}>Gerar Nova Chave</Button>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Esta chave é usada para assinar os tokens de sessão. Gerar uma nova chave invalidará todas as sessões ativas.</p>
                             </div>
                         </>
                     )}

@@ -78,7 +78,8 @@ html {
   `,
   customJs: `
 // console.log("Custom JS loaded!");
-  `
+  `,
+  jwtSecret: '',
 };
 
 

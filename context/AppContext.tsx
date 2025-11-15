@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord } from '../types';
 import { initialThemeSettings } from '../constants';
 import { api } from '../services/api';
@@ -34,14 +34,15 @@ export const AppContext = createContext<AppContextType>(null!);
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [themeSettings, setThemeSettingsState] = useState<ThemeSettings>(() => {
     const saved = localStorage.getItem('themeSettings');
-    return saved ? JSON.parse(saved) : initialThemeSettings;
+    const settings = saved ? JSON.parse(saved) : initialThemeSettings;
+    if (!settings.jwtSecret) {
+        settings.jwtSecret = crypto.randomUUID();
+        localStorage.setItem('themeSettings', JSON.stringify(settings));
+    }
+    return settings;
   });
   
-  const [user, setUser] = useState<User | null>(() => {
-      const savedUser = localStorage.getItem('user');
-      return savedUser ? JSON.parse(savedUser) : null;
-  });
-  
+  const [user, setUser] = useState<User | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [academies, setAcademies] = useState<Academy[]>([]);
   const [graduations, setGraduations] = useState<Graduation[]>([]);
@@ -49,6 +50,59 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [users, setUsers] = useState<User[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const logout = useCallback(() => {
+    setUser(null);
+    localStorage.removeItem('authToken');
+  }, []);
+
+  useEffect(() => {
+    const verifyTokenAndSetUser = (token: string, allUsers: User[]) => {
+      try {
+        const payload = JSON.parse(atob(token));
+        if (payload.exp > Date.now()) {
+          const loggedInUser = allUsers.find(u => u.id === payload.userId);
+          if (loggedInUser) {
+            setUser(loggedInUser);
+          } else {
+            logout();
+          }
+        } else {
+          logout();
+        }
+      } catch (error) {
+        console.error("Token verification failed", error);
+        logout();
+      }
+    };
+    
+    const fetchData = async () => {
+        setLoading(true);
+        const [studentsData, academiesData, graduationsData, schedulesData, usersData, attendanceData] = await Promise.all([
+            api.getStudents(),
+            api.getAcademies(),
+            api.getGraduations(),
+            api.getSchedules(),
+            api.getUsers(),
+            api.getAttendanceRecords(),
+        ]);
+        setStudents(studentsData);
+        setAcademies(academiesData);
+        setGraduations(graduationsData);
+        setSchedules(schedulesData);
+        setUsers(usersData);
+        setAttendanceRecords(attendanceData);
+        
+        const token = localStorage.getItem('authToken');
+        if (token) {
+            verifyTokenAndSetUser(token, usersData);
+        }
+
+        setLoading(false);
+    };
+    fetchData();
+  }, [logout]);
+
 
   useEffect(() => {
     localStorage.setItem('themeSettings', JSON.stringify(themeSettings));
@@ -87,45 +141,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 }, [themeSettings.theme]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-        setLoading(true);
-        const [studentsData, academiesData, graduationsData, schedulesData, usersData, attendanceData] = await Promise.all([
-            api.getStudents(),
-            api.getAcademies(),
-            api.getGraduations(),
-            api.getSchedules(),
-            api.getUsers(),
-            api.getAttendanceRecords(),
-        ]);
-        setStudents(studentsData);
-        setAcademies(academiesData);
-        setGraduations(graduationsData);
-        setSchedules(schedulesData);
-        setUsers(usersData);
-        setAttendanceRecords(attendanceData);
-        setLoading(false);
-    };
-    fetchData();
-  }, []);
-
   const setThemeSettings = (settings: ThemeSettings) => {
     setThemeSettingsState(settings);
   };
   
   const login = async (email: string, pass: string) => {
-    const loggedInUser = await api.login(email, pass);
-    if (loggedInUser) {
-      setUser(loggedInUser);
-      localStorage.setItem('user', JSON.stringify(loggedInUser));
-      return true;
+    const { token } = await api.login(email, pass);
+    if (token) {
+        localStorage.setItem('authToken', token);
+        try {
+            const payload = JSON.parse(atob(token));
+            const loggedInUser = users.find(u => u.id === payload.userId);
+            if (loggedInUser) {
+                setUser(loggedInUser);
+                return true;
+            }
+        } catch (e) {
+            console.error("Failed to parse token", e);
+            logout();
+            return false;
+        }
     }
+    logout();
     return false;
-  };
-  
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
   };
 
   const updateStudentPayment = async (studentId: string, status: 'paid' | 'unpaid') => {

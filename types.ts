@@ -81,6 +81,8 @@ export interface ThemeSettings {
   footerHtml: string;
   customCss: string;
   customJs: string;
+  // Security
+  jwtSecret: string;
 }
 
 export interface NewsArticle {
