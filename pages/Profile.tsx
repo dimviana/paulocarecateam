@@ -1,0 +1,84 @@
+import React, { useContext } from 'react';
+import { AppContext } from '../context/AppContext';
+import Card from '../components/ui/Card';
+import { Navigate } from 'react-router-dom';
+
+const calculateTrainingTime = (startDateString: string): string => {
+    if (!startDateString) return "N/A";
+    const startDate = new Date(startDateString);
+    const now = new Date();
+    
+    let years = now.getFullYear() - startDate.getFullYear();
+    let months = now.getMonth() - startDate.getMonth();
+    let days = now.getDate() - startDate.getDate();
+
+    if (days < 0) {
+        months--;
+        const lastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+        days += lastMonth.getDate();
+    }
+    if (months < 0) {
+        years--;
+        months += 12;
+    }
+    return `${years} anos, ${months} meses e ${days} dias`;
+};
+
+
+const ProfilePage: React.FC = () => {
+    const { user, students, academies, graduations, loading } = useContext(AppContext);
+
+    if (loading) {
+        return <div className="text-center text-white">Carregando perfil...</div>;
+    }
+
+    if (user?.role !== 'student') {
+        return <Navigate to="/dashboard" replace />;
+    }
+
+    const studentData = students.find(s => s.id === user.studentId);
+    if (!studentData) {
+        return <div className="text-center text-red-500">Perfil de aluno não encontrado.</div>;
+    }
+
+    const academy = academies.find(a => a.id === studentData.academyId);
+    const graduation = graduations.find(g => g.id === studentData.beltId);
+    const trainingTime = calculateTrainingTime(studentData.firstGraduationDate);
+
+    return (
+        <div className="space-y-6">
+            <h1 className="text-3xl font-bold text-white">Meu Perfil</h1>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="lg:col-span-1">
+                    <div className="flex flex-col items-center text-center">
+                        <img className="w-24 h-24 rounded-full mb-4 border-2 border-red-500" src={`https://i.pravatar.cc/150?u=${user.email}`} alt="User" />
+                        <h2 className="text-2xl font-bold text-white">{studentData.name}</h2>
+                        <p className="text-gray-400">{academy?.name}</p>
+                        <div className="mt-4 flex items-center bg-gray-700/50 px-3 py-1 rounded-full">
+                            {graduation && <span className="w-5 h-5 rounded-full mr-2 border border-gray-500" style={{ backgroundColor: graduation.color }}></span>}
+                            <span className="font-semibold">{graduation?.name}</span>
+                        </div>
+                    </div>
+                </Card>
+                <Card className="lg:col-span-2">
+                    <h3 className="text-xl font-bold text-red-500 mb-4">Informações</h3>
+                    <div className="space-y-3 text-gray-300">
+                        <p><strong>Email:</strong> {user.email}</p>
+                        <p><strong>Data de Nascimento:</strong> {new Date(studentData.birthDate).toLocaleDateString()}</p>
+                        <p><strong>CPF:</strong> {studentData.cpf}</p>
+                        <p><strong>Telefone:</strong> {studentData.phone}</p>
+                        <p><strong>Endereço:</strong> {studentData.address}</p>
+                        <p><strong>Tempo de Treino:</strong> {trainingTime}</p>
+                         <p><strong>Status Financeiro:</strong> 
+                            <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${studentData.paymentStatus === 'paid' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                {studentData.paymentStatus === 'paid' ? 'Em Dia' : 'Inadimplente'}
+                            </span>
+                        </p>
+                    </div>
+                </Card>
+            </div>
+        </div>
+    );
+};
+
+export default ProfilePage;
