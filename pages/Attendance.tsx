@@ -57,15 +57,15 @@ const DayScheduleModal: React.FC<{ date: Date; onClose: () => void }> = ({ date,
                         return (studentGrad?.rank ?? 0) >= (requiredGrad?.rank ?? 0);
                     });
                     return (
-                        <div key={schedule.id} className="p-3 bg-gray-800 rounded-lg">
-                            <h3 className="font-bold text-red-400">{schedule.className} ({schedule.startTime}-{schedule.endTime})</h3>
-                            <p className="text-sm text-gray-400 mb-2">Professor: {users.find(u => u.id === schedule.professorId)?.name}</p>
+                        <div key={schedule.id} className="p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                            <h3 className="font-bold text-red-500 dark:text-red-400">{schedule.className} ({schedule.startTime}-{schedule.endTime})</h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Professor: {users.find(u => u.id === schedule.professorId)?.name}</p>
                             <div className="space-y-2">
                                 {eligibleStudents.map(student => {
                                     const key = `${student.id}-${schedule.id}`;
                                     const currentStatus = attendance[key];
                                     return (
-                                        <div key={student.id} className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
+                                        <div key={student.id} className="flex justify-between items-center bg-gray-200 dark:bg-gray-700/50 p-2 rounded">
                                             <span>{student.name}</span>
                                             <div className="flex gap-2">
                                                 <Button size="sm" onClick={() => handleStatusChange(student.id, schedule.id, 'present')} className={currentStatus === 'present' ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-500'}>Presente</Button>
@@ -77,9 +77,9 @@ const DayScheduleModal: React.FC<{ date: Date; onClose: () => void }> = ({ date,
                             </div>
                         </div>
                     )
-                }) : <p className="text-gray-400">Nenhuma aula agendada para este dia.</p>}
+                }) : <p className="text-gray-500 dark:text-gray-400">Nenhuma aula agendada para este dia.</p>}
             </div>
-            <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-700">
+            <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <Button variant="secondary" onClick={onClose}>Cancelar</Button>
                 <Button onClick={handleSave}>Salvar Frequência</Button>
             </div>
@@ -152,24 +152,24 @@ const CalendarView: React.FC = () => {
     };
 
     return (
-        <Card className="!p-0 overflow-hidden border-gray-700">
-            <div className="p-4 flex items-center gap-4 bg-gray-800 border-b border-gray-700">
+        <Card className="!p-0 overflow-hidden border-gray-200 dark:border-gray-700">
+            <div className="p-4 flex items-center gap-4 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                 <input
                     type="number"
                     value={year}
                     onChange={handleYearChange}
-                    className="bg-gray-900 text-white p-2 rounded-md border border-gray-600 focus:ring-red-500 w-28 text-center"
+                    className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-2 rounded-md border border-gray-300 dark:border-gray-600 focus:ring-red-500 w-28 text-center"
                     placeholder="Ano"
                 />
                 <select
                     value={month}
                     onChange={handleMonthChange}
-                    className="bg-gray-900 text-white p-2 rounded-md border border-gray-600 focus:ring-red-500"
+                    className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-2 rounded-md border border-gray-300 dark:border-gray-600 focus:ring-red-500"
                 >
                     {MONTH_NAMES.map((m, i) => <option key={i} value={i}>{m.toUpperCase()}</option>)}
                 </select>
             </div>
-            <div className="bg-gray-900 text-white p-2 text-center font-bold text-lg tracking-widest">
+            <div className="bg-gray-800 dark:bg-gray-900 text-white p-2 text-center font-bold text-lg tracking-widest">
                 CALENDÁRIO {year} | {MONTH_NAMES[month].toUpperCase()}
             </div>
             <div className="grid grid-cols-7 text-center font-bold">
@@ -186,21 +186,21 @@ const CalendarView: React.FC = () => {
                     
                     let cellBg = 'bg-transparent';
                     if (!cell.isCurrentMonth) {
-                         cellBg = 'bg-gray-800/50';
+                         cellBg = 'bg-gray-100 dark:bg-gray-800/50';
                     } else if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
                          cellBg = 'bg-red-500/10';
                     }
 
-                    let textColor = 'text-white';
+                    let textColor = 'text-gray-900 dark:text-white';
                      if (!cell.isCurrentMonth) {
-                        textColor = 'text-gray-500';
+                        textColor = 'text-gray-400 dark:text-gray-500';
                     }
                     
                     return (
                         <div 
                             key={cell.date.toString()}
                             onClick={() => cell.isCurrentMonth && hasSchedule && handleDayClick(cell.day)}
-                            className={`h-24 p-2 border-t border-r border-gray-700 text-left align-top transition-colors ${cellBg} ${textColor} ${hasSchedule && cell.isCurrentMonth ? 'cursor-pointer hover:bg-red-900/50 relative' : ''}`}
+                            className={`h-24 p-2 border-t border-r border-gray-200 dark:border-gray-700 text-left align-top transition-colors ${cellBg} ${textColor} ${hasSchedule && cell.isCurrentMonth ? 'cursor-pointer hover:bg-red-900/50 relative' : ''}`}
                             style={{
                                 borderRightWidth: (index + 1) % 7 === 0 ? '0px' : '1px'
                             }}
@@ -250,7 +250,7 @@ const AttendanceGrid: React.FC<{ studentId: string }> = ({ studentId }) => {
                  {days.map(day => {
                     const dateStr = toYYYYMMDD(day);
                     const status = recordsByDate.get(dateStr);
-                    let colorClass = 'bg-gray-700';
+                    let colorClass = 'bg-gray-300 dark:bg-gray-700';
                     if (status === 'present') colorClass = 'bg-green-500';
                     if (status === 'absent') colorClass = 'bg-red-600';
 
@@ -261,7 +261,7 @@ const AttendanceGrid: React.FC<{ studentId: string }> = ({ studentId }) => {
                 <span>Legenda:</span>
                 <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-green-500"/> Presente</div>
                 <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-red-600"/> Faltou</div>
-                <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-gray-700"/> Sem Registro</div>
+                <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-gray-300 dark:bg-gray-700"/> Sem Registro</div>
              </div>
         </Card>
     );
@@ -274,7 +274,7 @@ const StudentView: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-white">Selecione um Aluno</h2>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Selecione um Aluno</h2>
              {loading ? <p>Carregando alunos...</p> : (
                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {students.map(student => {
@@ -282,14 +282,14 @@ const StudentView: React.FC = () => {
                         const isSelected = selectedStudentId === student.id;
                         return (
                            <div key={student.id} onClick={() => setSelectedStudentId(student.id)}
-                            className={`bg-gray-800/50 backdrop-blur-sm p-4 rounded-lg shadow-lg cursor-pointer transition-all duration-300
-                                ${isSelected ? 'border-2 border-red-500 scale-105' : 'border border-red-600/30 hover:border-red-500/50'}`}>
+                            className={`bg-white dark:bg-gray-800/50 backdrop-blur-sm p-4 rounded-lg shadow-lg cursor-pointer transition-all duration-300
+                                ${isSelected ? 'border-2 border-red-500 scale-105' : 'border border-gray-200 dark:border-red-600/30 hover:border-red-500/50'}`}>
                                <div className="text-center flex flex-col items-center">
-                                   <img src={`https://i.pravatar.cc/150?u=${student.cpf}`} alt={student.name} className="w-20 h-20 rounded-full mb-3 border-4 border-gray-700" />
-                                   <h2 className="font-bold text-white">{student.name}</h2>
+                                   <img src={`https://i.pravatar.cc/150?u=${student.cpf}`} alt={student.name} className="w-20 h-20 rounded-full mb-3 border-4 border-gray-200 dark:border-gray-700" />
+                                   <h2 className="font-bold text-gray-900 dark:text-white">{student.name}</h2>
                                    {belt && (
-                                       <div className="mt-1 flex items-center justify-center bg-gray-700/50 px-2 py-0.5 rounded-full text-xs">
-                                           <span className="w-3 h-3 rounded-full mr-1.5 border border-gray-500" style={{ backgroundColor: belt.color }}></span>
+                                       <div className="mt-1 flex items-center justify-center bg-gray-200 dark:bg-gray-700/50 px-2 py-0.5 rounded-full text-xs">
+                                           <span className="w-3 h-3 rounded-full mr-1.5 border border-gray-400 dark:border-gray-500" style={{ backgroundColor: belt.color }}></span>
                                            {belt.name}
                                        </div>
                                    )}
@@ -316,8 +316,8 @@ const AttendancePage: React.FC = () => {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center flex-wrap gap-4">
-                <h1 className="text-3xl font-bold text-white">Frequência</h1>
-                <div className="flex gap-2 p-1 bg-gray-800 rounded-lg">
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Frequência</h1>
+                <div className="flex gap-2 p-1 bg-gray-200 dark:bg-gray-800 rounded-lg">
                     <Button size="sm" variant={view === 'calendar' ? 'primary' : 'secondary'} onClick={() => setView('calendar')}>Visão Calendário</Button>
                     <Button size="sm" variant={view === 'student' ? 'primary' : 'secondary'} onClick={() => setView('student')}>Visão por Aluno</Button>
                 </div>

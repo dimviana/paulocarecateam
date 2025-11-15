@@ -72,6 +72,7 @@ export interface ThemeSettings {
   useGradient: boolean;
   reminderDaysBeforeDue: number;
   overdueDaysAfterDue: number;
+  theme: 'light' | 'dark' | 'system';
   // Public Web Page Settings
   publicPageEnabled: boolean;
   heroHtml: string;

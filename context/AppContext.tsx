@@ -58,6 +58,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [themeSettings]);
 
   useEffect(() => {
+    const themeToApply = themeSettings.theme;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    const applyFinalTheme = (t: 'light' | 'dark') => {
+        if (t === 'light') {
+            document.documentElement.classList.remove('dark');
+        } else {
+            document.documentElement.classList.add('dark');
+        }
+    };
+
+    const handleSystemChange = (e: MediaQueryListEvent) => {
+        if (themeToApply === 'system') {
+            applyFinalTheme(e.matches ? 'dark' : 'light');
+        }
+    };
+
+    if (themeToApply === 'system') {
+        applyFinalTheme(mediaQuery.matches ? 'dark' : 'light');
+        mediaQuery.addEventListener('change', handleSystemChange);
+    } else {
+        applyFinalTheme(themeToApply);
+    }
+
+    return () => {
+        mediaQuery.removeEventListener('change', handleSystemChange);
+    };
+}, [themeSettings.theme]);
+
+  useEffect(() => {
     const fetchData = async () => {
         setLoading(true);
         const [studentsData, academiesData, graduationsData, schedulesData, usersData, attendanceData] = await Promise.all([

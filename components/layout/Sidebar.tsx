@@ -25,8 +25,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
   const filteredLinks = navLinks.filter(link => link.roles.includes(user?.role || ''));
 
-  const linkClasses = "flex items-center px-4 py-3 text-gray-300 hover:bg-red-600/20 hover:text-red-400 rounded-lg transition-colors duration-200";
-  const activeLinkClasses = "bg-red-600/30 text-red-400 font-semibold";
+  const linkClasses = "flex items-center px-4 py-3 text-gray-600 dark:text-gray-300 hover:bg-red-600/10 dark:hover:bg-red-600/20 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors duration-200";
+  const activeLinkClasses = "bg-red-600/20 dark:bg-red-600/30 text-red-500 dark:text-red-400 font-semibold";
 
   return (
     <>
@@ -38,15 +38,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
       ></div>
 
       <div
-        className={`fixed top-0 left-0 z-40 w-64 h-full bg-gray-900 border-r border-gray-800/50 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:inset-0`}
+        className={`fixed top-0 left-0 z-40 w-64 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800/50 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:inset-0`}
       >
         {/* Sidebar header */}
-        <div className="flex justify-between items-center h-16 px-4 border-b border-gray-800">
+        <div className="flex justify-between items-center h-16 px-4 border-b border-gray-200 dark:border-gray-800">
           <NavLink to="/dashboard" className="flex items-center">
             <img src={themeSettings.logoUrl} alt="Logo" className="h-8 w-auto" />
-            <span className="text-white text-lg font-bold ml-2">{themeSettings.systemName}</span>
+            <span className="text-gray-800 dark:text-white text-lg font-bold ml-2">{themeSettings.systemName}</span>
           </NavLink>
-          <button className="lg:hidden text-gray-400 hover:text-white" onClick={() => setIsOpen(false)}>
+          <button className="lg:hidden text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white" onClick={() => setIsOpen(false)}>
             <IconX />
           </button>
         </div>

@@ -21,7 +21,7 @@ const Dashboard: React.FC = () => {
 
     return (
         <div className="space-y-8">
-            <h1 className="text-4xl font-bold text-white">Bem-vindo, {user?.name}!</h1>
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Bem-vindo, {user?.name}!</h1>
             
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -30,8 +30,8 @@ const Dashboard: React.FC = () => {
                         <IconUsers />
                     </div>
                     <div>
-                        <p className="text-gray-400">Total de Alunos</p>
-                        <p className="text-3xl font-bold text-white">{students.length}</p>
+                        <p className="text-gray-500 dark:text-gray-400">Total de Alunos</p>
+                        <p className="text-3xl font-bold text-gray-900 dark:text-white">{students.length}</p>
                     </div>
                 </Card>
                 <Card className="flex items-center space-x-4">
@@ -39,8 +39,8 @@ const Dashboard: React.FC = () => {
                         <IconDollarSign />
                     </div>
                     <div>
-                        <p className="text-gray-400">Alunos em Dia</p>
-                        <p className="text-3xl font-bold text-white">{paidStudents}</p>
+                        <p className="text-gray-500 dark:text-gray-400">Alunos em Dia</p>
+                        <p className="text-3xl font-bold text-gray-900 dark:text-white">{paidStudents}</p>
                     </div>
                 </Card>
                 {user?.role === 'general_admin' && (
@@ -49,8 +49,8 @@ const Dashboard: React.FC = () => {
                             <IconBuilding />
                         </div>
                         <div>
-                            <p className="text-gray-400">Total de Academias</p>
-                            <p className="text-3xl font-bold text-white">{academies.length}</p>
+                            <p className="text-gray-500 dark:text-gray-400">Total de Academias</p>
+                            <p className="text-3xl font-bold text-gray-900 dark:text-white">{academies.length}</p>
                         </div>
                     </Card>
                 )}
@@ -69,13 +69,13 @@ const Dashboard: React.FC = () => {
                             allBirthdays
                                 .sort((a,b) => new Date(a.birthDate!).getUTCDate() - new Date(b.birthDate!).getUTCDate())
                                 .map(person => (
-                                <div key={person.id} className="p-2 bg-gray-700/50 rounded-md">
-                                    <p className="font-semibold text-white">{person.name}</p>
-                                    <p className="text-sm text-gray-400">{new Date(person.birthDate!).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', timeZone: 'UTC' })}</p>
+                                <div key={person.id} className="p-2 bg-gray-200/50 dark:bg-gray-700/50 rounded-md">
+                                    <p className="font-semibold text-gray-800 dark:text-white">{person.name}</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">{new Date(person.birthDate!).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', timeZone: 'UTC' })}</p>
                                 </div>
                             ))
                         ) : (
-                            <p className="text-gray-400">Nenhum aniversário este mês.</p>
+                            <p className="text-gray-600 dark:text-gray-400">Nenhum aniversário este mês.</p>
                         )}
                     </div>
                 </Card>

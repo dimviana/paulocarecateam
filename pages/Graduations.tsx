@@ -74,31 +74,31 @@ const GraduationsPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-white">Gerenciar Graduações</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerenciar Graduações</h1>
         <Button onClick={() => handleOpenModal({})}>Adicionar Graduação</Button>
       </div>
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="border-b border-gray-700">
+            <thead className="border-b border-gray-200 dark:border-gray-700">
               <tr>
-                <th className="p-4 text-sm font-semibold text-gray-300">Ordem</th>
-                <th className="p-4 text-sm font-semibold text-gray-300">Nome</th>
-                <th className="p-4 text-sm font-semibold text-gray-300">Cor</th>
-                <th className="p-4 text-sm font-semibold text-gray-300">Tempo Mínimo</th>
-                <th className="p-4 text-sm font-semibold text-gray-300">Ações</th>
+                <th className="p-4 text-sm font-semibold text-gray-600 dark:text-gray-300">Ordem</th>
+                <th className="p-4 text-sm font-semibold text-gray-600 dark:text-gray-300">Nome</th>
+                <th className="p-4 text-sm font-semibold text-gray-600 dark:text-gray-300">Cor</th>
+                <th className="p-4 text-sm font-semibold text-gray-600 dark:text-gray-300">Tempo Mínimo</th>
+                <th className="p-4 text-sm font-semibold text-gray-600 dark:text-gray-300">Ações</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr><td colSpan={5} className="p-4 text-center">Carregando...</td></tr>
               ) : [...graduations].sort((a,b) => a.rank - b.rank).map(grad => (
-                <tr key={grad.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                <tr key={grad.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                   <td className="p-4">{grad.rank}</td>
                   <td className="p-4">{grad.name}</td>
                   <td className="p-4">
                     <div className="flex items-center">
-                      <span className="w-6 h-6 rounded-full border border-gray-500" style={{ backgroundColor: grad.color }}></span>
+                      <span className="w-6 h-6 rounded-full border border-gray-300 dark:border-gray-500" style={{ backgroundColor: grad.color }}></span>
                       <span className="ml-2">{grad.color}</span>
                     </div>
                   </td>

@@ -45,12 +45,14 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
     onSave(formData);
   };
 
+  const selectStyles = "w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500";
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input label="Nome da Turma" name="className" value={formData.className} onChange={handleChange} required />
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Dia da Semana</label>
-        <select name="dayOfWeek" value={formData.dayOfWeek} onChange={handleChange} required className="w-full bg-gray-900/50 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dia da Semana</label>
+        <select name="dayOfWeek" value={formData.dayOfWeek} onChange={handleChange} required className={selectStyles}>
           {DAYS_OF_WEEK.map(day => <option key={day} value={day}>{day}</option>)}
         </select>
       </div>
@@ -59,35 +61,35 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
         <Input label="Horário de Fim" name="endTime" type="time" value={formData.endTime} onChange={handleChange} required />
       </div>
        <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Graduação Mínima</label>
-        <select name="requiredGraduationId" value={formData.requiredGraduationId} onChange={handleChange} required className="w-full bg-gray-900/50 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Graduação Mínima</label>
+        <select name="requiredGraduationId" value={formData.requiredGraduationId} onChange={handleChange} required className={selectStyles}>
            <option value="">Selecione uma graduação</option>
            {graduations.sort((a,b) => a.rank - b.rank).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
         </select>
       </div>
        <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Professor</label>
-        <select name="professorId" value={formData.professorId} onChange={handleChange} required className="w-full bg-gray-900/50 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Professor</label>
+        <select name="professorId" value={formData.professorId} onChange={handleChange} required className={selectStyles}>
            <option value="">Selecione um professor</option>
            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </div>
        <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Assistentes (segure Ctrl/Cmd para selecionar vários)</label>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assistentes (segure Ctrl/Cmd para selecionar vários)</label>
         <select
           name="assistantIds"
           value={formData.assistantIds || []}
           onChange={handleChange}
           multiple
-          className="w-full bg-gray-900/50 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500 h-24"
+          className={`${selectStyles} h-24`}
         >
           {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </div>
        {user?.role === 'general_admin' && (
          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Academia</label>
-            <select name="academyId" value={formData.academyId} onChange={handleChange} required className="w-full bg-gray-900/50 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Academia</label>
+            <select name="academyId" value={formData.academyId} onChange={handleChange} required className={selectStyles}>
                <option value="">Selecione uma academia</option>
                {academies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
@@ -149,7 +151,7 @@ const SchedulesPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-white">Gerenciar Horários</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerenciar Horários</h1>
         {isAdmin && <Button onClick={() => handleOpenModal({})}>Adicionar Horário</Button>}
       </div>
       
@@ -165,14 +167,14 @@ const SchedulesPage: React.FC = () => {
                             {groupedSchedules[day].sort((a,b) => a.startTime.localeCompare(b.startTime)).map(schedule => {
                                 const requiredGrad = graduations.find(g => g.id === schedule.requiredGraduationId);
                                 return (
-                                <div key={schedule.id} className="bg-gray-700/50 p-3 rounded-md">
+                                <div key={schedule.id} className="bg-gray-100 dark:bg-gray-700/50 p-3 rounded-md">
                                     <p className="font-semibold">{schedule.className}</p>
-                                    <p className="text-sm text-gray-300">{schedule.startTime} - {schedule.endTime}</p>
-                                    <p className="text-sm text-gray-400">Prof: {users.find(u => u.id === schedule.professorId)?.name}</p>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300">{schedule.startTime} - {schedule.endTime}</p>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">Prof: {users.find(u => u.id === schedule.professorId)?.name}</p>
                                     {requiredGrad && (
-                                        <p className="text-sm text-gray-400 flex items-center mt-1">
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center mt-1">
                                             Mín:
-                                            <span className="w-3 h-3 rounded-full mx-1.5 border border-gray-500" style={{ backgroundColor: requiredGrad.color }}></span>
+                                            <span className="w-3 h-3 rounded-full mx-1.5 border border-gray-400 dark:border-gray-500" style={{ backgroundColor: requiredGrad.color }}></span>
                                             {requiredGrad.name}
                                         </p>
                                     )}

@@ -13,7 +13,7 @@ const StudentDetailsModal: React.FC<{ student: Student; onClose: () => void }> =
 
     return (
         <Modal isOpen={true} onClose={onClose} title={`Detalhes de ${student.name}`}>
-            <div className="space-y-3 text-gray-300">
+            <div className="space-y-3 text-gray-700 dark:text-gray-300">
                 <p><strong>Academia:</strong> {academy?.name || 'N/A'}</p>
                 <p><strong>CPF:</strong> {student.cpf}</p>
                 <p><strong>Telefone:</strong> {student.phone}</p>
@@ -76,15 +76,15 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
             <Input label="Telefone" name="phone" value={formData.phone} onChange={handleChange} required />
             <Input label="Endereço" name="address" value={formData.address} onChange={handleChange} required />
             <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Graduação (Faixa)</label>
-                <select name="beltId" value={formData.beltId} onChange={handleChange} required className="w-full bg-gray-900/50 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Graduação (Faixa)</label>
+                <select name="beltId" value={formData.beltId} onChange={handleChange} required className="w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
                     <option value="">Selecione a Graduação</option>
                     {graduations.map(grad => <option key={grad.id} value={grad.id}>{grad.name}</option>)}
                 </select>
             </div>
              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Academia</label>
-                <select name="academyId" value={formData.academyId} onChange={handleChange} required className="w-full bg-gray-900/50 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Academia</label>
+                <select name="academyId" value={formData.academyId} onChange={handleChange} required className="w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
                     <option value="">Selecione a Academia</option>
                     {academies.map(ac => <option key={ac.id} value={ac.id}>{ac.name}</option>)}
                 </select>
@@ -148,13 +148,13 @@ const StudentsPage: React.FC = () => {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center flex-wrap gap-4">
-                <h1 className="text-3xl font-bold text-white">Gerenciar Alunos</h1>
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerenciar Alunos</h1>
                 <div className="flex items-center gap-4">
                      <div>
                         <select 
                             value={filterBeltId} 
                             onChange={(e) => setFilterBeltId(e.target.value)} 
-                            className="bg-gray-800 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500"
+                            className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500"
                         >
                             <option value="">Todas as Graduações</option>
                             {graduations.sort((a,b) => a.rank - b.rank).map(grad => <option key={grad.id} value={grad.id}>{grad.name}</option>)}
@@ -172,12 +172,12 @@ const StudentsPage: React.FC = () => {
                         const belt = graduations.find(g => g.id === student.beltId);
                         return (
                            <Card key={student.id} className="text-center flex flex-col items-center transition-all duration-300 ease-in-out transform hover:-translate-y-2 hover:shadow-2xl hover:shadow-red-900/50 hover:border-red-500/50">
-                               <img src={`https://i.pravatar.cc/150?u=${student.cpf}`} alt={student.name} className="w-24 h-24 rounded-full mb-4 border-4 border-gray-700 group-hover:border-red-500 transition-colors" />
-                               <h2 className="text-xl font-bold text-white">{student.name}</h2>
-                               <p className="text-sm text-gray-400 mb-2">REG: {student.fjjpe_registration}</p>
+                               <img src={`https://i.pravatar.cc/150?u=${student.cpf}`} alt={student.name} className="w-24 h-24 rounded-full mb-4 border-4 border-gray-200 dark:border-gray-700 group-hover:border-red-500 transition-colors" />
+                               <h2 className="text-xl font-bold text-gray-900 dark:text-white">{student.name}</h2>
+                               <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">REG: {student.fjjpe_registration}</p>
                                {belt && (
-                                   <div className="flex items-center justify-center bg-gray-700/50 px-3 py-1 rounded-full text-sm">
-                                       <span className="w-4 h-4 rounded-full mr-2 border border-gray-500" style={{ backgroundColor: belt.color }}></span>
+                                   <div className="flex items-center justify-center bg-gray-200/60 dark:bg-gray-700/50 px-3 py-1 rounded-full text-sm">
+                                       <span className="w-4 h-4 rounded-full mr-2 border border-gray-400 dark:border-gray-500" style={{ backgroundColor: belt.color }}></span>
                                        {belt.name}
                                    </div>
                                )}

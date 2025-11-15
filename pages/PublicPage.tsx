@@ -27,15 +27,15 @@ const PublicPage: React.FC = () => {
     return (
         <>
             <style>{themeSettings.customCss || ''}</style>
-            <div className="bg-gray-900 text-white antialiased">
+            <div className="bg-white dark:bg-gray-900 text-gray-800 dark:text-white antialiased">
                 {/* Header */}
-                <header className="sticky top-0 z-50 bg-gray-900/80 backdrop-blur-md border-b border-gray-700/50">
+                <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700/50">
                     <nav className="container mx-auto px-6 py-3 flex justify-between items-center">
                         <a href="#inicio" className="flex items-center">
                             <img src={themeSettings.logoUrl} alt="Logo" className="h-10 w-auto" />
-                            <span className="text-white text-lg font-bold ml-2 hidden sm:block">{themeSettings.systemName}</span>
+                            <span className="text-gray-800 dark:text-white text-lg font-bold ml-2 hidden sm:block">{themeSettings.systemName}</span>
                         </a>
-                        <div className="space-x-8 hidden md:flex">
+                        <div className="space-x-8 hidden md:flex text-gray-700 dark:text-gray-300">
                             <a href="#inicio" className="hover:text-red-500 transition-colors">Início</a>
                             <a href="#quem-somos" className="hover:text-red-500 transition-colors">Quem Somos</a>
                             <a href="#filiais" className="hover:text-red-500 transition-colors">Filiais</a>

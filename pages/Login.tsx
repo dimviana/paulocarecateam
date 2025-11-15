@@ -31,15 +31,15 @@ const Login: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900 p-4 bg-cover bg-center" style={{backgroundImage: 'url(/path-to-futuristic-background.jpg)'}}>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-4 bg-cover bg-center">
          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
-         <div className="absolute inset-0 -z-10 h-full w-full bg-gray-900 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:14px_24px]"></div>
+         <div className="absolute inset-0 -z-10 h-full w-full bg-gray-100 dark:bg-gray-900 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:14px_24px]"></div>
 
-        <div className="relative z-10 w-full max-w-md p-8 space-y-8 bg-gray-800/50 backdrop-blur-md border border-red-600/30 rounded-xl shadow-2xl shadow-red-900/40">
+        <div className="relative z-10 w-full max-w-md p-8 space-y-8 bg-white/50 dark:bg-gray-800/50 backdrop-blur-md border border-gray-300 dark:border-red-600/30 rounded-xl shadow-2xl shadow-gray-500/40 dark:shadow-red-900/40">
             <div className="text-center">
                 <img src={themeSettings.logoUrl} alt="Logo" className="mx-auto h-16 w-auto mb-4" />
-                <h1 className="text-4xl font-bold text-white tracking-wider">{themeSettings.systemName}</h1>
-                <p className="mt-2 text-gray-400">Acesse sua conta</p>
+                <h1 className="text-4xl font-bold text-gray-900 dark:text-white tracking-wider">{themeSettings.systemName}</h1>
+                <p className="mt-2 text-gray-600 dark:text-gray-400">Acesse sua conta</p>
             </div>
             <form className="space-y-6" onSubmit={handleLogin}>
                 <Input 

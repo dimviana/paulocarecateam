@@ -1,14 +1,37 @@
 
-import React from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Student } from '../../types';
 import Card from '../ui/Card';
+import { AppContext } from '../../context/AppContext';
 
 interface PaymentsChartProps {
   students: Student[];
 }
 
 const PaymentsChart: React.FC<PaymentsChartProps> = ({ students }) => {
+  const { themeSettings } = useContext(AppContext);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (themeSettings.theme === 'system') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return themeSettings.theme === 'dark';
+  });
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => {
+      if (themeSettings.theme === 'system') {
+        setIsDarkMode(mediaQuery.matches);
+      } else {
+        setIsDarkMode(themeSettings.theme === 'dark');
+      }
+    };
+    handler();
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, [themeSettings.theme]);
+
   const paidCount = students.filter(s => s.paymentStatus === 'paid').length;
   const unpaidCount = students.length - paidCount;
 
@@ -41,8 +64,9 @@ const PaymentsChart: React.FC<PaymentsChartProps> = ({ students }) => {
                 </Pie>
                 <Tooltip 
                     contentStyle={{ 
-                        backgroundColor: 'rgba(31, 41, 55, 0.8)', // bg-gray-700 with opacity
-                        borderColor: '#4B5563', // border-gray-600
+                        backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.95)',
+                        borderColor: isDarkMode ? '#4B5563' : '#E5E7EB',
+                        color: isDarkMode ? '#F3F4F6' : '#1F2937',
                     }}
                 />
                 <Legend />
