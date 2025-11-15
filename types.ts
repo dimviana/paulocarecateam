@@ -77,3 +77,11 @@ export interface NewsArticle {
   imageUrl: string;
   date: string;
 }
+
+export interface AttendanceRecord {
+  id: string;
+  studentId: string;
+  scheduleId: string;
+  date: string; // YYYY-MM-DD
+  status: 'present' | 'absent';
+}

@@ -1,4 +1,4 @@
-import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Payment } from '../types';
+import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Payment, AttendanceRecord } from '../types';
 
 let graduations: Graduation[] = [
   { id: '1', name: 'Branca', color: '#FFFFFF', minTimeInMonths: 0, rank: 1 },
@@ -39,7 +39,18 @@ let users: User[] = [
 let news: NewsArticle[] = [
     { id: '1', title: 'Novas Regras de Competição IBJJF 2024', content: 'A IBJJF anunciou novas regras para competições a partir de agosto de 2024, focando na segurança dos atletas...', imageUrl: 'https://picsum.photos/800/400?random=1', date: '2024-07-15' },
     { id: '2', title: 'Campeonato Mundial de Jiu-Jitsu: Destaques e Resultados', content: 'Ocorreu no último final de semana o Campeonato Mundial, com lutas emocionantes e novos campeões coroados...', imageUrl: 'https://picsum.photos/800/400?random=2', date: '2024-06-28' },
-]
+];
+
+let attendanceRecords: AttendanceRecord[] = [
+    { id: 'att1', studentId: '1', scheduleId: '1', date: '2024-07-29', status: 'present' },
+    { id: 'att2', studentId: '1', scheduleId: '4', date: '2024-07-26', status: 'present' },
+    { id: 'att3', studentId: '1', scheduleId: '1', date: '2024-07-22', status: 'absent' },
+    { id: 'att4', studentId: '1', scheduleId: '4', date: '2024-07-19', status: 'present' },
+    { id: 'att5', studentId: '1', scheduleId: '1', date: '2024-07-15', status: 'present' },
+    { id: 'att6', studentId: '2', scheduleId: '1', date: '2024-07-29', status: 'present' },
+    { id: 'att7', studentId: '2', scheduleId: '4', date: '2024-07-26', status: 'absent' },
+];
+
 
 const simulateDelay = <T,>(data: T): Promise<T> => 
   new Promise(resolve => setTimeout(() => resolve(data), 500));
@@ -58,6 +69,7 @@ export const api = {
   getNews: () => simulateDelay(news),
   getGraduations: () => simulateDelay(graduations),
   getSchedules: () => simulateDelay(schedules),
+  getAttendanceRecords: () => simulateDelay(attendanceRecords),
   
   updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid'): Promise<Student> => {
     const studentIndex = students.findIndex(s => s.id === studentId);
@@ -167,5 +179,29 @@ export const api = {
   deleteSchedule: (id: string): Promise<{ success: boolean }> => {
     schedules = schedules.filter(s => s.id !== id);
     return simulateDelay({ success: true });
-  }
+  },
+  
+  saveAttendanceRecord: (record: Omit<AttendanceRecord, 'id'> & { id?: string }): Promise<AttendanceRecord> => {
+    const existingIndex = attendanceRecords.findIndex(
+        r => r.studentId === record.studentId && r.scheduleId === record.scheduleId && r.date === record.date
+    );
+
+    if (existingIndex > -1) {
+        const updatedRecord = { ...attendanceRecords[existingIndex], status: record.status };
+        attendanceRecords[existingIndex] = updatedRecord;
+        return simulateDelay(updatedRecord);
+    } else {
+        const newRecord: AttendanceRecord = {
+            ...record,
+            id: String(Date.now() + Math.random()),
+        };
+        attendanceRecords.push(newRecord);
+        return simulateDelay(newRecord);
+    }
+  },
+
+  deleteAttendanceRecord: (id: string): Promise<{ success: boolean }> => {
+    attendanceRecords = attendanceRecords.filter(r => r.id !== id);
+    return simulateDelay({ success: true });
+  },
 };

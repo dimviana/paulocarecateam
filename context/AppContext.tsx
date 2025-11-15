@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
-import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule } from '../types';
+import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord } from '../types';
 import { initialThemeSettings } from '../constants';
 import { api } from '../services/api';
 
@@ -14,9 +14,9 @@ interface AppContextType {
   graduations: Graduation[];
   schedules: ClassSchedule[];
   users: User[];
+  attendanceRecords: AttendanceRecord[];
   loading: boolean;
   updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid') => Promise<void>;
-  // FIX: Updated Omit to include 'paymentHistory' to align with API and component types.
   saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => Promise<void>;
   deleteStudent: (studentId: string) => Promise<void>;
   saveAcademy: (academy: Omit<Academy, 'id'> & { id?: string }) => Promise<void>;
@@ -25,6 +25,8 @@ interface AppContextType {
   deleteGraduation: (id: string) => Promise<void>;
   saveSchedule: (schedule: Omit<ClassSchedule, 'id'> & { id?: string }) => Promise<void>;
   deleteSchedule: (id: string) => Promise<void>;
+  saveAttendanceRecord: (record: Omit<AttendanceRecord, 'id'> & { id?: string }) => Promise<void>;
+  deleteAttendanceRecord: (id: string) => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType>(null!);
@@ -45,6 +47,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [graduations, setGraduations] = useState<Graduation[]>([]);
   const [schedules, setSchedules] = useState<ClassSchedule[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,18 +60,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     const fetchData = async () => {
         setLoading(true);
-        const [studentsData, academiesData, graduationsData, schedulesData, usersData] = await Promise.all([
+        const [studentsData, academiesData, graduationsData, schedulesData, usersData, attendanceData] = await Promise.all([
             api.getStudents(),
             api.getAcademies(),
             api.getGraduations(),
             api.getSchedules(),
-            api.getUsers()
+            api.getUsers(),
+            api.getAttendanceRecords(),
         ]);
         setStudents(studentsData);
         setAcademies(academiesData);
         setGraduations(graduationsData);
         setSchedules(schedulesData);
         setUsers(usersData);
+        setAttendanceRecords(attendanceData);
         setLoading(false);
     };
     fetchData();
@@ -137,17 +142,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await api.deleteSchedule(id);
     setSchedules(await api.getSchedules());
   }
+  
+  const saveAttendanceRecord = async (record: Omit<AttendanceRecord, 'id'> & { id?: string }) => {
+    await api.saveAttendanceRecord(record);
+    setAttendanceRecords(await api.getAttendanceRecords());
+  };
+
+  const deleteAttendanceRecord = async (id: string) => {
+    await api.deleteAttendanceRecord(id);
+    setAttendanceRecords(await api.getAttendanceRecords());
+  };
+
 
   return (
     <AppContext.Provider value={{ 
         themeSettings, setThemeSettings, 
         user, login, logout, 
-        students, academies, graduations, schedules, users,
+        students, academies, graduations, schedules, users, attendanceRecords,
         loading, 
         updateStudentPayment, saveStudent, deleteStudent,
         saveAcademy, deleteAcademy,
         saveGraduation, deleteGraduation,
-        saveSchedule, deleteSchedule
+        saveSchedule, deleteSchedule,
+        saveAttendanceRecord, deleteAttendanceRecord
     }}>
       {children}
     </AppContext.Provider>
