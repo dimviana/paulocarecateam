@@ -6,6 +6,33 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
 
+const StudentDetailsModal: React.FC<{ student: Student; onClose: () => void }> = ({ student, onClose }) => {
+    const { academies, graduations } = useContext(AppContext);
+    const academy = academies.find(a => a.id === student.academyId);
+    const graduation = graduations.find(g => g.id === student.beltId);
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title={`Detalhes de ${student.name}`}>
+            <div className="space-y-3 text-gray-300">
+                <p><strong>Academia:</strong> {academy?.name || 'N/A'}</p>
+                <p><strong>CPF:</strong> {student.cpf}</p>
+                <p><strong>Telefone:</strong> {student.phone}</p>
+                <p><strong>Endereço:</strong> {student.address}</p>
+                <p><strong>Data de Nascimento:</strong> {new Date(student.birthDate).toLocaleDateString()}</p>
+                <p><strong>Primeira Graduação:</strong> {new Date(student.firstGraduationDate).toLocaleDateString()}</p>
+                <p><strong>Status Financeiro:</strong>
+                    <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${student.paymentStatus === 'paid' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                        {student.paymentStatus === 'paid' ? 'Em Dia' : 'Inadimplente'}
+                    </span>
+                </p>
+                <div className="flex justify-end pt-4">
+                    <Button variant="secondary" onClick={onClose}>Fechar</Button>
+                </div>
+            </div>
+        </Modal>
+    );
+};
+
 // Define StudentForm component inside the same file to avoid re-rendering issues and keep it self-contained.
 interface StudentFormProps {
     student: Partial<Student> | null;
@@ -19,6 +46,7 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
         name: '',
         birthDate: '',
         cpf: '',
+        fjjpe_registration: '',
         phone: '',
         address: '',
         beltId: '',
@@ -40,6 +68,7 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <Input label="Nome" name="name" value={formData.name} onChange={handleChange} required />
+            <Input label="Registro FJJPE" name="fjjpe_registration" value={formData.fjjpe_registration} onChange={handleChange} required />
             <Input label="Data de Nascimento" name="birthDate" type="date" value={formData.birthDate} onChange={handleChange} required />
             <Input label="CPF" name="cpf" value={formData.cpf} onChange={handleChange} required />
             <Input label="Telefone" name="phone" value={formData.phone} onChange={handleChange} required />
@@ -73,6 +102,8 @@ const StudentsPage: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Partial<Student> | null>(null);
     const [filterBeltId, setFilterBeltId] = useState<string>('');
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+    const [studentForDetails, setStudentForDetails] = useState<Student | null>(null);
 
     const handleOpenModal = (student: Partial<Student> | null = null) => {
         setSelectedStudent(student);
@@ -82,6 +113,16 @@ const StudentsPage: React.FC = () => {
     const handleCloseModal = () => {
         setIsModalOpen(false);
         setSelectedStudent(null);
+    };
+
+    const handleOpenDetailsModal = (student: Student) => {
+        setStudentForDetails(student);
+        setIsDetailsModalOpen(true);
+    };
+
+    const handleCloseDetailsModal = () => {
+        setIsDetailsModalOpen(false);
+        setStudentForDetails(null);
     };
 
     const handleSaveStudent = async (studentData: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => {
@@ -118,55 +159,43 @@ const StudentsPage: React.FC = () => {
                     <Button onClick={() => handleOpenModal({})}>Adicionar Aluno</Button>
                 </div>
             </div>
-            <Card>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="border-b border-gray-700">
-                            <tr>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Nome</th>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Graduação</th>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Telefone</th>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Status</th>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan={5} className="p-4 text-center">Carregando...</td></tr>
-                            ) : filteredStudents.map(student => {
-                                const belt = graduations.find(g => g.id === student.beltId);
-                                return (
-                                    <tr key={student.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                                        <td className="p-4">{student.name}</td>
-                                        <td className="p-4">
-                                            {belt ? (
-                                                <span className="flex items-center">
-                                                    <span className="w-4 h-4 rounded-full mr-2 border border-gray-500" style={{ backgroundColor: belt.color }}></span>
-                                                    {belt.name}
-                                                </span>
-                                            ) : 'N/A'}
-                                        </td>
-                                        <td className="p-4">{student.phone}</td>
-                                        <td className="p-4">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${student.paymentStatus === 'paid' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                                                {student.paymentStatus === 'paid' ? 'Em Dia' : 'Inadimplente'}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 flex gap-2">
-                                            <Button variant="secondary" size="sm" onClick={() => handleOpenModal(student)}>Editar</Button>
-                                            <Button variant="danger" size="sm" onClick={() => handleDeleteStudent(student.id)}>Excluir</Button>
-                                        </td>
-                                    </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
+            
+            {loading ? (
+                <div className="text-center p-4">Carregando...</div>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {filteredStudents.map(student => {
+                        const belt = graduations.find(g => g.id === student.beltId);
+                        return (
+                           <Card key={student.id} className="text-center flex flex-col items-center transition-all duration-300 ease-in-out transform hover:-translate-y-2 hover:shadow-2xl hover:shadow-red-900/50 hover:border-red-500/50">
+                               <img src={`https://i.pravatar.cc/150?u=${student.cpf}`} alt={student.name} className="w-24 h-24 rounded-full mb-4 border-4 border-gray-700 group-hover:border-red-500 transition-colors" />
+                               <h2 className="text-xl font-bold text-white">{student.name}</h2>
+                               <p className="text-sm text-gray-400 mb-2">REG: {student.fjjpe_registration}</p>
+                               {belt && (
+                                   <div className="flex items-center justify-center bg-gray-700/50 px-3 py-1 rounded-full text-sm">
+                                       <span className="w-4 h-4 rounded-full mr-2 border border-gray-500" style={{ backgroundColor: belt.color }}></span>
+                                       {belt.name}
+                                   </div>
+                               )}
+                               <div className="mt-auto pt-4 w-full flex flex-col sm:flex-row justify-center gap-2">
+                                   <Button size="sm" onClick={() => handleOpenDetailsModal(student)}>Detalhes</Button>
+                                   <Button size="sm" variant="secondary" onClick={() => handleOpenModal(student)}>Editar</Button>
+                                   <Button size="sm" variant="danger" onClick={() => handleDeleteStudent(student.id)}>Excluir</Button>
+                               </div>
+                           </Card>
+                        );
+                    })}
                 </div>
-            </Card>
+            )}
+
 
             <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={selectedStudent?.id ? 'Editar Aluno' : 'Adicionar Aluno'}>
                 <StudentForm student={selectedStudent} onSave={handleSaveStudent} onClose={handleCloseModal} />
             </Modal>
+            
+            {isDetailsModalOpen && studentForDetails && (
+                <StudentDetailsModal student={studentForDetails} onClose={handleCloseDetailsModal} />
+            )}
         </div>
     );
 };

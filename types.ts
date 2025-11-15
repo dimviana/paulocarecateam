@@ -31,6 +31,7 @@ export interface Student {
   name: string;
   birthDate: string;
   cpf: string;
+  fjjpe_registration: string;
   phone: string;
   address: string;
   beltId: string;

@@ -40,6 +40,7 @@ const FinancePage: React.FC = () => {
     const { students, updateStudentPayment, loading } = useContext(AppContext);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+    const [updatedRow, setUpdatedRow] = useState<{ id: string; status: 'paid' | 'unpaid' } | null>(null);
 
     const handleSendMessage = (phone: string, name: string) => {
         const message = `Olá ${name},%20gostaríamos%20de%20lembrar%20sobre%20o%20pagamento%20da%20sua%20mensalidade.`;
@@ -58,9 +59,17 @@ const FinancePage: React.FC = () => {
 
     const handleRegisterPayment = async () => {
         if (selectedStudent) {
-            await updateStudentPayment(selectedStudent.id, 'paid');
+            await handleStatusUpdate(selectedStudent.id, 'paid');
             handleCloseHistoryModal();
         }
+    };
+
+    const handleStatusUpdate = async (studentId: string, status: 'paid' | 'unpaid') => {
+        await updateStudentPayment(studentId, status);
+        setUpdatedRow({ id: studentId, status });
+        setTimeout(() => {
+            setUpdatedRow(null);
+        }, 2500);
     };
 
     return (
@@ -79,8 +88,15 @@ const FinancePage: React.FC = () => {
                         <tbody>
                             {loading ? (
                                 <tr><td colSpan={3} className="p-4 text-center">Carregando...</td></tr>
-                            ) : students.map(student => (
-                                <tr key={student.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                            ) : students.map(student => {
+                                const isUpdated = updatedRow?.id === student.id;
+                                const rowClass = isUpdated
+                                    ? updatedRow.status === 'paid'
+                                        ? 'bg-green-500/20'
+                                        : 'bg-red-500/20'
+                                    : '';
+                                return (
+                                <tr key={student.id} className={`border-b border-gray-800 hover:bg-gray-800/50 transition-colors duration-500 ${rowClass}`}>
                                     <td className="p-4">{student.name}</td>
                                     <td className="p-4">
                                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${student.paymentStatus === 'paid' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
@@ -91,16 +107,16 @@ const FinancePage: React.FC = () => {
                                         <Button size="sm" variant="secondary" onClick={() => handleOpenHistoryModal(student)}>Ver Histórico</Button>
                                         {student.paymentStatus === 'unpaid' && (
                                             <>
-                                                <Button size="sm" onClick={() => updateStudentPayment(student.id, 'paid')}>Marcar como Pago</Button>
+                                                <Button size="sm" onClick={() => handleStatusUpdate(student.id, 'paid')}>Marcar como Pago</Button>
                                                 <Button variant="secondary" size="sm" onClick={() => handleSendMessage(student.phone, student.name)}>Lembrar (WhatsApp)</Button>
                                             </>
                                         )}
                                         {student.paymentStatus === 'paid' && (
-                                             <Button variant="danger" size="sm" onClick={() => updateStudentPayment(student.id, 'unpaid')}>Marcar como Inadimplente</Button>
+                                             <Button variant="danger" size="sm" onClick={() => handleStatusUpdate(student.id, 'unpaid')}>Marcar como Inadimplente</Button>
                                         )}
                                     </td>
                                 </tr>
-                            ))}
+                            )})}
                         </tbody>
                     </table>
                 </div>

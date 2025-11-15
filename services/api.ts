@@ -18,10 +18,10 @@ let schedules: ClassSchedule[] = [
 ];
 
 let students: Student[] = [
-  { id: '1', name: 'Carlos Gracie', birthDate: '1990-08-15', cpf: '111.111.111-11', phone: '11999999991', address: 'Rua do Tatame, 123', beltId: '7', academyId: '1', firstGraduationDate: '2010-01-20', paymentStatus: 'paid', lastSeen: '2024-07-28', paymentHistory: [{id: 'p1', date: '2024-07-05', amount: 150}] },
-  { id: '2', name: 'Hélio Gracie', birthDate: '1992-07-20', cpf: '222.222.222-22', phone: '11999999992', address: 'Avenida Ippon, 456', beltId: '5', academyId: '1', firstGraduationDate: '2012-03-10', paymentStatus: 'unpaid', lastSeen: '2024-07-27', paymentHistory: [{id: 'p2', date: '2024-06-05', amount: 150}] },
-  { id: '3', name: 'Royce Gracie', birthDate: '1995-01-30', cpf: '333.333.333-33', phone: '11999999993', address: 'Travessa da Luta, 789', beltId: '3', academyId: '2', firstGraduationDate: '2018-06-01', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [] },
-  { id: '4', name: 'Rickson Gracie', birthDate: '1988-08-21', cpf: '444.444.444-44', phone: '11999999994', address: 'Alameda do Armlock, 101', beltId: '4', academyId: '2', firstGraduationDate: '2015-11-15', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [] },
+  { id: '1', name: 'Carlos Gracie', birthDate: '1990-08-15', cpf: '111.111.111-11', fjjpe_registration: 'FJJPE-001', phone: '11999999991', address: 'Rua do Tatame, 123', beltId: '7', academyId: '1', firstGraduationDate: '2010-01-20', paymentStatus: 'paid', lastSeen: '2024-07-28', paymentHistory: [{id: 'p1', date: '2024-07-05', amount: 150}] },
+  { id: '2', name: 'Hélio Gracie', birthDate: '1992-07-20', cpf: '222.222.222-22', fjjpe_registration: 'FJJPE-002', phone: '11999999992', address: 'Avenida Ippon, 456', beltId: '5', academyId: '1', firstGraduationDate: '2012-03-10', paymentStatus: 'unpaid', lastSeen: '2024-07-27', paymentHistory: [{id: 'p2', date: '2024-06-05', amount: 150}] },
+  { id: '3', name: 'Royce Gracie', birthDate: '1995-01-30', cpf: '333.333.333-33', fjjpe_registration: 'FJJPE-003', phone: '11999999993', address: 'Travessa da Luta, 789', beltId: '3', academyId: '2', firstGraduationDate: '2018-06-01', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [] },
+  { id: '4', name: 'Rickson Gracie', birthDate: '1988-08-21', cpf: '444.444.444-44', fjjpe_registration: 'FJJPE-004', phone: '11999999994', address: 'Alameda do Armlock, 101', beltId: '4', academyId: '2', firstGraduationDate: '2015-11-15', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [] },
 ];
 
 let academies: Academy[] = [
@@ -96,6 +96,7 @@ export const api = {
             paymentStatus: 'unpaid',
             lastSeen: new Date().toISOString().split('T')[0],
             paymentHistory: [],
+            fjjpe_registration: student.fjjpe_registration || `FJJPE-${Math.floor(Math.random() * 1000)}`
         };
         students.push(newStudent);
         return simulateDelay(newStudent);
