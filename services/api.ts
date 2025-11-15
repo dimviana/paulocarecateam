@@ -1,4 +1,4 @@
-import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule } from '../types';
+import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Payment } from '../types';
 
 let graduations: Graduation[] = [
   { id: '1', name: 'Branca', color: '#FFFFFF', minTimeInMonths: 0, rank: 1 },
@@ -18,10 +18,10 @@ let schedules: ClassSchedule[] = [
 ];
 
 let students: Student[] = [
-  { id: '1', name: 'Carlos Gracie', birthDate: '1990-05-15', cpf: '111.111.111-11', phone: '11999999991', address: 'Rua do Tatame, 123', beltId: '7', academyId: '1', firstGraduationDate: '2010-01-20', paymentStatus: 'paid', lastSeen: '2024-07-28' },
-  { id: '2', name: 'Hélio Gracie', birthDate: '1992-08-20', cpf: '222.222.222-22', phone: '11999999992', address: 'Avenida Ippon, 456', beltId: '5', academyId: '1', firstGraduationDate: '2012-03-10', paymentStatus: 'unpaid', lastSeen: '2024-07-27' },
-  { id: '3', name: 'Royce Gracie', birthDate: '1995-01-30', cpf: '333.333.333-33', phone: '11999999993', address: 'Travessa da Luta, 789', beltId: '3', academyId: '2', firstGraduationDate: '2018-06-01', paymentStatus: 'paid', lastSeen: '2024-07-29' },
-  { id: '4', name: 'Rickson Gracie', birthDate: '1988-11-21', cpf: '444.444.444-44', phone: '11999999994', address: 'Alameda do Armlock, 101', beltId: '4', academyId: '2', firstGraduationDate: '2015-11-15', paymentStatus: 'paid', lastSeen: '2024-07-29' },
+  { id: '1', name: 'Carlos Gracie', birthDate: '1990-08-15', cpf: '111.111.111-11', phone: '11999999991', address: 'Rua do Tatame, 123', beltId: '7', academyId: '1', firstGraduationDate: '2010-01-20', paymentStatus: 'paid', lastSeen: '2024-07-28', paymentHistory: [{id: 'p1', date: '2024-07-05', amount: 150}] },
+  { id: '2', name: 'Hélio Gracie', birthDate: '1992-07-20', cpf: '222.222.222-22', phone: '11999999992', address: 'Avenida Ippon, 456', beltId: '5', academyId: '1', firstGraduationDate: '2012-03-10', paymentStatus: 'unpaid', lastSeen: '2024-07-27', paymentHistory: [{id: 'p2', date: '2024-06-05', amount: 150}] },
+  { id: '3', name: 'Royce Gracie', birthDate: '1995-01-30', cpf: '333.333.333-33', phone: '11999999993', address: 'Travessa da Luta, 789', beltId: '3', academyId: '2', firstGraduationDate: '2018-06-01', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [] },
+  { id: '4', name: 'Rickson Gracie', birthDate: '1988-08-21', cpf: '444.444.444-44', phone: '11999999994', address: 'Alameda do Armlock, 101', beltId: '4', academyId: '2', firstGraduationDate: '2015-11-15', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [] },
 ];
 
 let academies: Academy[] = [
@@ -30,8 +30,8 @@ let academies: Academy[] = [
 ];
 
 let users: User[] = [
-  { id: '1', name: 'Admin Geral', email: 'androiddiviana@gmail.com', role: 'general_admin' },
-  { id: '2', name: 'Admin Gracie', email: 'admin@gracie.com', role: 'academy_admin', academyId: '1' },
+  { id: '1', name: 'Admin Geral', email: 'androiddiviana@gmail.com', role: 'general_admin', birthDate: '1985-08-10' },
+  { id: '2', name: 'Admin Gracie', email: 'admin@gracie.com', role: 'academy_admin', academyId: '1', birthDate: '1988-05-25' },
   { id: '3', name: 'Admin Atos', email: 'admin@atos.com', role: 'academy_admin', academyId: '2' },
   { id: '4', name: 'Carlos Gracie (Aluno)', email: 'carlos@aluno.com', role: 'student', studentId: '1', academyId: '1' },
 ];
@@ -60,13 +60,29 @@ export const api = {
   getSchedules: () => simulateDelay(schedules),
   
   updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid'): Promise<Student> => {
-    students = students.map(s => s.id === studentId ? { ...s, paymentStatus: status } : s);
-    const updatedStudent = students.find(s => s.id === studentId);
-    if (!updatedStudent) throw new Error("Student not found");
-    return simulateDelay(updatedStudent);
+    const studentIndex = students.findIndex(s => s.id === studentId);
+    if (studentIndex === -1) {
+      throw new Error("Student not found");
+    }
+
+    const studentToUpdate = { ...students[studentIndex] };
+    studentToUpdate.paymentStatus = status;
+
+    if (status === 'paid') {
+      const newPayment: Payment = {
+        id: String(Date.now()),
+        date: new Date().toISOString().split('T')[0],
+        amount: 150.00, // Assuming a fixed amount
+      };
+      studentToUpdate.paymentHistory = [...(studentToUpdate.paymentHistory || []), newPayment];
+    }
+    
+    students[studentIndex] = studentToUpdate;
+    
+    return simulateDelay(studentToUpdate);
   },
   
-  saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen'> & { id?: string }): Promise<Student> => {
+  saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }): Promise<Student> => {
     if (student.id) {
         let existingStudent = students.find(s => s.id === student.id);
         if (!existingStudent) throw new Error("Student not found");
@@ -79,6 +95,7 @@ export const api = {
             id: String(Date.now()),
             paymentStatus: 'unpaid',
             lastSeen: new Date().toISOString().split('T')[0],
+            paymentHistory: [],
         };
         students.push(newStudent);
         return simulateDelay(newStudent);

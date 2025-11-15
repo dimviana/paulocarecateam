@@ -1,4 +1,4 @@
-import React, { useState, useContext, FormEvent } from 'react';
+import React, { useState, useContext, FormEvent, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Student } from '../types';
 import Card from '../components/ui/Card';
@@ -9,7 +9,7 @@ import Input from '../components/ui/Input';
 // Define StudentForm component inside the same file to avoid re-rendering issues and keep it self-contained.
 interface StudentFormProps {
     student: Partial<Student> | null;
-    onSave: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen'> & { id?: string }) => void;
+    onSave: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => void;
     onClose: () => void;
 }
 
@@ -34,7 +34,7 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
 
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
-        onSave(formData);
+        onSave(formData as any);
     };
 
     return (
@@ -72,6 +72,7 @@ const StudentsPage: React.FC = () => {
     const { students, saveStudent, deleteStudent, loading, graduations } = useContext(AppContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Partial<Student> | null>(null);
+    const [filterBeltId, setFilterBeltId] = useState<string>('');
 
     const handleOpenModal = (student: Partial<Student> | null = null) => {
         setSelectedStudent(student);
@@ -83,7 +84,7 @@ const StudentsPage: React.FC = () => {
         setSelectedStudent(null);
     };
 
-    const handleSaveStudent = async (studentData: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen'> & { id?: string }) => {
+    const handleSaveStudent = async (studentData: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => {
         await saveStudent(studentData);
         handleCloseModal();
     };
@@ -94,11 +95,28 @@ const StudentsPage: React.FC = () => {
       }
     }
 
+    const filteredStudents = useMemo(() => {
+        if (!filterBeltId) return students;
+        return students.filter(s => s.beltId === filterBeltId);
+    }, [students, filterBeltId]);
+
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center flex-wrap gap-4">
                 <h1 className="text-3xl font-bold text-white">Gerenciar Alunos</h1>
-                <Button onClick={() => handleOpenModal({})}>Adicionar Aluno</Button>
+                <div className="flex items-center gap-4">
+                     <div>
+                        <select 
+                            value={filterBeltId} 
+                            onChange={(e) => setFilterBeltId(e.target.value)} 
+                            className="bg-gray-800 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500"
+                        >
+                            <option value="">Todas as Graduações</option>
+                            {graduations.sort((a,b) => a.rank - b.rank).map(grad => <option key={grad.id} value={grad.id}>{grad.name}</option>)}
+                        </select>
+                    </div>
+                    <Button onClick={() => handleOpenModal({})}>Adicionar Aluno</Button>
+                </div>
             </div>
             <Card>
                 <div className="overflow-x-auto">
@@ -115,7 +133,7 @@ const StudentsPage: React.FC = () => {
                         <tbody>
                             {loading ? (
                                 <tr><td colSpan={5} className="p-4 text-center">Carregando...</td></tr>
-                            ) : students.map(student => {
+                            ) : filteredStudents.map(student => {
                                 const belt = graduations.find(g => g.id === student.beltId);
                                 return (
                                     <tr key={student.id} className="border-b border-gray-800 hover:bg-gray-800/50">

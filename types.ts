@@ -20,6 +20,12 @@ export interface ClassSchedule {
   requiredGraduationId: string;
 }
 
+export interface Payment {
+  id: string;
+  date: string;
+  amount: number;
+}
+
 export interface Student {
   id: string;
   name: string;
@@ -32,6 +38,7 @@ export interface Student {
   firstGraduationDate: string;
   paymentStatus: 'paid' | 'unpaid';
   lastSeen: string;
+  paymentHistory: Payment[];
 }
 
 export interface Academy {
@@ -51,6 +58,7 @@ export interface User {
   role: 'general_admin' | 'academy_admin' | 'student';
   academyId?: string;
   studentId?: string;
+  birthDate?: string;
 }
 
 export interface ThemeSettings {

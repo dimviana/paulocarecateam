@@ -16,7 +16,8 @@ interface AppContextType {
   users: User[];
   loading: boolean;
   updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid') => Promise<void>;
-  saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen'> & { id?: string }) => Promise<void>;
+  // FIX: Updated Omit to include 'paymentHistory' to align with API and component types.
+  saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => Promise<void>;
   deleteStudent: (studentId: string) => Promise<void>;
   saveAcademy: (academy: Omit<Academy, 'id'> & { id?: string }) => Promise<void>;
   deleteAcademy: (id: string) => Promise<void>;
@@ -97,7 +98,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setStudents(await api.getStudents());
   }
 
-  const saveStudent = async (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen'> & { id?: string }) => {
+  const saveStudent = async (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => {
       await api.saveStudent(student);
       setStudents(await api.getStudents());
   }

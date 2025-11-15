@@ -1,13 +1,12 @@
-
 import React, { useContext } from 'react';
 import { AppContext } from '../context/AppContext';
 import Card from '../components/ui/Card';
 import PaymentsChart from '../components/charts/PaymentsChart';
 import AttendanceChart from '../components/charts/AttendanceChart';
-import { IconUsers, IconDollarSign, IconBuilding } from '../constants';
+import { IconUsers, IconDollarSign, IconBuilding, IconGift } from '../constants';
 
 const Dashboard: React.FC = () => {
-    const { user, students, academies, loading } = useContext(AppContext);
+    const { user, users, students, academies, loading } = useContext(AppContext);
     
     if (loading) {
         return <div className="text-center">Carregando dados...</div>;
@@ -15,6 +14,11 @@ const Dashboard: React.FC = () => {
     
     const paidStudents = students.filter(s => s.paymentStatus === 'paid').length;
     
+    const currentMonth = new Date().getMonth();
+    const birthdayStudents = students.filter(s => new Date(s.birthDate).getUTCMonth() === currentMonth);
+    const birthdayProfessors = users.filter(u => u.birthDate && u.role !== 'student' && new Date(u.birthDate).getUTCMonth() === currentMonth);
+    const allBirthdays = [...birthdayStudents, ...birthdayProfessors];
+
     return (
         <div className="space-y-8">
             <h1 className="text-4xl font-bold text-white">Bem-vindo, {user?.name}!</h1>
@@ -52,10 +56,29 @@ const Dashboard: React.FC = () => {
                 )}
             </div>
 
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <PaymentsChart students={students} />
-                <AttendanceChart />
+            {/* Charts and Birthdays */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <PaymentsChart students={students} />
+                    <AttendanceChart />
+                </div>
+                <Card>
+                    <h3 className="text-xl font-bold text-red-500 mb-4 flex items-center"><IconGift /><span className="ml-2">Aniversariantes do Mês</span></h3>
+                    <div className="space-y-3 max-h-80 overflow-y-auto">
+                        {allBirthdays.length > 0 ? (
+                            allBirthdays
+                                .sort((a,b) => new Date(a.birthDate!).getUTCDate() - new Date(b.birthDate!).getUTCDate())
+                                .map(person => (
+                                <div key={person.id} className="p-2 bg-gray-700/50 rounded-md">
+                                    <p className="font-semibold text-white">{person.name}</p>
+                                    <p className="text-sm text-gray-400">{new Date(person.birthDate!).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', timeZone: 'UTC' })}</p>
+                                </div>
+                            ))
+                        ) : (
+                            <p className="text-gray-400">Nenhum aniversário este mês.</p>
+                        )}
+                    </div>
+                </Card>
             </div>
         </div>
     );
