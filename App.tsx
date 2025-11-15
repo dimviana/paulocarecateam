@@ -196,7 +196,7 @@ const AcademiesPage: React.FC = () => {
 const ProtectedRoute: React.FC = () => {
     const { user } = useContext(AppContext);
     if (!user) {
-        return <Navigate to="/login" replace />;
+        return <Navigate to="/" replace />;
     }
     return (
         <Layout>
