@@ -1,3 +1,4 @@
+
 import React, { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Student } from '../types';
@@ -107,7 +108,7 @@ const FinancePage: React.FC = () => {
                                         <Button size="sm" variant="secondary" onClick={() => handleOpenHistoryModal(student)}>Ver Histórico</Button>
                                         {student.paymentStatus === 'unpaid' && (
                                             <>
-                                                <Button size="sm" onClick={() => handleStatusUpdate(student.id, 'paid')}>Marcar como Pago</Button>
+                                                <Button size="sm" variant="success" onClick={() => handleStatusUpdate(student.id, 'paid')}>Marcar como Pago</Button>
                                                 <Button variant="secondary" size="sm" onClick={() => handleSendMessage(student.phone, student.name)}>Lembrar (WhatsApp)</Button>
                                             </>
                                         )}
