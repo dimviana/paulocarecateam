@@ -51,6 +51,7 @@ export interface Academy {
   responsibleRegistration: string;
   professorId: string;
   assistantIds: string[];
+  imageUrl?: string;
 }
 
 export interface User {

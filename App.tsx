@@ -33,6 +33,7 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
     responsibleRegistration: '',
     professorId: '',
     assistantIds: [] as string[],
+    imageUrl: '',
     ...academy
   });
   
@@ -55,6 +56,7 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input label="Nome da Academia" name="name" value={formData.name} onChange={handleChange} required />
       <Input label="Endereço / Localização" name="address" value={formData.address} onChange={handleChange} required />
+      <Input label="URL da Imagem (.png, .jpg)" name="imageUrl" value={formData.imageUrl} onChange={handleChange} placeholder="https://exemplo.com/imagem.png" />
       <Input label="Nome do Responsável" name="responsible" value={formData.responsible} onChange={handleChange} required />
       <Input label="CPF/CNPJ / Registro" name="responsibleRegistration" value={formData.responsibleRegistration} onChange={handleChange} required />
       
@@ -128,7 +130,7 @@ const AcademiesPage: React.FC = () => {
                         const professor = users.find(u => u.id === academy.professorId);
                         return (
                            <Card key={academy.id} className="text-center flex flex-col items-center transition-all duration-300 ease-in-out transform hover:-translate-y-2 hover:shadow-2xl hover:shadow-red-900/50 hover:border-red-500/50">
-                               <img src={`https://i.pravatar.cc/150?u=${professor?.email}`} alt={professor?.name} className="w-24 h-24 rounded-full mb-4 border-4 border-gray-700 group-hover:border-red-500 transition-colors" />
+                               <img src={academy.imageUrl || `https://i.pravatar.cc/150?u=${professor?.email}`} alt={academy.name} className="w-24 h-24 rounded-full mb-4 border-4 border-gray-700 group-hover:border-red-500 transition-colors object-cover" />
                                <h2 className="text-xl font-bold text-white">{academy.name}</h2>
                                <p className="text-sm text-gray-400 mb-1">Resp: {academy.responsible}</p>
                                <p className="text-sm text-gray-400">{academy.address}</p>

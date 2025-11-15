@@ -25,8 +25,8 @@ let students: Student[] = [
 ];
 
 let academies: Academy[] = [
-  { id: '1', name: 'Gracie Humaitá', address: 'Rio de Janeiro, RJ', responsible: 'Royler Gracie', responsibleRegistration: 'REG-001', professorId: '1', assistantIds: ['2'] },
-  { id: '2', name: 'Atos Jiu-Jitsu', address: 'San Diego, CA', responsible: 'Andre Galvão', responsibleRegistration: 'REG-002', professorId: '3', assistantIds: ['4'] },
+  { id: '1', name: 'Gracie Humaitá', address: 'Rio de Janeiro, RJ', responsible: 'Royler Gracie', responsibleRegistration: 'REG-001', professorId: '1', assistantIds: ['2'], imageUrl: 'https://i.imgur.com/8L3h7M0.png' },
+  { id: '2', name: 'Atos Jiu-Jitsu', address: 'San Diego, CA', responsible: 'Andre Galvão', responsibleRegistration: 'REG-002', professorId: '3', assistantIds: ['4'], imageUrl: 'https://i.imgur.com/O6G3g5I.png' },
 ];
 
 let users: User[] = [
