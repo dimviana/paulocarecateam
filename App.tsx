@@ -1,4 +1,4 @@
-import React, { useContext, useState, FormEvent } from 'react';
+import React, { useContext, useState, FormEvent, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
 import { Academy } from './types';
@@ -37,6 +37,8 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
     ...academy
   });
   
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (name === 'assistantIds' && e.target instanceof HTMLSelectElement) {
@@ -44,6 +46,17 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
       setFormData(prev => ({ ...prev, assistantIds: selectedIds }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setFormData(prev => ({ ...prev, imageUrl: reader.result as string }));
+        };
+        reader.readAsDataURL(file);
     }
   };
 
@@ -56,7 +69,33 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input label="Nome da Academia" name="name" value={formData.name} onChange={handleChange} required />
       <Input label="Endereço / Localização" name="address" value={formData.address} onChange={handleChange} required />
-      <Input label="URL da Imagem (.png, .jpg)" name="imageUrl" value={formData.imageUrl} onChange={handleChange} placeholder="https://exemplo.com/imagem.png" />
+      <Input label="URL da Imagem (.png, .jpg)" name="imageUrl" value={formData.imageUrl} onChange={handleChange} placeholder="Cole a URL ou carregue abaixo" />
+      
+      <div className="text-center text-gray-400 my-1 text-sm">OU</div>
+      
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+        accept="image/png, image/jpeg"
+      />
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={() => fileInputRef.current?.click()}
+        className="w-full"
+      >
+        Carregar Imagem do Computador
+      </Button>
+
+      {formData.imageUrl && (
+          <div className="mt-4 text-center">
+              <p className="text-sm font-medium text-gray-300 mb-2">Pré-visualização:</p>
+              <img src={formData.imageUrl} alt="Pré-visualização da academia" className="w-24 h-24 rounded-lg object-cover mx-auto border border-gray-600" />
+          </div>
+      )}
+
       <Input label="Nome do Responsável" name="responsible" value={formData.responsible} onChange={handleChange} required />
       <Input label="CPF/CNPJ / Registro" name="responsibleRegistration" value={formData.responsibleRegistration} onChange={handleChange} required />
       
