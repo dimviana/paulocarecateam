@@ -20,6 +20,7 @@ const StudentDetailsModal: React.FC<{ student: Student; onClose: () => void }> =
                 <p><strong>Endereço:</strong> {student.address}</p>
                 <p><strong>Data de Nascimento:</strong> {new Date(student.birthDate).toLocaleDateString()}</p>
                 <p><strong>Primeira Graduação:</strong> {new Date(student.firstGraduationDate).toLocaleDateString()}</p>
+                <p><strong>Dia do Vencimento:</strong> Dia {student.paymentDueDateDay}</p>
                 <p><strong>Status Financeiro:</strong>
                     <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${student.paymentStatus === 'paid' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                         {student.paymentStatus === 'paid' ? 'Em Dia' : 'Inadimplente'}
@@ -52,12 +53,13 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
         beltId: '',
         academyId: '',
         firstGraduationDate: '',
+        paymentDueDateDay: 10,
         ...student,
     });
     
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const { name, value, type } = e.target;
+        setFormData(prev => ({ ...prev, [name]: type === 'number' ? parseInt(value) || 0 : value }));
     };
 
     const handleSubmit = (e: FormEvent) => {
@@ -88,6 +90,8 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
                 </select>
             </div>
             <Input label="Data da Primeira Graduação" name="firstGraduationDate" type="date" value={formData.firstGraduationDate} onChange={handleChange} required />
+            <Input label="Dia do Vencimento da Mensalidade" name="paymentDueDateDay" type="number" min="1" max="31" value={formData.paymentDueDateDay} onChange={handleChange} required />
+
             <div className="flex justify-end gap-4 pt-4">
                 <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
                 <Button type="submit">Salvar</Button>

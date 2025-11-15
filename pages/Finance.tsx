@@ -1,5 +1,4 @@
-
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Student } from '../types';
 import Card from '../components/ui/Card';
@@ -38,13 +37,54 @@ const PaymentHistoryModal: React.FC<{ student: Student; onClose: () => void, onR
 
 
 const FinancePage: React.FC = () => {
-    const { students, updateStudentPayment, loading } = useContext(AppContext);
+    const { students, updateStudentPayment, loading, graduations } = useContext(AppContext);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-    const [updatedRow, setUpdatedRow] = useState<{ id: string; status: 'paid' | 'unpaid' } | null>(null);
+    const [updatedCard, setUpdatedCard] = useState<string | null>(null);
 
-    const handleSendMessage = (phone: string, name: string) => {
-        const message = `Olá ${name},%20gostaríamos%20de%20lembrar%20sobre%20o%20pagamento%20da%20sua%20mensalidade.`;
+    const { remindersToSend, overduePayments } = useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const reminders: Student[] = [];
+        const overdue: Student[] = [];
+
+        students.forEach(student => {
+            if (!student.paymentDueDateDay) return;
+
+            const dueDateThisMonth = new Date(today.getFullYear(), today.getMonth(), student.paymentDueDateDay);
+            
+            const lastDueDate = dueDateThisMonth > today 
+                ? new Date(today.getFullYear(), today.getMonth() - 1, student.paymentDueDateDay)
+                : dueDateThisMonth;
+            
+            const nextDueDate = dueDateThisMonth > today
+                ? dueDateThisMonth
+                : new Date(today.getFullYear(), today.getMonth() + 1, student.paymentDueDateDay);
+
+            if (student.paymentStatus === 'unpaid') {
+                const daysSinceLastDue = Math.round((today.getTime() - lastDueDate.getTime()) / (1000 * 60 * 60 * 24));
+                if (daysSinceLastDue > 0 && daysSinceLastDue <= 5) {
+                    overdue.push(student);
+                }
+
+                const daysUntilNextDue = Math.round((nextDueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                if (daysUntilNextDue >= 0 && daysUntilNextDue <= 5) {
+                    reminders.push(student);
+                }
+            }
+        });
+
+        return { remindersToSend: reminders, overduePayments: overdue };
+    }, [students]);
+
+    const handleSendReminder = (phone: string, name: string) => {
+        const message = `Olá ${name},%20tudo%20bem?%20Passando%20para%20lembrar%20que%20sua%20mensalidade%20está%20próxima%20do%20vencimento.%20Qualquer%20dúvida,%20estamos%20à%20disposição!`;
+        window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+    };
+
+    const handleSendOverdueNotice = (phone: string, name: string) => {
+        const message = `Olá ${name},%20tudo%20bem?%20Identificamos%20que%20sua%20mensalidade%20está%20em%20atraso.%20Por%20favor,%20regularize%20sua%20situação%20o%20mais%20breve%20possível.%20Obrigado!`;
         window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
     };
 
@@ -67,61 +107,93 @@ const FinancePage: React.FC = () => {
 
     const handleStatusUpdate = async (studentId: string, status: 'paid' | 'unpaid') => {
         await updateStudentPayment(studentId, status);
-        setUpdatedRow({ id: studentId, status });
+        setUpdatedCard(studentId);
         setTimeout(() => {
-            setUpdatedRow(null);
+            setUpdatedCard(null);
         }, 2500);
     };
 
     return (
         <div className="space-y-6">
             <h1 className="text-3xl font-bold text-white">Controle Financeiro</h1>
-            <Card>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="border-b border-gray-700">
-                            <tr>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Nome</th>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Status</th>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan={3} className="p-4 text-center">Carregando...</td></tr>
-                            ) : students.map(student => {
-                                const isUpdated = updatedRow?.id === student.id;
-                                const rowClass = isUpdated
-                                    ? updatedRow.status === 'paid'
-                                        ? 'bg-green-500/20'
-                                        : 'bg-red-500/20'
-                                    : '';
-                                return (
-                                <tr key={student.id} className={`border-b border-gray-800 hover:bg-gray-800/50 transition-colors duration-500 ${rowClass}`}>
-                                    <td className="p-4">{student.name}</td>
-                                    <td className="p-4">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${student.paymentStatus === 'paid' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                                            {student.paymentStatus === 'paid' ? 'Em Dia' : 'Inadimplente'}
-                                        </span>
-                                    </td>
-                                    <td className="p-4 flex flex-wrap gap-2">
-                                        <Button size="sm" variant="secondary" onClick={() => handleOpenHistoryModal(student)}>Ver Histórico</Button>
-                                        {student.paymentStatus === 'unpaid' && (
-                                            <>
-                                                <Button size="sm" variant="success" onClick={() => handleStatusUpdate(student.id, 'paid')}>Marcar como Pago</Button>
-                                                <Button variant="secondary" size="sm" onClick={() => handleSendMessage(student.phone, student.name)}>Lembrar (WhatsApp)</Button>
-                                            </>
-                                        )}
-                                        {student.paymentStatus === 'paid' && (
-                                             <Button variant="danger" size="sm" onClick={() => handleStatusUpdate(student.id, 'unpaid')}>Marcar como Inadimplente</Button>
-                                        )}
-                                    </td>
-                                </tr>
-                            )})}
-                        </tbody>
-                    </table>
+            
+            {remindersToSend.length > 0 && (
+                <Card>
+                    <h2 className="text-xl font-bold text-yellow-400 mb-4">Lembretes a Enviar (Vence em até 5 dias)</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {remindersToSend.map(student => (
+                            <div key={student.id} className="p-3 bg-gray-700/50 rounded-md flex justify-between items-center">
+                                <div>
+                                    <p className="font-semibold">{student.name}</p>
+                                    <p className="text-sm text-gray-400">Vence dia: {student.paymentDueDateDay}</p>
+                                </div>
+                                <Button size="sm" onClick={() => handleSendReminder(student.phone, student.name)}>Enviar Lembrete</Button>
+                            </div>
+                        ))}
+                    </div>
+                </Card>
+            )}
+
+             {overduePayments.length > 0 && (
+                <Card>
+                    <h2 className="text-xl font-bold text-red-500 mb-4">Cobranças Atrasadas (Venceu há até 5 dias)</h2>
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {overduePayments.map(student => (
+                            <div key={student.id} className="p-3 bg-gray-700/50 rounded-md flex justify-between items-center">
+                                <div>
+                                    <p className="font-semibold">{student.name}</p>
+                                    <p className="text-sm text-gray-400">Venceu dia: {student.paymentDueDateDay}</p>
+                                </div>
+                                <Button size="sm" variant="danger" onClick={() => handleSendOverdueNotice(student.phone, student.name)}>Enviar Cobrança</Button>
+                            </div>
+                        ))}
+                    </div>
+                </Card>
+            )}
+
+            <h2 className="text-2xl font-bold text-white pt-4">Todos os Alunos</h2>
+            {loading ? (
+                <div className="text-center p-4">Carregando...</div>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {students.map(student => {
+                        const belt = graduations.find(g => g.id === student.beltId);
+                        const isUpdated = updatedCard === student.id;
+                        const cardClass = isUpdated
+                            ? student.paymentStatus === 'paid'
+                                ? 'border-green-500/80 scale-105'
+                                : 'border-red-500/80 scale-105'
+                            : 'hover:border-red-500/50';
+
+                        return (
+                           <Card key={student.id} className={`text-center flex flex-col items-center transition-all duration-500 ease-in-out transform hover:-translate-y-1 ${cardClass}`}>
+                               <img src={`https://i.pravatar.cc/150?u=${student.cpf}`} alt={student.name} className="w-24 h-24 rounded-full mb-4 border-4 border-gray-700" />
+                               <h2 className="text-xl font-bold text-white">{student.name}</h2>
+                               
+                                <span className={`my-2 px-2 py-1 rounded-full text-xs font-medium ${student.paymentStatus === 'paid' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                    {student.paymentStatus === 'paid' ? 'Em Dia' : 'Inadimplente'}
+                                </span>
+
+                               {belt && (
+                                   <div className="flex items-center justify-center bg-gray-700/50 px-3 py-1 rounded-full text-sm">
+                                       <span className="w-4 h-4 rounded-full mr-2 border border-gray-500" style={{ backgroundColor: belt.color }}></span>
+                                       {belt.name}
+                                   </div>
+                               )}
+                               <div className="mt-auto pt-4 w-full flex flex-col sm:flex-row justify-center gap-2">
+                                    <Button size="sm" variant="secondary" onClick={() => handleOpenHistoryModal(student)}>Histórico</Button>
+                                    {student.paymentStatus === 'unpaid' && (
+                                        <Button size="sm" variant="success" onClick={() => handleStatusUpdate(student.id, 'paid')}>Pagar</Button>
+                                    )}
+                                    {student.paymentStatus === 'paid' && (
+                                         <Button variant="danger" size="sm" onClick={() => handleStatusUpdate(student.id, 'unpaid')}>Tornar Inadimplente</Button>
+                                    )}
+                               </div>
+                           </Card>
+                        );
+                    })}
                 </div>
-            </Card>
+            )}
 
             {isHistoryModalOpen && selectedStudent && (
                 <PaymentHistoryModal 

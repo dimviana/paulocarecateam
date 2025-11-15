@@ -40,6 +40,7 @@ export interface Student {
   paymentStatus: 'paid' | 'unpaid';
   lastSeen: string;
   paymentHistory: Payment[];
+  paymentDueDateDay: number;
 }
 
 export interface Academy {
