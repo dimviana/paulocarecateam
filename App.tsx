@@ -12,6 +12,7 @@ import GraduationsPage from './pages/Graduations';
 import SchedulesPage from './pages/Schedules';
 import AttendancePage from './pages/Attendance';
 import ProfilePage from './pages/Profile';
+import PublicPage from './pages/PublicPage';
 import Card from './components/ui/Card';
 import Button from './components/ui/Button';
 import Modal from './components/ui/Modal';
@@ -204,9 +205,27 @@ const ProtectedRoute: React.FC = () => {
     );
 };
 
+const PublicPageWrapper: React.FC = () => {
+    const { themeSettings, loading, user } = useContext(AppContext);
+
+    if (loading) {
+        return <div className="h-screen w-screen flex items-center justify-center bg-gray-900 text-white">Carregando...</div>;
+    }
+    
+    // If user is logged in, always go to dashboard
+    if(user) {
+        return <Navigate to="/dashboard" replace />;
+    }
+
+    // If not logged in, show public page or redirect to login
+    return themeSettings.publicPageEnabled ? <PublicPage /> : <Navigate to="/login" replace />;
+}
+
+
 const AppRoutes: React.FC = () => {
   return (
     <Routes>
+      <Route path="/" element={<PublicPageWrapper />} />
       <Route path="/login" element={<Login />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
@@ -218,7 +237,6 @@ const AppRoutes: React.FC = () => {
         <Route path="/attendance" element={<AttendancePage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Route>
        <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

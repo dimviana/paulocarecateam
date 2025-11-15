@@ -8,7 +8,78 @@ export const initialThemeSettings: ThemeSettings = {
   useGradient: true,
   reminderDaysBeforeDue: 5,
   overdueDaysAfterDue: 5,
+  publicPageEnabled: false,
+  heroHtml: `
+<div class="relative bg-gray-800 text-white text-center py-20 px-4 overflow-hidden" style="background-image: url('https://images.unsplash.com/photo-1581009137052-c40971b51c69?q=80&w=2070&auto=format&fit=crop'); background-size: cover; background-position: center;">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+    <div class="relative z-10 container mx-auto">
+        <h1 class="text-5xl font-bold mb-4 animate-fade-in-down">Jiu-Jitsu: Arte, Disciplina, Respeito</h1>
+        <p class="text-xl animate-fade-in-up">Transforme sua vida dentro e fora do tatame. Junte-se à nossa família.</p>
+        <a href="#filiais" class="mt-8 inline-block bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg transition duration-300">Encontre uma Academia</a>
+    </div>
+</div>
+  `,
+  aboutHtml: `
+<div class="py-16 bg-gray-900 px-4">
+    <div class="container mx-auto text-center">
+        <h2 class="text-4xl font-bold text-red-500 mb-6">Quem Somos</h2>
+        <p class="text-lg text-gray-300 max-w-3xl mx-auto">
+            Somos mais do que uma academia, somos uma comunidade unida pela paixão pelo Jiu-Jitsu. Com instrutores de classe mundial e um ambiente acolhedor, nossa missão é capacitar cada aluno a atingir seu potencial máximo, promovendo saúde, autoconfiança e respeito mútuo.
+        </p>
+    </div>
+</div>
+  `,
+  branchesHtml: `
+<div class="py-16 bg-gray-800 px-4">
+    <div class="container mx-auto text-center">
+        <h2 class="text-4xl font-bold text-red-500 mb-10">Nossas Filiais</h2>
+        <p class="text-gray-300">Aqui você pode listar suas academias. Este conteúdo é totalmente personalizável na área de configurações!</p>
+        <!-- Exemplo: <div class="mt-4 p-4 bg-gray-700 rounded"><h3>Nome da Academia</h3><p>Endereço</p></div> -->
+    </div>
+</div>
+  `,
+  footerHtml: `
+<div class="py-8 bg-black text-center text-gray-400">
+    <p>&copy; ${new Date().getFullYear()} Jiu-Jitsu Hub. Todos os direitos reservados.</p>
+    <p>Desenvolvido com a Arte Suave em mente.</p>
+</div>
+  `,
+  customCss: `
+@keyframes fade-in-down {
+    0% {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+@keyframes fade-in-up {
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.animate-fade-in-down {
+    animation: fade-in-down 1s ease-out forwards;
+}
+.animate-fade-in-up {
+    animation: fade-in-up 1s ease-out 0.5s forwards;
+}
+html {
+    scroll-behavior: smooth;
+}
+  `,
+  customJs: `
+// console.log("Custom JS loaded!");
+  `
 };
+
 
 export const IconUsers = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>

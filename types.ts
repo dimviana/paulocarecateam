@@ -72,6 +72,14 @@ export interface ThemeSettings {
   useGradient: boolean;
   reminderDaysBeforeDue: number;
   overdueDaysAfterDue: number;
+  // Public Web Page Settings
+  publicPageEnabled: boolean;
+  heroHtml: string;
+  aboutHtml: string;
+  branchesHtml: string;
+  footerHtml: string;
+  customCss: string;
+  customJs: string;
 }
 
 export interface NewsArticle {
