@@ -1,13 +1,14 @@
-
 import React, { useState, useContext, FormEvent } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
+import { IconEye, IconEyeOff } from '../constants';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -51,15 +52,28 @@ const Login: React.FC = () => {
                     required
                     placeholder="seu@email.com"
                 />
-                 <Input 
-                    id="password"
-                    label="Senha"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    placeholder="********"
-                />
+                 <div>
+                    <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha</label>
+                    <div className="relative">
+                        <input
+                            id="password"
+                            type={showPassword ? 'text' : 'password'}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            placeholder="********"
+                            className="w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500 transition duration-150 ease-in-out pr-10"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white"
+                            aria-label={showPassword ? "Esconder senha" : "Mostrar senha"}
+                        >
+                            {showPassword ? <IconEyeOff /> : <IconEye />}
+                        </button>
+                    </div>
+                </div>
                 {error && <p className="text-sm text-red-500">{error}</p>}
                 <div>
                     <Button type="submit" className="w-full" disabled={loading}>
