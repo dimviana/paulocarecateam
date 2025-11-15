@@ -3,6 +3,7 @@ export interface Graduation {
   name: string;
   color: string;
   minTimeInMonths: number;
+  rank: number;
 }
 
 export type DayOfWeek = 'Segunda-feira' | 'Terça-feira' | 'Quarta-feira' | 'Quinta-feira' | 'Sexta-feira' | 'Sábado' | 'Domingo';
@@ -16,6 +17,7 @@ export interface ClassSchedule {
   professorId: string;
   assistantIds: string[];
   academyId: string;
+  requiredGraduationId: string;
 }
 
 export interface Student {

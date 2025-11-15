@@ -15,20 +15,19 @@ interface ScheduleFormProps {
 const DAYS_OF_WEEK: DayOfWeek[] = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
 const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }) => {
-  const { users, academies, user } = useContext(AppContext);
+  const { users, academies, user, graduations } = useContext(AppContext);
   const [formData, setFormData] = useState({
     className: '',
     dayOfWeek: 'Segunda-feira' as DayOfWeek,
     startTime: '',
     endTime: '',
     professorId: '',
-    // FIX: Initialize assistantIds as string[] to avoid type inference issues.
     assistantIds: [] as string[],
     academyId: user?.role === 'academy_admin' ? user.academyId || '' : '',
+    requiredGraduationId: '',
     ...schedule
   });
 
-  // FIX: Correctly handle change events for different input types to avoid TypeScript errors.
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (name === 'assistantIds' && e.target instanceof HTMLSelectElement) {
@@ -60,13 +59,19 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
         <Input label="Horário de Fim" name="endTime" type="time" value={formData.endTime} onChange={handleChange} required />
       </div>
        <div>
+        <label className="block text-sm font-medium text-gray-300 mb-1">Graduação Mínima</label>
+        <select name="requiredGraduationId" value={formData.requiredGraduationId} onChange={handleChange} required className="w-full bg-gray-900/50 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
+           <option value="">Selecione uma graduação</option>
+           {graduations.sort((a,b) => a.rank - b.rank).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+      </div>
+       <div>
         <label className="block text-sm font-medium text-gray-300 mb-1">Professor</label>
         <select name="professorId" value={formData.professorId} onChange={handleChange} required className="w-full bg-gray-900/50 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
            <option value="">Selecione um professor</option>
            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </div>
-       {/* FIX: Add missing multi-select for assistantIds */}
        <div>
         <label className="block text-sm font-medium text-gray-300 mb-1">Assistentes (segure Ctrl/Cmd para selecionar vários)</label>
         <select
@@ -98,7 +103,7 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
 
 
 const SchedulesPage: React.FC = () => {
-  const { schedules, saveSchedule, deleteSchedule, loading, users, user } = useContext(AppContext);
+  const { schedules, saveSchedule, deleteSchedule, loading, users, user, graduations } = useContext(AppContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<Partial<ClassSchedule> | null>(null);
 
@@ -157,11 +162,20 @@ const SchedulesPage: React.FC = () => {
                     <Card key={day}>
                         <h2 className="text-xl font-bold text-red-500 mb-4">{day}</h2>
                         <div className="space-y-4">
-                            {groupedSchedules[day].sort((a,b) => a.startTime.localeCompare(b.startTime)).map(schedule => (
+                            {groupedSchedules[day].sort((a,b) => a.startTime.localeCompare(b.startTime)).map(schedule => {
+                                const requiredGrad = graduations.find(g => g.id === schedule.requiredGraduationId);
+                                return (
                                 <div key={schedule.id} className="bg-gray-700/50 p-3 rounded-md">
                                     <p className="font-semibold">{schedule.className}</p>
                                     <p className="text-sm text-gray-300">{schedule.startTime} - {schedule.endTime}</p>
                                     <p className="text-sm text-gray-400">Prof: {users.find(u => u.id === schedule.professorId)?.name}</p>
+                                    {requiredGrad && (
+                                        <p className="text-sm text-gray-400 flex items-center mt-1">
+                                            Mín:
+                                            <span className="w-3 h-3 rounded-full mx-1.5 border border-gray-500" style={{ backgroundColor: requiredGrad.color }}></span>
+                                            {requiredGrad.name}
+                                        </p>
+                                    )}
                                     {isAdmin && (
                                         <div className="flex gap-2 mt-2">
                                             <Button variant="secondary" size="sm" onClick={() => handleOpenModal(schedule)}>Editar</Button>
@@ -169,7 +183,7 @@ const SchedulesPage: React.FC = () => {
                                         </div>
                                     )}
                                 </div>
-                            ))}
+                            )})}
                         </div>
                     </Card>
                 )

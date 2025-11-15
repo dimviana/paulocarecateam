@@ -1,6 +1,7 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, FormEvent } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
+import { Academy } from './types';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -11,8 +12,150 @@ import GraduationsPage from './pages/Graduations';
 import SchedulesPage from './pages/Schedules';
 import AttendancePage from './pages/Attendance';
 import ProfilePage from './pages/Profile';
+import Card from './components/ui/Card';
+import Button from './components/ui/Button';
+import Modal from './components/ui/Modal';
+import Input from './components/ui/Input';
 
-const AcademiesPage = () => <div className="text-white text-2xl">Página de Academias (em construção)</div>;
+
+interface AcademyFormProps {
+  academy: Partial<Academy> | null;
+  onSave: (academy: Omit<Academy, 'id'> & { id?: string }) => void;
+  onClose: () => void;
+}
+
+const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) => {
+  const { users } = useContext(AppContext);
+  const [formData, setFormData] = useState({
+    name: '',
+    address: '',
+    responsible: '',
+    responsibleRegistration: '',
+    professorId: '',
+    assistantIds: [] as string[],
+    ...academy
+  });
+  
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    if (name === 'assistantIds' && e.target instanceof HTMLSelectElement) {
+      const selectedIds = Array.from(e.target.selectedOptions).map(option => option.value);
+      setFormData(prev => ({ ...prev, assistantIds: selectedIds }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <Input label="Nome da Academia" name="name" value={formData.name} onChange={handleChange} required />
+      <Input label="Endereço / Localização" name="address" value={formData.address} onChange={handleChange} required />
+      <Input label="Nome do Responsável" name="responsible" value={formData.responsible} onChange={handleChange} required />
+      <Input label="CPF/CNPJ / Registro" name="responsibleRegistration" value={formData.responsibleRegistration} onChange={handleChange} required />
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-1">Professor Responsável</label>
+        <select name="professorId" value={formData.professorId} onChange={handleChange} required className="w-full bg-gray-900/50 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
+           <option value="">Selecione um professor</option>
+           {users.filter(u => u.role !== 'student').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-1">Assistentes (segure Ctrl/Cmd para selecionar)</label>
+        <select
+          name="assistantIds"
+          value={formData.assistantIds}
+          onChange={handleChange}
+          multiple
+          className="w-full bg-gray-900/50 border border-gray-600 text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500 h-24"
+        >
+          {users.filter(u => u.role !== 'student').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+      </div>
+      
+      <div className="flex justify-end gap-4 pt-4">
+        <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+        <Button type="submit">Salvar</Button>
+      </div>
+    </form>
+  );
+};
+
+const AcademiesPage: React.FC = () => {
+    const { academies, users, saveAcademy, deleteAcademy, loading } = useContext(AppContext);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedAcademy, setSelectedAcademy] = useState<Partial<Academy> | null>(null);
+
+    const handleOpenModal = (academy: Partial<Academy> | null = null) => {
+        setSelectedAcademy(academy);
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setSelectedAcademy(null);
+    };
+
+    const handleSaveAcademy = async (academyData: Omit<Academy, 'id'> & { id?: string }) => {
+        await saveAcademy(academyData);
+        handleCloseModal();
+    };
+    
+    const handleDeleteAcademy = async (academyId: string) => {
+      if(window.confirm('Tem certeza que deseja excluir esta academia?')) {
+        await deleteAcademy(academyId);
+      }
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h1 className="text-3xl font-bold text-white">Gerenciar Academias</h1>
+                <Button onClick={() => handleOpenModal({})}>Adicionar Academia</Button>
+            </div>
+            <Card>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead className="border-b border-gray-700">
+                            <tr>
+                                <th className="p-4 text-sm font-semibold text-gray-300">Academia</th>
+                                <th className="p-4 text-sm font-semibold text-gray-300">Responsável</th>
+                                <th className="p-4 text-sm font-semibold text-gray-300">Endereço</th>
+                                <th className="p-4 text-sm font-semibold text-gray-300">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                <tr><td colSpan={4} className="p-4 text-center">Carregando...</td></tr>
+                            ) : academies.map(academy => (
+                                <tr key={academy.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                                    <td className="p-4">{academy.name}</td>
+                                    <td className="p-4">{academy.responsible}</td>
+                                    <td className="p-4">{academy.address}</td>
+                                    <td className="p-4 flex gap-2">
+                                        <Button variant="secondary" size="sm" onClick={() => handleOpenModal(academy)}>Editar</Button>
+                                        <Button variant="danger" size="sm" onClick={() => handleDeleteAcademy(academy.id)}>Excluir</Button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
+
+            <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={selectedAcademy?.id ? 'Editar Academia' : 'Adicionar Academia'}>
+                <AcademyForm academy={selectedAcademy} onSave={handleSaveAcademy} onClose={handleCloseModal} />
+            </Modal>
+        </div>
+    );
+};
+
 
 const ProtectedRoute: React.FC = () => {
     const { user } = useContext(AppContext);

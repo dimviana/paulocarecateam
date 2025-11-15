@@ -17,12 +17,13 @@ const GraduationForm: React.FC<GraduationFormProps> = ({ graduation, onSave, onC
     name: '',
     color: '#FFFFFF',
     minTimeInMonths: 0,
+    rank: 0,
     ...graduation
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = e.target;
-    setFormData(prev => ({ ...prev, [name]: type === 'number' ? parseInt(value) : value }));
+    setFormData(prev => ({ ...prev, [name]: type === 'number' ? parseInt(value) || 0 : value }));
   };
 
   const handleSubmit = (e: FormEvent) => {
@@ -33,6 +34,7 @@ const GraduationForm: React.FC<GraduationFormProps> = ({ graduation, onSave, onC
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input label="Nome da Faixa" name="name" value={formData.name} onChange={handleChange} required />
+      <Input label="Ordem (Rank)" name="rank" type="number" value={formData.rank} onChange={handleChange} required />
       <Input label="Cor" name="color" type="color" value={formData.color} onChange={handleChange} required />
       <Input label="Tempo Mínimo (meses)" name="minTimeInMonths" type="number" value={formData.minTimeInMonths} onChange={handleChange} required />
       <div className="flex justify-end gap-4 pt-4">
@@ -80,6 +82,7 @@ const GraduationsPage: React.FC = () => {
           <table className="w-full text-left">
             <thead className="border-b border-gray-700">
               <tr>
+                <th className="p-4 text-sm font-semibold text-gray-300">Ordem</th>
                 <th className="p-4 text-sm font-semibold text-gray-300">Nome</th>
                 <th className="p-4 text-sm font-semibold text-gray-300">Cor</th>
                 <th className="p-4 text-sm font-semibold text-gray-300">Tempo Mínimo</th>
@@ -88,9 +91,10 @@ const GraduationsPage: React.FC = () => {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} className="p-4 text-center">Carregando...</td></tr>
-              ) : graduations.map(grad => (
+                <tr><td colSpan={5} className="p-4 text-center">Carregando...</td></tr>
+              ) : [...graduations].sort((a,b) => a.rank - b.rank).map(grad => (
                 <tr key={grad.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                  <td className="p-4">{grad.rank}</td>
                   <td className="p-4">{grad.name}</td>
                   <td className="p-4">
                     <div className="flex items-center">

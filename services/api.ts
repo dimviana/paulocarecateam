@@ -1,20 +1,20 @@
 import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule } from '../types';
 
 let graduations: Graduation[] = [
-  { id: '1', name: 'Branca', color: '#FFFFFF', minTimeInMonths: 0 },
-  { id: '2', name: 'Azul', color: '#0000FF', minTimeInMonths: 24 },
-  { id: '3', name: 'Roxa', color: '#800080', minTimeInMonths: 24 },
-  { id: '4', name: 'Marrom', color: '#A52A2A', minTimeInMonths: 18 },
-  { id: '5', name: 'Preta', color: '#000000', minTimeInMonths: 12 },
-  { id: '6', name: 'Coral', color: '#FF7F50', minTimeInMonths: 36 },
-  { id: '7', name: 'Vermelha', color: '#FF0000', minTimeInMonths: 60 },
+  { id: '1', name: 'Branca', color: '#FFFFFF', minTimeInMonths: 0, rank: 1 },
+  { id: '2', name: 'Azul', color: '#0000FF', minTimeInMonths: 24, rank: 2 },
+  { id: '3', name: 'Roxa', color: '#800080', minTimeInMonths: 24, rank: 3 },
+  { id: '4', name: 'Marrom', color: '#A52A2A', minTimeInMonths: 18, rank: 4 },
+  { id: '5', name: 'Preta', color: '#000000', minTimeInMonths: 12, rank: 5 },
+  { id: '6', name: 'Coral', color: '#FF7F50', minTimeInMonths: 36, rank: 6 },
+  { id: '7', name: 'Vermelha', color: '#FF0000', minTimeInMonths: 60, rank: 7 },
 ];
 
 let schedules: ClassSchedule[] = [
-    { id: '1', className: 'Jiu-Jitsu Adulto (Iniciante)', dayOfWeek: 'Segunda-feira', startTime: '19:00', endTime: '20:30', professorId: '1', assistantIds: ['2'], academyId: '1' },
-    { id: '2', className: 'Jiu-Jitsu Kids', dayOfWeek: 'Terça-feira', startTime: '18:00', endTime: '19:00', professorId: '3', assistantIds: ['4'], academyId: '2' },
-    { id: '3', className: 'Jiu-Jitsu Adulto (Avançado)', dayOfWeek: 'Quarta-feira', startTime: '20:00', endTime: '21:30', professorId: '1', assistantIds: [], academyId: '1' },
-    { id: '4', className: 'Jiu-Jitsu Adulto (Todos)', dayOfWeek: 'Sexta-feira', startTime: '19:00', endTime: '20:30', professorId: '1', assistantIds: ['2'], academyId: '1' },
+    { id: '1', className: 'Jiu-Jitsu Adulto (Iniciante)', dayOfWeek: 'Segunda-feira', startTime: '19:00', endTime: '20:30', professorId: '1', assistantIds: ['2'], academyId: '1', requiredGraduationId: '1' },
+    { id: '2', className: 'Jiu-Jitsu Kids', dayOfWeek: 'Terça-feira', startTime: '18:00', endTime: '19:00', professorId: '3', assistantIds: ['4'], academyId: '2', requiredGraduationId: '1' },
+    { id: '3', className: 'Jiu-Jitsu Adulto (Avançado)', dayOfWeek: 'Quarta-feira', startTime: '20:00', endTime: '21:30', professorId: '1', assistantIds: [], academyId: '1', requiredGraduationId: '3' },
+    { id: '4', className: 'Jiu-Jitsu Adulto (Todos)', dayOfWeek: 'Sexta-feira', startTime: '19:00', endTime: '20:30', professorId: '1', assistantIds: ['2'], academyId: '1', requiredGraduationId: '1' },
 ];
 
 let students: Student[] = [
@@ -90,6 +90,29 @@ export const api = {
     return simulateDelay({ success: true });
   },
 
+  saveAcademy: (academy: Omit<Academy, 'id'> & { id?: string }): Promise<Academy> => {
+    if (academy.id) {
+        let existing = academies.find(a => a.id === academy.id);
+        if (!existing) throw new Error("Academy not found");
+        const updated = { ...existing, ...academy };
+        academies = academies.map(a => a.id === academy.id ? updated : a);
+        return simulateDelay(updated);
+    } else {
+        const newAcademy: Academy = { 
+            ...academy, 
+            id: String(Date.now()), 
+            assistantIds: academy.assistantIds || [] 
+        };
+        academies.push(newAcademy);
+        return simulateDelay(newAcademy);
+    }
+  },
+
+  deleteAcademy: (id: string): Promise<{ success: boolean }> => {
+    academies = academies.filter(a => a.id !== id);
+    return simulateDelay({ success: true });
+  },
+
   saveGraduation: (grad: Omit<Graduation, 'id'> & { id?: string }): Promise<Graduation> => {
     if (grad.id) {
         let existing = graduations.find(g => g.id === grad.id);
@@ -98,7 +121,7 @@ export const api = {
         graduations = graduations.map(g => g.id === grad.id ? updated : g);
         return simulateDelay(updated);
     } else {
-        const newGrad: Graduation = { ...grad, id: String(Date.now()) };
+        const newGrad: Graduation = { ...grad, id: String(Date.now()) } as Graduation;
         graduations.push(newGrad);
         return simulateDelay(newGrad);
     }
@@ -117,7 +140,7 @@ export const api = {
         schedules = schedules.map(s => s.id === schedule.id ? updated : s);
         return simulateDelay(updated);
     } else {
-        const newSchedule: ClassSchedule = { ...schedule, id: String(Date.now()) };
+        const newSchedule: ClassSchedule = { ...schedule, id: String(Date.now()) } as ClassSchedule;
         schedules.push(newSchedule);
         return simulateDelay(newSchedule);
     }

@@ -58,7 +58,7 @@ const StudentDetailsModal: React.FC<{ student: Student; onClose: () => void }> =
 };
 
 const AttendancePage: React.FC = () => {
-    const { schedules, users, user, students, loading } = useContext(AppContext);
+    const { schedules, users, user, students, loading, graduations } = useContext(AppContext);
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
     const today = DAYS_OF_WEEK[new Date().getDay()];
@@ -83,23 +83,34 @@ const AttendancePage: React.FC = () => {
                 </Card>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {todaysSchedules.map(schedule => (
+                    {todaysSchedules.map(schedule => {
+                        const requiredGrad = graduations.find(g => g.id === schedule.requiredGraduationId);
+                        const requiredRank = requiredGrad ? requiredGrad.rank : 0;
+
+                        const eligibleStudents = students.filter(student => {
+                            if (student.academyId !== schedule.academyId) return false;
+                            const studentGrad = graduations.find(g => g.id === student.beltId);
+                            const studentRank = studentGrad ? studentGrad.rank : 0;
+                            return studentRank >= requiredRank;
+                        });
+
+                        return (
                         <Card key={schedule.id}>
                             <h2 className="text-xl font-bold text-red-500 mb-2">{schedule.className}</h2>
                             <p className="text-gray-300">{schedule.startTime} - {schedule.endTime}</p>
                             <p className="text-gray-400 mb-4">Prof: {users.find(u => u.id === schedule.professorId)?.name}</p>
                             
-                            <h3 className="font-semibold mt-4 mb-2 border-t border-gray-700 pt-2">Alunos Presentes</h3>
+                            <h3 className="font-semibold mt-4 mb-2 border-t border-gray-700 pt-2">Alunos Aptos ({eligibleStudents.length})</h3>
                             <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
-                               {students.filter(s => s.academyId === schedule.academyId).map(student => (
+                               {eligibleStudents.length > 0 ? eligibleStudents.map(student => (
                                    <div key={student.id} className="flex justify-between items-center bg-gray-700/50 p-2 rounded-md">
                                         <span>{student.name}</span>
                                         <Button size="sm" variant="secondary" onClick={() => setSelectedStudent(student)}>Ver Detalhes</Button>
                                    </div>
-                               ))}
+                               )) : <p className="text-sm text-gray-400">Nenhum aluno apto para esta turma.</p>}
                             </div>
                         </Card>
-                    ))}
+                    )})}
                 </div>
             )}
             {selectedStudent && <StudentDetailsModal student={selectedStudent} onClose={() => setSelectedStudent(null)} />}

@@ -18,6 +18,8 @@ interface AppContextType {
   updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid') => Promise<void>;
   saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen'> & { id?: string }) => Promise<void>;
   deleteStudent: (studentId: string) => Promise<void>;
+  saveAcademy: (academy: Omit<Academy, 'id'> & { id?: string }) => Promise<void>;
+  deleteAcademy: (id: string) => Promise<void>;
   saveGraduation: (grad: Omit<Graduation, 'id'> & { id?: string }) => Promise<void>;
   deleteGraduation: (id: string) => Promise<void>;
   saveSchedule: (schedule: Omit<ClassSchedule, 'id'> & { id?: string }) => Promise<void>;
@@ -105,6 +107,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setStudents(await api.getStudents());
   }
 
+  const saveAcademy = async (academy: Omit<Academy, 'id'> & { id?: string }) => {
+      await api.saveAcademy(academy);
+      setAcademies(await api.getAcademies());
+  }
+
+  const deleteAcademy = async (id: string) => {
+    await api.deleteAcademy(id);
+    setAcademies(await api.getAcademies());
+  }
+
   const saveGraduation = async (grad: Omit<Graduation, 'id'> & { id?: string }) => {
       await api.saveGraduation(grad);
       setGraduations(await api.getGraduations());
@@ -132,6 +144,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         students, academies, graduations, schedules, users,
         loading, 
         updateStudentPayment, saveStudent, deleteStudent,
+        saveAcademy, deleteAcademy,
         saveGraduation, deleteGraduation,
         saveSchedule, deleteSchedule
     }}>
