@@ -6,13 +6,10 @@ import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 
 // --- Constants ---
-const WEEK_DAYS_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const DAYS_OF_WEEK_MAP: { [key: number]: DayOfWeek } = { 0: 'Domingo', 1: 'Segunda-feira', 2: 'Terça-feira', 3: 'Quarta-feira', 4: 'Quinta-feira', 5: 'Sexta-feira', 6: 'Sábado' };
 
 // --- Helper Functions ---
-const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
-const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
 const toYYYYMMDD = (date: Date) => date.toISOString().split('T')[0];
 
 // --- Sub-components ---
@@ -96,6 +93,19 @@ const CalendarView: React.FC = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        setCurrentDate(new Date(year, parseInt(e.target.value), 1));
+    };
+    const handleYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newYear = parseInt(e.target.value);
+        if (!isNaN(newYear) && String(newYear).length === 4) {
+             setCurrentDate(new Date(newYear, month, 1));
+        }
+    };
+
     const scheduledDaysInMonth = useMemo(() => {
         const monthSchedules = new Set<number>();
         schedules.forEach(schedule => {
@@ -112,43 +122,91 @@ const CalendarView: React.FC = () => {
         });
         return monthSchedules;
     }, [schedules, currentDate]);
-    
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const daysInMonth = getDaysInMonth(year, month);
-    const firstDay = getFirstDayOfMonth(year, month);
 
-    const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-    const emptyStartDays = Array.from({ length: firstDay }, (_, i) => i);
+    const calendarCells = useMemo(() => {
+        const cells = [];
+        const firstDayOfMonth = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const prevMonthLastDay = new Date(year, month, 0).getDate();
 
-    const changeMonth = (offset: number) => {
-        setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
-    };
+        // Previous month days
+        for (let i = firstDayOfMonth - 1; i >= 0; i--) {
+            cells.push({ day: prevMonthLastDay - i, isCurrentMonth: false, date: new Date(year, month - 1, prevMonthLastDay - i) });
+        }
+
+        // Current month days
+        for (let i = 1; i <= daysInMonth; i++) {
+            cells.push({ day: i, isCurrentMonth: true, date: new Date(year, month, i) });
+        }
+
+        // Next month days
+        const remaining = 42 - cells.length; // Fill up to 6 weeks
+        for (let i = 1; i <= remaining; i++) {
+            cells.push({ day: i, isCurrentMonth: false, date: new Date(year, month + 1, i) });
+        }
+        return cells;
+    }, [year, month]);
 
     const handleDayClick = (day: number) => {
         setSelectedDate(new Date(year, month, day));
     };
-    
+
     return (
-        <Card>
-            <div className="flex justify-between items-center mb-4">
-                <Button size="sm" onClick={() => changeMonth(-1)}>&lt;</Button>
-                <h2 className="text-xl font-bold">{MONTH_NAMES[month]} {year}</h2>
-                <Button size="sm" onClick={() => changeMonth(1)}>&gt;</Button>
+        <Card className="!p-0 overflow-hidden border-gray-700">
+            <div className="p-4 flex items-center gap-4 bg-gray-800 border-b border-gray-700">
+                <input
+                    type="number"
+                    value={year}
+                    onChange={handleYearChange}
+                    className="bg-gray-900 text-white p-2 rounded-md border border-gray-600 focus:ring-red-500 w-28 text-center"
+                    placeholder="Ano"
+                />
+                <select
+                    value={month}
+                    onChange={handleMonthChange}
+                    className="bg-gray-900 text-white p-2 rounded-md border border-gray-600 focus:ring-red-500"
+                >
+                    {MONTH_NAMES.map((m, i) => <option key={i} value={i}>{m.toUpperCase()}</option>)}
+                </select>
             </div>
-            <div className="grid grid-cols-7 gap-1 text-center">
-                {WEEK_DAYS_SHORT.map(day => <div key={day} className="font-semibold text-gray-400 text-sm">{day}</div>)}
-                {emptyStartDays.map(i => <div key={`empty-${i}`} />)}
-                {calendarDays.map(day => {
-                    const hasSchedule = scheduledDaysInMonth.has(day);
-                    const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
+            <div className="bg-gray-900 text-white p-2 text-center font-bold text-lg tracking-widest">
+                CALENDÁRIO {year} | {MONTH_NAMES[month].toUpperCase()}
+            </div>
+            <div className="grid grid-cols-7 text-center font-bold">
+                {['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map((day) => (
+                    <div key={day} className="bg-sky-700 text-white p-2 border-l border-sky-800 first:border-l-0">
+                        {day}
+                    </div>
+                ))}
+            </div>
+            <div className="grid grid-cols-7">
+                {calendarCells.map((cell, index) => {
+                    const dayOfWeek = cell.date.getDay();
+                    const hasSchedule = cell.isCurrentMonth && scheduledDaysInMonth.has(cell.day);
+                    
+                    let cellBg = 'bg-transparent';
+                    if (!cell.isCurrentMonth) {
+                         cellBg = 'bg-gray-800/50';
+                    } else if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
+                         cellBg = 'bg-red-500/10';
+                    }
+
+                    let textColor = 'text-white';
+                     if (!cell.isCurrentMonth) {
+                        textColor = 'text-gray-500';
+                    }
+                    
                     return (
-                        <div key={day} 
-                             onClick={() => hasSchedule && handleDayClick(day)}
-                             className={`p-2 rounded-lg aspect-square flex items-center justify-center transition-colors
-                                ${hasSchedule ? 'bg-red-900/50 cursor-pointer hover:bg-red-800' : 'text-gray-500'}
-                                ${isToday ? 'border-2 border-red-500' : ''}`}>
-                            {day}
+                        <div 
+                            key={cell.date.toString()}
+                            onClick={() => cell.isCurrentMonth && hasSchedule && handleDayClick(cell.day)}
+                            className={`h-24 p-2 border-t border-r border-gray-700 text-left align-top transition-colors ${cellBg} ${textColor} ${hasSchedule && cell.isCurrentMonth ? 'cursor-pointer hover:bg-red-900/50 relative' : ''}`}
+                            style={{
+                                borderRightWidth: (index + 1) % 7 === 0 ? '0px' : '1px'
+                            }}
+                        >
+                            <span className="font-semibold">{cell.day}</span>
+                            {hasSchedule && cell.isCurrentMonth && <span className="absolute bottom-2 right-2 h-2.5 w-2.5 bg-red-500 rounded-full animate-pulse"></span>}
                         </div>
                     );
                 })}
