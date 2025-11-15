@@ -1,3 +1,4 @@
+
 import React, { useContext } from 'react';
 import { AppContext } from '../context/AppContext';
 import Card from '../components/ui/Card';
@@ -29,7 +30,7 @@ const ProfilePage: React.FC = () => {
     const { user, students, academies, graduations, loading } = useContext(AppContext);
 
     if (loading) {
-        return <div className="text-center text-gray-900 dark:text-white">Carregando perfil...</div>;
+        return <div className="text-center text-slate-800">Carregando perfil...</div>;
     }
 
     if (user?.role !== 'student') {
@@ -47,22 +48,22 @@ const ProfilePage: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Meu Perfil</h1>
+            <h1 className="text-3xl font-bold text-slate-800">Meu Perfil</h1>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-1">
                     <div className="flex flex-col items-center text-center">
-                        <img className="w-24 h-24 rounded-full mb-4 border-2 border-red-500" src={`https://i.pravatar.cc/150?u=${user.email}`} alt="User" />
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{studentData.name}</h2>
-                        <p className="text-gray-500 dark:text-gray-400">{academy?.name}</p>
-                        <div className="mt-4 flex items-center bg-gray-200 dark:bg-gray-700/50 px-3 py-1 rounded-full">
-                            {graduation && <span className="w-5 h-5 rounded-full mr-2 border border-gray-400 dark:border-gray-500" style={{ backgroundColor: graduation.color }}></span>}
-                            <span className="font-semibold">{graduation?.name}</span>
+                        <img className="w-24 h-24 rounded-full mb-4 border-2 border-amber-500" src={`https://i.pravatar.cc/150?u=${user.email}`} alt="User" />
+                        <h2 className="text-2xl font-bold text-slate-800">{studentData.name}</h2>
+                        <p className="text-slate-500">{academy?.name}</p>
+                        <div className="mt-4 flex items-center bg-slate-100 px-3 py-1 rounded-full">
+                            {graduation && <span className="w-5 h-5 rounded-full mr-2 border border-slate-300" style={{ backgroundColor: graduation.color }}></span>}
+                            <span className="font-semibold text-slate-700">{graduation?.name}</span>
                         </div>
                     </div>
                 </Card>
                 <Card className="lg:col-span-2">
-                    <h3 className="text-xl font-bold text-red-500 mb-4">Informações</h3>
-                    <div className="space-y-3 text-gray-700 dark:text-gray-300">
+                    <h3 className="text-xl font-bold text-amber-600 mb-4">Informações</h3>
+                    <div className="space-y-3 text-slate-700">
                         <p><strong>Email:</strong> {user.email}</p>
                         <p><strong>Data de Nascimento:</strong> {new Date(studentData.birthDate).toLocaleDateString()}</p>
                         <p><strong>CPF:</strong> {studentData.cpf}</p>
@@ -70,7 +71,7 @@ const ProfilePage: React.FC = () => {
                         <p><strong>Endereço:</strong> {studentData.address}</p>
                         <p><strong>Tempo de Treino:</strong> {trainingTime}</p>
                          <p><strong>Status Financeiro:</strong> 
-                            <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${studentData.paymentStatus === 'paid' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                            <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${studentData.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                 {studentData.paymentStatus === 'paid' ? 'Em Dia' : 'Inadimplente'}
                             </span>
                         </p>

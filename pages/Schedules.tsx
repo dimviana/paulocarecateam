@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, FormEvent, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { ClassSchedule, DayOfWeek } from '../types';
@@ -45,13 +46,13 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
     onSave(formData);
   };
 
-  const selectStyles = "w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500";
+  const selectStyles = "w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-md px-3 py-2 focus:ring-amber-500 focus:border-amber-500";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input label="Nome da Turma" name="className" value={formData.className} onChange={handleChange} required />
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dia da Semana</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Dia da Semana</label>
         <select name="dayOfWeek" value={formData.dayOfWeek} onChange={handleChange} required className={selectStyles}>
           {DAYS_OF_WEEK.map(day => <option key={day} value={day}>{day}</option>)}
         </select>
@@ -61,21 +62,21 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
         <Input label="Horário de Fim" name="endTime" type="time" value={formData.endTime} onChange={handleChange} required />
       </div>
        <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Graduação Mínima</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Graduação Mínima</label>
         <select name="requiredGraduationId" value={formData.requiredGraduationId} onChange={handleChange} required className={selectStyles}>
            <option value="">Selecione uma graduação</option>
            {graduations.sort((a,b) => a.rank - b.rank).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
         </select>
       </div>
        <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Professor</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Professor</label>
         <select name="professorId" value={formData.professorId} onChange={handleChange} required className={selectStyles}>
            <option value="">Selecione um professor</option>
            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </div>
        <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assistentes (segure Ctrl/Cmd para selecionar vários)</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Assistentes (segure Ctrl/Cmd para selecionar vários)</label>
         <select
           name="assistantIds"
           value={formData.assistantIds || []}
@@ -88,7 +89,7 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
       </div>
        {user?.role === 'general_admin' && (
          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Academia</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Academia</label>
             <select name="academyId" value={formData.academyId} onChange={handleChange} required className={selectStyles}>
                <option value="">Selecione uma academia</option>
                {academies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -151,7 +152,7 @@ const SchedulesPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerenciar Horários</h1>
+        <h1 className="text-3xl font-bold text-slate-800">Gerenciar Horários</h1>
         {isAdmin && <Button onClick={() => handleOpenModal({})}>Adicionar Horário</Button>}
       </div>
       
@@ -162,19 +163,19 @@ const SchedulesPage: React.FC = () => {
             {DAYS_OF_WEEK.map(day => (
                 groupedSchedules[day].length > 0 && (
                     <Card key={day}>
-                        <h2 className="text-xl font-bold text-red-500 mb-4">{day}</h2>
+                        <h2 className="text-xl font-bold text-amber-600 mb-4">{day}</h2>
                         <div className="space-y-4">
                             {groupedSchedules[day].sort((a,b) => a.startTime.localeCompare(b.startTime)).map(schedule => {
                                 const requiredGrad = graduations.find(g => g.id === schedule.requiredGraduationId);
                                 return (
-                                <div key={schedule.id} className="bg-gray-100 dark:bg-gray-700/50 p-3 rounded-md">
-                                    <p className="font-semibold">{schedule.className}</p>
-                                    <p className="text-sm text-gray-700 dark:text-gray-300">{schedule.startTime} - {schedule.endTime}</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Prof: {users.find(u => u.id === schedule.professorId)?.name}</p>
+                                <div key={schedule.id} className="bg-slate-50 p-3 rounded-md border border-slate-200">
+                                    <p className="font-semibold text-slate-800">{schedule.className}</p>
+                                    <p className="text-sm text-slate-700">{schedule.startTime} - {schedule.endTime}</p>
+                                    <p className="text-sm text-slate-500">Prof: {users.find(u => u.id === schedule.professorId)?.name}</p>
                                     {requiredGrad && (
-                                        <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center mt-1">
+                                        <p className="text-sm text-slate-500 flex items-center mt-1">
                                             Mín:
-                                            <span className="w-3 h-3 rounded-full mx-1.5 border border-gray-400 dark:border-gray-500" style={{ backgroundColor: requiredGrad.color }}></span>
+                                            <span className="w-3 h-3 rounded-full mx-1.5 border border-slate-400" style={{ backgroundColor: requiredGrad.color }}></span>
                                             {requiredGrad.name}
                                         </p>
                                     )}

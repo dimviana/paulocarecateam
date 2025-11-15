@@ -1,3 +1,4 @@
+
 import React, { useContext, useState, FormEvent, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
@@ -65,6 +66,8 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
     e.preventDefault();
     onSave(formData);
   };
+  
+  const selectStyles = "w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-md px-3 py-2 focus:ring-amber-500 focus:border-amber-500";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -72,7 +75,7 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
       <Input label="Endereço / Localização" name="address" value={formData.address} onChange={handleChange} required />
       <Input label="URL da Imagem (.png, .jpg)" name="imageUrl" value={formData.imageUrl} onChange={handleChange} placeholder="Cole a URL ou carregue abaixo" />
       
-      <div className="text-center text-gray-500 dark:text-gray-400 my-1 text-sm">OU</div>
+      <div className="text-center text-slate-500 my-1 text-sm">OU</div>
       
       <input
         type="file"
@@ -92,8 +95,8 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
 
       {formData.imageUrl && (
           <div className="mt-4 text-center">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pré-visualização:</p>
-              <img src={formData.imageUrl} alt="Pré-visualização da academia" className="w-24 h-24 rounded-lg object-cover mx-auto border border-gray-300 dark:border-gray-600" />
+              <p className="text-sm font-medium text-slate-700 mb-2">Pré-visualização:</p>
+              <img src={formData.imageUrl} alt="Pré-visualização da academia" className="w-24 h-24 rounded-lg object-cover mx-auto border border-slate-300" />
           </div>
       )}
 
@@ -101,21 +104,21 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
       <Input label="CPF/CNPJ / Registro" name="responsibleRegistration" value={formData.responsibleRegistration} onChange={handleChange} required />
       
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Professor Responsável</label>
-        <select name="professorId" value={formData.professorId} onChange={handleChange} required className="w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500">
+        <label className="block text-sm font-medium text-slate-700 mb-1">Professor Responsável</label>
+        <select name="professorId" value={formData.professorId} onChange={handleChange} required className={selectStyles}>
            <option value="">Selecione um professor</option>
            {users.filter(u => u.role !== 'student').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assistentes (segure Ctrl/Cmd para selecionar)</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Assistentes (segure Ctrl/Cmd para selecionar)</label>
         <select
           name="assistantIds"
           value={formData.assistantIds}
           onChange={handleChange}
           multiple
-          className="w-full bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500 h-24"
+          className={`${selectStyles} h-24`}
         >
           {users.filter(u => u.role !== 'student').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
@@ -158,7 +161,7 @@ const AcademiesPage: React.FC = () => {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerenciar Academias</h1>
+                <h1 className="text-3xl font-bold text-slate-800">Gerenciar Academias</h1>
                 <Button onClick={() => handleOpenModal({})}>Adicionar Academia</Button>
             </div>
             
@@ -169,11 +172,11 @@ const AcademiesPage: React.FC = () => {
                     {academies.map(academy => {
                         const professor = users.find(u => u.id === academy.professorId);
                         return (
-                           <Card key={academy.id} className="text-center flex flex-col items-center transition-all duration-300 ease-in-out transform hover:-translate-y-2 hover:shadow-2xl hover:shadow-red-900/50 hover:border-red-500/50">
-                               <img src={academy.imageUrl || `https://i.pravatar.cc/150?u=${professor?.email}`} alt={academy.name} className="w-24 h-24 rounded-full mb-4 border-4 border-gray-200 dark:border-gray-700 group-hover:border-red-500 transition-colors object-cover" />
-                               <h2 className="text-xl font-bold text-gray-900 dark:text-white">{academy.name}</h2>
-                               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Resp: {academy.responsible}</p>
-                               <p className="text-sm text-gray-500 dark:text-gray-400">{academy.address}</p>
+                           <Card key={academy.id} className="text-center flex flex-col items-center transition-all duration-300 ease-in-out transform hover:-translate-y-1 hover:shadow-lg hover:border-amber-500/50">
+                               <img src={academy.imageUrl || `https://i.pravatar.cc/150?u=${professor?.email}`} alt={academy.name} className="w-24 h-24 rounded-full mb-4 border-4 border-slate-200 group-hover:border-amber-500 transition-colors object-cover" />
+                               <h2 className="text-xl font-bold text-slate-800">{academy.name}</h2>
+                               <p className="text-sm text-slate-500 mb-1">Resp: {academy.responsible}</p>
+                               <p className="text-sm text-slate-500">{academy.address}</p>
                                <div className="mt-auto pt-4 w-full flex justify-center gap-2">
                                    <Button size="sm" variant="secondary" onClick={() => handleOpenModal(academy)}>Editar</Button>
                                    <Button size="sm" variant="danger" onClick={() => handleDeleteAcademy(academy.id)}>Excluir</Button>
@@ -209,7 +212,7 @@ const PublicPageWrapper: React.FC = () => {
     const { themeSettings, loading, user } = useContext(AppContext);
 
     if (loading) {
-        return <div className="h-screen w-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white">Carregando...</div>;
+        return <div className="h-screen w-screen flex items-center justify-center bg-slate-100 text-slate-800">Carregando...</div>;
     }
     
     // If user is logged in, always go to dashboard

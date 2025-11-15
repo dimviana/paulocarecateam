@@ -1,51 +1,26 @@
 
-import React, { useContext, useEffect, useState } from 'react';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Student } from '../../types';
+import React from 'react';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Card from '../ui/Card';
-import { AppContext } from '../../context/AppContext';
 
-interface PaymentsChartProps {
-  students: Student[];
-}
-
-const PaymentsChart: React.FC<PaymentsChartProps> = ({ students }) => {
-  const { themeSettings } = useContext(AppContext);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (themeSettings.theme === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-    return themeSettings.theme === 'dark';
-  });
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => {
-      if (themeSettings.theme === 'system') {
-        setIsDarkMode(mediaQuery.matches);
-      } else {
-        setIsDarkMode(themeSettings.theme === 'dark');
-      }
-    };
-    handler();
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
-  }, [themeSettings.theme]);
-
-  const paidCount = students.filter(s => s.paymentStatus === 'paid').length;
-  const unpaidCount = students.length - paidCount;
-
+const StudentBreakdownChart: React.FC = () => {
   const data = [
-    { name: 'Em Dia', value: paidCount },
-    { name: 'Inadimplentes', value: unpaidCount },
+    { name: 'Boys', value: 1200 },
+    { name: 'Girls', value: 800 },
   ];
 
-  const COLORS = ['#10B981', '#EF4444']; // Emerald-500, Red-500
+  const COLORS = ['#F9A825', '#A0522D']; // Amber, Sienna (Brown)
 
   return (
-    <Card>
-        <h3 className="text-xl font-bold text-red-500 mb-4">Status de Pagamento</h3>
-        <div style={{ width: '100%', height: 300 }}>
+    <Card className="flex flex-col h-full">
+        <h3 className="text-lg font-semibold text-slate-800">Student Breakdown</h3>
+        <div className="flex-grow w-full h-64 relative">
+             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="text-center">
+                    <p className="text-3xl font-bold text-slate-800">2000</p>
+                    <p className="text-sm text-slate-500">Students</p>
+                </div>
+            </div>
             <ResponsiveContainer>
                 <PieChart>
                 <Pie
@@ -54,22 +29,26 @@ const PaymentsChart: React.FC<PaymentsChartProps> = ({ students }) => {
                     cy="50%"
                     labelLine={false}
                     outerRadius={100}
+                    innerRadius={70}
                     fill="#8884d8"
                     dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    paddingAngle={5}
+                    cornerRadius={8}
                 >
                     {data.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                 </Pie>
                 <Tooltip 
+                    cursor={{fill: 'transparent'}}
                     contentStyle={{ 
-                        backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.95)',
-                        borderColor: isDarkMode ? '#4B5563' : '#E5E7EB',
-                        color: isDarkMode ? '#F3F4F6' : '#1F2937',
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        borderColor: '#E5E7EB',
+                        color: '#1F2937',
+                        borderRadius: '0.75rem',
                     }}
                 />
-                <Legend />
+                <Legend iconType="circle" />
                 </PieChart>
             </ResponsiveContainer>
         </div>
@@ -77,4 +56,4 @@ const PaymentsChart: React.FC<PaymentsChartProps> = ({ students }) => {
   );
 };
 
-export default PaymentsChart;
+export default StudentBreakdownChart;

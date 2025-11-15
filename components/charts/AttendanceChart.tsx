@@ -1,62 +1,50 @@
 
-import React, { useContext, useEffect, useState } from 'react';
+import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import Card from '../ui/Card';
-import { AppContext } from '../../context/AppContext';
 
-const data = [
-  { name: 'Seg', Presenças: 18 },
-  { name: 'Ter', Presenças: 22 },
-  { name: 'Qua', Presenças: 25 },
-  { name: 'Qui', Presenças: 21 },
-  { name: 'Sex', Presenças: 30 },
-  { name: 'Sáb', Presenças: 15 },
+const attendanceData = [
+  { name: '18-June', Present: 1600, Absent: 800 },
+  { name: '19-June', Present: 1800, Absent: 1100 },
+  { name: '20-June', Present: 1900, Absent: 900 },
+  { name: '21-June', Present: 1200, Absent: 700 },
+  { name: '22-June', Present: 2000, Absent: 400 },
+  { name: '23-June', Present: 1400, Absent: 600 },
+  { name: '24-June', Present: 1100, Absent: 500 },
+  { name: '25-June', Present: 1300, Absent: 800 },
+  { name: '26-June', Present: 1800, Absent: 300 },
 ];
 
+
 const AttendanceChart: React.FC = () => {
-  const { themeSettings } = useContext(AppContext);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (themeSettings.theme === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-    return themeSettings.theme === 'dark';
-  });
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => {
-      if (themeSettings.theme === 'system') {
-        setIsDarkMode(mediaQuery.matches);
-      } else {
-        setIsDarkMode(themeSettings.theme === 'dark');
-      }
-    };
-    handler();
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
-  }, [themeSettings.theme]);
-
-  const tickColor = isDarkMode ? '#D1D5DB' : '#374151';
+  const tickColor = '#64748B'; // slate-500
 
   return (
-    <Card>
-      <h3 className="text-xl font-bold text-red-500 mb-4">Frequência Semanal</h3>
+    <Card className="h-full">
+      <div className="flex justify-between items-center mb-4">
+         <h3 className="text-lg font-semibold text-slate-800">Attendance Report</h3>
+         <div className="flex items-center space-x-4 text-sm">
+            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-amber-500 mr-2"></span>Present</div>
+            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-slate-600 mr-2"></span>Absent</div>
+         </div>
+      </div>
       <div style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer>
-          <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
-            <XAxis dataKey="name" tick={{ fill: tickColor }} />
-            <YAxis tick={{ fill: tickColor }} />
+          <BarChart data={attendanceData} barGap={8}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0, 0, 0, 0.05)" />
+            <XAxis dataKey="name" tick={{ fill: tickColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: tickColor, fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip 
-                cursor={{fill: 'rgba(220, 38, 38, 0.2)'}}
+                cursor={{fill: 'rgba(245, 158, 11, 0.1)'}}
                 contentStyle={{ 
-                    backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.95)',
-                    borderColor: isDarkMode ? '#4B5563' : '#E5E7EB',
-                    color: isDarkMode ? '#F3F4F6' : '#1F2937',
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    borderColor: '#E5E7EB',
+                    color: '#1F2937',
+                    borderRadius: '0.75rem',
                 }}
             />
-            <Legend />
-            <Bar dataKey="Presenças" fill="#DC2626" />
+            <Bar dataKey="Present" fill="#F9A825" radius={[5, 5, 0, 0]} barSize={10} />
+            <Bar dataKey="Absent" fill="#475569" radius={[5, 5, 0, 0]} barSize={10} />
           </BarChart>
         </ResponsiveContainer>
       </div>

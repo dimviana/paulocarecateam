@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, FormEvent } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Graduation } from '../types';
@@ -74,35 +75,35 @@ const GraduationsPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerenciar Graduações</h1>
+        <h1 className="text-3xl font-bold text-slate-800">Gerenciar Graduações</h1>
         <Button onClick={() => handleOpenModal({})}>Adicionar Graduação</Button>
       </div>
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="border-b border-gray-200 dark:border-gray-700">
+            <thead className="border-b border-slate-200">
               <tr>
-                <th className="p-4 text-sm font-semibold text-gray-600 dark:text-gray-300">Ordem</th>
-                <th className="p-4 text-sm font-semibold text-gray-600 dark:text-gray-300">Nome</th>
-                <th className="p-4 text-sm font-semibold text-gray-600 dark:text-gray-300">Cor</th>
-                <th className="p-4 text-sm font-semibold text-gray-600 dark:text-gray-300">Tempo Mínimo</th>
-                <th className="p-4 text-sm font-semibold text-gray-600 dark:text-gray-300">Ações</th>
+                <th className="p-4 text-sm font-semibold text-slate-600">Ordem</th>
+                <th className="p-4 text-sm font-semibold text-slate-600">Nome</th>
+                <th className="p-4 text-sm font-semibold text-slate-600">Cor</th>
+                <th className="p-4 text-sm font-semibold text-slate-600">Tempo Mínimo</th>
+                <th className="p-4 text-sm font-semibold text-slate-600">Ações</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr><td colSpan={5} className="p-4 text-center">Carregando...</td></tr>
               ) : [...graduations].sort((a,b) => a.rank - b.rank).map(grad => (
-                <tr key={grad.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                  <td className="p-4">{grad.rank}</td>
-                  <td className="p-4">{grad.name}</td>
+                <tr key={grad.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="p-4 text-slate-700">{grad.rank}</td>
+                  <td className="p-4 text-slate-800 font-medium">{grad.name}</td>
                   <td className="p-4">
                     <div className="flex items-center">
-                      <span className="w-6 h-6 rounded-full border border-gray-300 dark:border-gray-500" style={{ backgroundColor: grad.color }}></span>
-                      <span className="ml-2">{grad.color}</span>
+                      <span className="w-6 h-6 rounded-full border border-slate-300" style={{ backgroundColor: grad.color }}></span>
+                      <span className="ml-3 text-slate-700 font-mono">{grad.color}</span>
                     </div>
                   </td>
-                  <td className="p-4">{grad.minTimeInMonths} meses</td>
+                  <td className="p-4 text-slate-700">{grad.minTimeInMonths} meses</td>
                   <td className="p-4 flex gap-2">
                     <Button variant="secondary" size="sm" onClick={() => handleOpenModal(grad)}>Editar</Button>
                     <Button variant="danger" size="sm" onClick={() => handleDelete(grad.id)}>Excluir</Button>

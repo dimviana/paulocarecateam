@@ -39,6 +39,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         settings.jwtSecret = crypto.randomUUID();
         localStorage.setItem('themeSettings', JSON.stringify(settings));
     }
+    // Force light theme to match new design
+    settings.theme = 'light';
     return settings;
   });
   
@@ -106,42 +108,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     localStorage.setItem('themeSettings', JSON.stringify(themeSettings));
-    const root = document.documentElement;
-    root.style.setProperty('--primary-color', themeSettings.primaryColor.replace('#',''));
-    root.style.setProperty('--secondary-color', themeSettings.secondaryColor.replace('#',''));
   }, [themeSettings]);
 
   useEffect(() => {
-    const themeToApply = themeSettings.theme;
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    
-    const applyFinalTheme = (t: 'light' | 'dark') => {
-        if (t === 'light') {
-            document.documentElement.classList.remove('dark');
-        } else {
-            document.documentElement.classList.add('dark');
-        }
-    };
-
-    const handleSystemChange = (e: MediaQueryListEvent) => {
-        if (themeToApply === 'system') {
-            applyFinalTheme(e.matches ? 'dark' : 'light');
-        }
-    };
-
-    if (themeToApply === 'system') {
-        applyFinalTheme(mediaQuery.matches ? 'dark' : 'light');
-        mediaQuery.addEventListener('change', handleSystemChange);
-    } else {
-        applyFinalTheme(themeToApply);
-    }
-
-    return () => {
-        mediaQuery.removeEventListener('change', handleSystemChange);
-    };
-}, [themeSettings.theme]);
+    // This effect is simplified as the new design is light-theme only.
+    // If theme switching is re-enabled, this logic would need to be expanded.
+    document.documentElement.classList.remove('dark');
+  }, []);
 
   const setThemeSettings = (settings: ThemeSettings) => {
+    // Force light theme to match new design
+    settings.theme = 'light';
     setThemeSettingsState(settings);
   };
   
@@ -151,9 +128,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         localStorage.setItem('authToken', token);
         try {
             const payload = JSON.parse(atob(token));
-            const loggedInUser = users.find(u => u.id === payload.userId);
+            const allUsers = await api.getUsers(); // Fetch fresh user list
+            const loggedInUser = allUsers.find(u => u.id === payload.userId);
             if (loggedInUser) {
                 setUser(loggedInUser);
+                setUsers(allUsers);
                 return true;
             }
         } catch (e) {

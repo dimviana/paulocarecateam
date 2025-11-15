@@ -1,3 +1,4 @@
+
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Student } from '../types';
@@ -13,9 +14,9 @@ const PaymentHistoryModal: React.FC<{ student: Student; onClose: () => void, onR
                     <div className="max-h-64 overflow-y-auto pr-2">
                         <ul className="space-y-2">
                             {student.paymentHistory.slice().reverse().map(payment => (
-                                <li key={payment.id} className="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-800 rounded-md">
+                                <li key={payment.id} className="flex justify-between items-center p-2 bg-slate-100 rounded-md">
                                     <span>Data: {new Date(payment.date).toLocaleDateString()}</span>
-                                    <span className="font-semibold text-green-500 dark:text-green-400">
+                                    <span className="font-semibold text-green-600">
                                         {payment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                     </span>
                                 </li>
@@ -23,10 +24,10 @@ const PaymentHistoryModal: React.FC<{ student: Student; onClose: () => void, onR
                         </ul>
                     </div>
                 ) : (
-                    <p className="text-gray-500 dark:text-gray-400 text-center">Nenhum pagamento registrado.</p>
+                    <p className="text-slate-500 text-center">Nenhum pagamento registrado.</p>
                 )}
 
-                <div className="flex justify-end gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
                     <Button type="button" variant="secondary" onClick={onClose}>Fechar</Button>
                     <Button type="button" onClick={onRegisterPayment}>Registrar Novo Pagamento</Button>
                 </div>
@@ -115,17 +116,17 @@ const FinancePage: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Controle Financeiro</h1>
+            <h1 className="text-3xl font-bold text-slate-800">Controle Financeiro</h1>
             
             {remindersToSend.length > 0 && (
                 <Card>
-                    <h2 className="text-xl font-bold text-yellow-400 mb-4">Lembretes a Enviar (Vence em até {themeSettings.reminderDaysBeforeDue} dias)</h2>
+                    <h2 className="text-xl font-bold text-amber-600 mb-4">Lembretes a Enviar (Vence em até {themeSettings.reminderDaysBeforeDue} dias)</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {remindersToSend.map(student => (
-                            <div key={student.id} className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-md flex justify-between items-center">
+                            <div key={student.id} className="p-3 bg-slate-100 rounded-md flex justify-between items-center">
                                 <div>
-                                    <p className="font-semibold">{student.name}</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Vence dia: {student.paymentDueDateDay}</p>
+                                    <p className="font-semibold text-slate-800">{student.name}</p>
+                                    <p className="text-sm text-slate-500">Vence dia: {student.paymentDueDateDay}</p>
                                 </div>
                                 <Button size="sm" onClick={() => handleSendReminder(student.phone, student.name)}>Enviar Lembrete</Button>
                             </div>
@@ -136,13 +137,13 @@ const FinancePage: React.FC = () => {
 
              {overduePayments.length > 0 && (
                 <Card>
-                    <h2 className="text-xl font-bold text-red-500 mb-4">Cobranças Atrasadas (Venceu há até {themeSettings.overdueDaysAfterDue} dias)</h2>
+                    <h2 className="text-xl font-bold text-red-600 mb-4">Cobranças Atrasadas (Venceu há até {themeSettings.overdueDaysAfterDue} dias)</h2>
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {overduePayments.map(student => (
-                            <div key={student.id} className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-md flex justify-between items-center">
+                            <div key={student.id} className="p-3 bg-slate-100 rounded-md flex justify-between items-center">
                                 <div>
-                                    <p className="font-semibold">{student.name}</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Venceu dia: {student.paymentDueDateDay}</p>
+                                    <p className="font-semibold text-slate-800">{student.name}</p>
+                                    <p className="text-sm text-slate-500">Venceu dia: {student.paymentDueDateDay}</p>
                                 </div>
                                 <Button size="sm" variant="danger" onClick={() => handleSendOverdueNotice(student.phone, student.name)}>Enviar Cobrança</Button>
                             </div>
@@ -151,7 +152,7 @@ const FinancePage: React.FC = () => {
                 </Card>
             )}
 
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white pt-4">Todos os Alunos</h2>
+            <h2 className="text-2xl font-bold text-slate-800 pt-4">Todos os Alunos</h2>
             {loading ? (
                 <div className="text-center p-4">Carregando...</div>
             ) : (
@@ -163,20 +164,20 @@ const FinancePage: React.FC = () => {
                             ? student.paymentStatus === 'paid'
                                 ? 'border-green-500/80 scale-105'
                                 : 'border-red-500/80 scale-105'
-                            : 'hover:border-red-500/50';
+                            : 'hover:border-amber-500/50';
 
                         return (
                            <Card key={student.id} className={`text-center flex flex-col items-center transition-all duration-500 ease-in-out transform hover:-translate-y-1 ${cardClass}`}>
-                               <img src={`https://i.pravatar.cc/150?u=${student.cpf}`} alt={student.name} className="w-24 h-24 rounded-full mb-4 border-4 border-gray-200 dark:border-gray-700" />
-                               <h2 className="text-xl font-bold text-gray-900 dark:text-white">{student.name}</h2>
+                               <img src={`https://i.pravatar.cc/150?u=${student.cpf}`} alt={student.name} className="w-24 h-24 rounded-full mb-4 border-4 border-slate-200" />
+                               <h2 className="text-xl font-bold text-slate-800">{student.name}</h2>
                                
-                                <span className={`my-2 px-2 py-1 rounded-full text-xs font-medium ${student.paymentStatus === 'paid' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                <span className={`my-2 px-2 py-1 rounded-full text-xs font-medium ${student.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                     {student.paymentStatus === 'paid' ? 'Em Dia' : 'Inadimplente'}
                                 </span>
 
                                {belt && (
-                                   <div className="flex items-center justify-center bg-gray-200/60 dark:bg-gray-700/50 px-3 py-1 rounded-full text-sm">
-                                       <span className="w-4 h-4 rounded-full mr-2 border border-gray-400 dark:border-gray-500" style={{ backgroundColor: belt.color }}></span>
+                                   <div className="flex items-center justify-center bg-slate-100 px-3 py-1 rounded-full text-sm">
+                                       <span className="w-4 h-4 rounded-full mr-2 border border-slate-300" style={{ backgroundColor: belt.color }}></span>
                                        {belt.name}
                                    </div>
                                )}
