@@ -6,6 +6,8 @@ export const initialThemeSettings: ThemeSettings = {
   primaryColor: '#dc2626', // red-600
   secondaryColor: '#111827', // gray-900
   useGradient: true,
+  reminderDaysBeforeDue: 5,
+  overdueDaysAfterDue: 5,
 };
 
 export const IconUsers = () => (

@@ -37,7 +37,7 @@ const PaymentHistoryModal: React.FC<{ student: Student; onClose: () => void, onR
 
 
 const FinancePage: React.FC = () => {
-    const { students, updateStudentPayment, loading, graduations } = useContext(AppContext);
+    const { students, updateStudentPayment, loading, graduations, themeSettings } = useContext(AppContext);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
     const [updatedCard, setUpdatedCard] = useState<string | null>(null);
@@ -64,19 +64,19 @@ const FinancePage: React.FC = () => {
 
             if (student.paymentStatus === 'unpaid') {
                 const daysSinceLastDue = Math.round((today.getTime() - lastDueDate.getTime()) / (1000 * 60 * 60 * 24));
-                if (daysSinceLastDue > 0 && daysSinceLastDue <= 5) {
+                if (daysSinceLastDue > 0 && daysSinceLastDue <= (themeSettings.overdueDaysAfterDue || 5)) {
                     overdue.push(student);
                 }
 
                 const daysUntilNextDue = Math.round((nextDueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                if (daysUntilNextDue >= 0 && daysUntilNextDue <= 5) {
+                if (daysUntilNextDue >= 0 && daysUntilNextDue <= (themeSettings.reminderDaysBeforeDue || 5)) {
                     reminders.push(student);
                 }
             }
         });
 
         return { remindersToSend: reminders, overduePayments: overdue };
-    }, [students]);
+    }, [students, themeSettings]);
 
     const handleSendReminder = (phone: string, name: string) => {
         const message = `Olá ${name},%20tudo%20bem?%20Passando%20para%20lembrar%20que%20sua%20mensalidade%20está%20próxima%20do%20vencimento.%20Qualquer%20dúvida,%20estamos%20à%20disposição!`;
@@ -119,7 +119,7 @@ const FinancePage: React.FC = () => {
             
             {remindersToSend.length > 0 && (
                 <Card>
-                    <h2 className="text-xl font-bold text-yellow-400 mb-4">Lembretes a Enviar (Vence em até 5 dias)</h2>
+                    <h2 className="text-xl font-bold text-yellow-400 mb-4">Lembretes a Enviar (Vence em até {themeSettings.reminderDaysBeforeDue} dias)</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {remindersToSend.map(student => (
                             <div key={student.id} className="p-3 bg-gray-700/50 rounded-md flex justify-between items-center">
@@ -136,7 +136,7 @@ const FinancePage: React.FC = () => {
 
              {overduePayments.length > 0 && (
                 <Card>
-                    <h2 className="text-xl font-bold text-red-500 mb-4">Cobranças Atrasadas (Venceu há até 5 dias)</h2>
+                    <h2 className="text-xl font-bold text-red-500 mb-4">Cobranças Atrasadas (Venceu há até {themeSettings.overdueDaysAfterDue} dias)</h2>
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {overduePayments.map(student => (
                             <div key={student.id} className="p-3 bg-gray-700/50 rounded-md flex justify-between items-center">

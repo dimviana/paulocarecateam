@@ -69,6 +69,8 @@ export interface ThemeSettings {
   primaryColor: string;
   secondaryColor: string;
   useGradient: boolean;
+  reminderDaysBeforeDue: number;
+  overdueDaysAfterDue: number;
 }
 
 export interface NewsArticle {

@@ -1,4 +1,3 @@
-
 import React, { useContext, useState, FormEvent } from 'react';
 import { AppContext } from '../context/AppContext';
 import Card from '../components/ui/Card';
@@ -14,7 +13,7 @@ const SettingsPage: React.FC = () => {
         const { name, value, type, checked } = e.target;
         setSettings(prev => ({
             ...prev,
-            [name]: type === 'checkbox' ? checked : value
+            [name]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value) || 0 : value)
         }));
     };
 
@@ -30,6 +29,7 @@ const SettingsPage: React.FC = () => {
             <h1 className="text-3xl font-bold text-white">Configurações do Sistema</h1>
             <Card>
                 <form onSubmit={handleSubmit} className="space-y-6">
+                    <h2 className="text-xl font-bold text-red-500 border-b border-gray-700 pb-2">Aparência</h2>
                     <Input 
                         label="Nome do Sistema" 
                         name="systemName"
@@ -69,8 +69,28 @@ const SettingsPage: React.FC = () => {
                         />
                         <label htmlFor="useGradient" className="ml-2 block text-sm text-gray-300">Usar degradê</label>
                     </div>
+                    
+                    <h2 className="text-xl font-bold text-red-500 border-b border-gray-700 pb-2 pt-4">Controle de Cobranças</h2>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <Input 
+                            label="Dias para lembrete (antes do venc.)"
+                            name="reminderDaysBeforeDue"
+                            type="number"
+                            min="0"
+                            value={settings.reminderDaysBeforeDue}
+                            onChange={handleChange}
+                        />
+                        <Input 
+                            label="Dias para cobrança (após venc.)"
+                            name="overdueDaysAfterDue"
+                            type="number"
+                            min="0"
+                            value={settings.overdueDaysAfterDue}
+                            onChange={handleChange}
+                        />
+                    </div>
 
-                    <div className="flex justify-end items-center gap-4">
+                    <div className="flex justify-end items-center gap-4 pt-4">
                         {saved && <span className="text-green-400">Salvo com sucesso!</span>}
                         <Button type="submit">Salvar Alterações</Button>
                     </div>

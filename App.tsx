@@ -119,35 +119,29 @@ const AcademiesPage: React.FC = () => {
                 <h1 className="text-3xl font-bold text-white">Gerenciar Academias</h1>
                 <Button onClick={() => handleOpenModal({})}>Adicionar Academia</Button>
             </div>
-            <Card>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="border-b border-gray-700">
-                            <tr>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Academia</th>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Responsável</th>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Endereço</th>
-                                <th className="p-4 text-sm font-semibold text-gray-300">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan={4} className="p-4 text-center">Carregando...</td></tr>
-                            ) : academies.map(academy => (
-                                <tr key={academy.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                                    <td className="p-4">{academy.name}</td>
-                                    <td className="p-4">{academy.responsible}</td>
-                                    <td className="p-4">{academy.address}</td>
-                                    <td className="p-4 flex gap-2">
-                                        <Button variant="secondary" size="sm" onClick={() => handleOpenModal(academy)}>Editar</Button>
-                                        <Button variant="danger" size="sm" onClick={() => handleDeleteAcademy(academy.id)}>Excluir</Button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            
+             {loading ? (
+                <div className="text-center p-4">Carregando...</div>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {academies.map(academy => {
+                        const professor = users.find(u => u.id === academy.professorId);
+                        return (
+                           <Card key={academy.id} className="text-center flex flex-col items-center transition-all duration-300 ease-in-out transform hover:-translate-y-2 hover:shadow-2xl hover:shadow-red-900/50 hover:border-red-500/50">
+                               <img src={`https://i.pravatar.cc/150?u=${professor?.email}`} alt={professor?.name} className="w-24 h-24 rounded-full mb-4 border-4 border-gray-700 group-hover:border-red-500 transition-colors" />
+                               <h2 className="text-xl font-bold text-white">{academy.name}</h2>
+                               <p className="text-sm text-gray-400 mb-1">Resp: {academy.responsible}</p>
+                               <p className="text-sm text-gray-400">{academy.address}</p>
+                               <div className="mt-auto pt-4 w-full flex justify-center gap-2">
+                                   <Button size="sm" variant="secondary" onClick={() => handleOpenModal(academy)}>Editar</Button>
+                                   <Button size="sm" variant="danger" onClick={() => handleDeleteAcademy(academy.id)}>Excluir</Button>
+                               </div>
+                           </Card>
+                        );
+                    })}
                 </div>
-            </Card>
+            )}
+
 
             <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={selectedAcademy?.id ? 'Editar Academia' : 'Adicionar Academia'}>
                 <AcademyForm academy={selectedAcademy} onSave={handleSaveAcademy} onClose={handleCloseModal} />
