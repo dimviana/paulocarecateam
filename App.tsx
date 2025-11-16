@@ -1,8 +1,9 @@
 
+
 import React, { useContext, useState, FormEvent, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
-import { Academy } from './types';
+import { Academy, Student } from './types';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -18,6 +19,7 @@ import Card from './components/ui/Card';
 import Button from './components/ui/Button';
 import Modal from './components/ui/Modal';
 import Input from './components/ui/Input';
+import ProfessorsPage from './pages/Professors';
 
 
 interface AcademyFormProps {
@@ -132,10 +134,56 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
   );
 };
 
+
+const AcademyStudentsModal: React.FC<{ academy: Academy; onClose: () => void }> = ({ academy, onClose }) => {
+    const { students, graduations } = useContext(AppContext);
+
+    const academyStudents = students.filter(s => s.academyId === academy.id);
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title={`Alunos da ${academy.name}`}>
+            {academyStudents.length > 0 ? (
+                <ul className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                    {academyStudents.map(student => {
+                        const belt = graduations.find(g => g.id === student.beltId);
+                        return (
+                            <li key={student.id} className="flex items-center p-2 bg-slate-50 rounded-lg">
+                                <img
+                                    src={student.imageUrl || `https://i.pravatar.cc/150?u=${student.cpf}`}
+                                    alt={student.name}
+                                    className="w-10 h-10 rounded-full object-cover mr-3"
+                                />
+                                <div className="flex-grow">
+                                    <p className="font-semibold text-slate-800">{student.name}</p>
+                                    <p className="text-sm text-slate-500">{belt?.name || 'Sem graduação'}</p>
+                                </div>
+                                {belt && (
+                                     <span
+                                        className="w-5 h-5 rounded-full border border-slate-300"
+                                        style={{ backgroundColor: belt.color }}
+                                        title={belt.name}
+                                    ></span>
+                                )}
+                            </li>
+                        );
+                    })}
+                </ul>
+            ) : (
+                <p className="text-center text-slate-500 py-4">Nenhum aluno encontrado para esta academia.</p>
+            )}
+            <div className="flex justify-end pt-4 mt-4 border-t border-slate-200">
+                <Button variant="secondary" onClick={onClose}>Fechar</Button>
+            </div>
+        </Modal>
+    );
+};
+
+
 const AcademiesPage: React.FC = () => {
-    const { academies, users, saveAcademy, deleteAcademy, loading } = useContext(AppContext);
+    const { academies, students, users, saveAcademy, deleteAcademy, loading, themeSettings } = useContext(AppContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedAcademy, setSelectedAcademy] = useState<Partial<Academy> | null>(null);
+    const [academyForStudents, setAcademyForStudents] = useState<Academy | null>(null);
 
     const handleOpenModal = (academy: Partial<Academy> | null = null) => {
         setSelectedAcademy(academy);
@@ -145,6 +193,14 @@ const AcademiesPage: React.FC = () => {
     const handleCloseModal = () => {
         setIsModalOpen(false);
         setSelectedAcademy(null);
+    };
+
+    const handleOpenStudentsModal = (academy: Academy) => {
+        setAcademyForStudents(academy);
+    };
+
+    const handleCloseStudentsModal = () => {
+        setAcademyForStudents(null);
     };
 
     const handleSaveAcademy = async (academyData: Omit<Academy, 'id'> & { id?: string }) => {
@@ -171,15 +227,43 @@ const AcademiesPage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {academies.map(academy => {
                         const professor = users.find(u => u.id === academy.professorId);
+                        const studentCount = students.filter(s => s.academyId === academy.id).length;
                         return (
-                           <Card key={academy.id} className="text-center flex flex-col items-center transition-all duration-300 ease-in-out transform hover:-translate-y-1 hover:shadow-lg hover:border-amber-500/50">
-                               <img src={academy.imageUrl || `https://i.pravatar.cc/150?u=${professor?.email}`} alt={academy.name} className="w-24 h-24 rounded-full mb-4 border-4 border-slate-200 group-hover:border-amber-500 transition-colors object-cover" />
-                               <h2 className="text-xl font-bold text-slate-800">{academy.name}</h2>
-                               <p className="text-sm text-slate-500 mb-1">Resp: {academy.responsible}</p>
-                               <p className="text-sm text-slate-500">{academy.address}</p>
-                               <div className="mt-auto pt-4 w-full flex justify-center gap-2">
-                                   <Button size="sm" variant="secondary" onClick={() => handleOpenModal(academy)}>Editar</Button>
-                                   <Button size="sm" variant="danger" onClick={() => handleDeleteAcademy(academy.id)}>Excluir</Button>
+                           <Card key={academy.id} className="p-0 flex flex-col overflow-hidden transition-transform duration-200 hover:-translate-y-1">
+                                <div className="h-2" style={{ backgroundColor: themeSettings.primaryColor || '#f59e0b' }}></div>
+                                <div className="p-5 flex flex-col flex-grow">
+                                    <div className="cursor-pointer flex-grow" onClick={() => handleOpenStudentsModal(academy)}>
+                                        <div className="flex items-center mb-4">
+                                             <img 
+                                                src={academy.imageUrl || `https://i.pravatar.cc/150?u=${academy.id}`} 
+                                                alt={academy.name} 
+                                                className="w-16 h-16 rounded-full object-cover border-2 border-slate-200"
+                                            />
+                                            <div className="ml-4">
+                                                <h2 className="text-xl font-bold text-slate-800">{academy.name}</h2>
+                                                <p className="text-sm text-slate-500">{academy.address}</p>
+                                            </div>
+                                        </div>
+                                         <div className="space-y-3 text-sm flex-grow">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-slate-600 font-medium">Responsável:</span>
+                                                <span className="text-slate-700">{academy.responsible}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-slate-600 font-medium">Professor:</span>
+                                                <span className="text-slate-700">{professor?.name || 'N/A'}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-slate-600 font-medium">Alunos:</span>
+                                                <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{studentCount}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-5 pt-4 border-t border-slate-200/60 flex justify-end gap-2">
+                                       <Button size="sm" variant="secondary" onClick={() => handleOpenModal(academy)}>Editar</Button>
+                                       <Button size="sm" variant="danger" onClick={() => handleDeleteAcademy(academy.id)}>Excluir</Button>
+                                    </div>
                                </div>
                            </Card>
                         );
@@ -191,6 +275,10 @@ const AcademiesPage: React.FC = () => {
             <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={selectedAcademy?.id ? 'Editar Academia' : 'Adicionar Academia'}>
                 <AcademyForm academy={selectedAcademy} onSave={handleSaveAcademy} onClose={handleCloseModal} />
             </Modal>
+            
+            {academyForStudents && (
+                <AcademyStudentsModal academy={academyForStudents} onClose={handleCloseStudentsModal} />
+            )}
         </div>
     );
 };
@@ -233,6 +321,7 @@ const AppRoutes: React.FC = () => {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/students" element={<StudentsPage />} />
+        <Route path="/professors" element={<ProfessorsPage />} />
         <Route path="/graduations" element={<GraduationsPage />} />
         <Route path="/schedules" element={<SchedulesPage />} />
         <Route path="/finance" element={<FinancePage />} />

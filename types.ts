@@ -41,6 +41,7 @@ export interface Student {
   lastSeen: string;
   paymentHistory: Payment[];
   paymentDueDateDay: number;
+  imageUrl?: string;
 }
 
 export interface Academy {
@@ -52,6 +53,15 @@ export interface Academy {
   professorId: string;
   assistantIds: string[];
   imageUrl?: string;
+}
+
+export interface Professor {
+  id: string;
+  name: string;
+  fjjpe_registration: string;
+  cpf: string;
+  academyId: string;
+  graduationId: string;
 }
 
 export interface User {
@@ -73,6 +83,7 @@ export interface ThemeSettings {
   reminderDaysBeforeDue: number;
   overdueDaysAfterDue: number;
   theme: 'light' | 'dark' | 'system';
+  monthlyFeeAmount: number;
   // Public Web Page Settings
   publicPageEnabled: boolean;
   heroHtml: string;

@@ -5,20 +5,20 @@ import Card from '../ui/Card';
 
 const StudentBreakdownChart: React.FC = () => {
   const data = [
-    { name: 'Boys', value: 1200 },
-    { name: 'Girls', value: 800 },
+    { name: 'Meninos', value: 1200 },
+    { name: 'Meninas', value: 800 },
   ];
 
   const COLORS = ['#F9A825', '#A0522D']; // Amber, Sienna (Brown)
 
   return (
     <Card className="flex flex-col h-full">
-        <h3 className="text-lg font-semibold text-slate-800">Student Breakdown</h3>
+        <h3 className="text-lg font-semibold text-slate-800">Divisão de Alunos</h3>
         <div className="flex-grow w-full h-64 relative">
              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="text-center">
                     <p className="text-3xl font-bold text-slate-800">2000</p>
-                    <p className="text-sm text-slate-500">Students</p>
+                    <p className="text-sm text-slate-500">Alunos</p>
                 </div>
             </div>
             <ResponsiveContainer>

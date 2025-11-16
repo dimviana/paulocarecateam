@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord } from '../types';
+import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord, Professor } from '../types';
 import { initialThemeSettings } from '../constants';
 import { api } from '../services/api';
 
@@ -15,6 +15,7 @@ interface AppContextType {
   schedules: ClassSchedule[];
   users: User[];
   attendanceRecords: AttendanceRecord[];
+  professors: Professor[];
   loading: boolean;
   updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid') => Promise<void>;
   saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => Promise<void>;
@@ -22,11 +23,14 @@ interface AppContextType {
   saveAcademy: (academy: Omit<Academy, 'id'> & { id?: string }) => Promise<void>;
   deleteAcademy: (id: string) => Promise<void>;
   saveGraduation: (grad: Omit<Graduation, 'id'> & { id?: string }) => Promise<void>;
+  updateGraduationRanks: (gradsWithNewRanks: { id: string, rank: number }[]) => Promise<void>;
   deleteGraduation: (id: string) => Promise<void>;
   saveSchedule: (schedule: Omit<ClassSchedule, 'id'> & { id?: string }) => Promise<void>;
   deleteSchedule: (id: string) => Promise<void>;
   saveAttendanceRecord: (record: Omit<AttendanceRecord, 'id'> & { id?: string }) => Promise<void>;
   deleteAttendanceRecord: (id: string) => Promise<void>;
+  saveProfessor: (prof: Omit<Professor, 'id'> & { id?: string }) => Promise<void>;
+  deleteProfessor: (id: string) => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType>(null!);
@@ -51,6 +55,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [schedules, setSchedules] = useState<ClassSchedule[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [professors, setProfessors] = useState<Professor[]>([]);
   const [loading, setLoading] = useState(true);
 
   const logout = useCallback(() => {
@@ -80,13 +85,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     
     const fetchData = async () => {
         setLoading(true);
-        const [studentsData, academiesData, graduationsData, schedulesData, usersData, attendanceData] = await Promise.all([
+        const [studentsData, academiesData, graduationsData, schedulesData, usersData, attendanceData, professorsData] = await Promise.all([
             api.getStudents(),
             api.getAcademies(),
             api.getGraduations(),
             api.getSchedules(),
             api.getUsers(),
             api.getAttendanceRecords(),
+            api.getProfessors(),
         ]);
         setStudents(studentsData);
         setAcademies(academiesData);
@@ -94,6 +100,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setSchedules(schedulesData);
         setUsers(usersData);
         setAttendanceRecords(attendanceData);
+        setProfessors(professorsData);
         
         const token = localStorage.getItem('authToken');
         if (token) {
@@ -146,7 +153,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateStudentPayment = async (studentId: string, status: 'paid' | 'unpaid') => {
-      await api.updateStudentPayment(studentId, status);
+      await api.updateStudentPayment(studentId, status, themeSettings.monthlyFeeAmount);
       setStudents(await api.getStudents());
   }
 
@@ -174,6 +181,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       await api.saveGraduation(grad);
       setGraduations(await api.getGraduations());
   }
+  
+  const updateGraduationRanks = async (gradsWithNewRanks: { id: string, rank: number }[]) => {
+    await api.updateGraduationRanks(gradsWithNewRanks);
+    setGraduations(await api.getGraduations());
+  }
 
   const deleteGraduation = async (id: string) => {
     await api.deleteGraduation(id);
@@ -199,19 +211,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await api.deleteAttendanceRecord(id);
     setAttendanceRecords(await api.getAttendanceRecords());
   };
+  
+  const saveProfessor = async (prof: Omit<Professor, 'id'> & { id?: string }) => {
+      await api.saveProfessor(prof);
+      setProfessors(await api.getProfessors());
+  }
+
+  const deleteProfessor = async (id: string) => {
+    await api.deleteProfessor(id);
+    setProfessors(await api.getProfessors());
+  }
 
 
   return (
     <AppContext.Provider value={{ 
         themeSettings, setThemeSettings, 
         user, login, logout, 
-        students, academies, graduations, schedules, users, attendanceRecords,
+        students, academies, graduations, schedules, users, attendanceRecords, professors,
         loading, 
         updateStudentPayment, saveStudent, deleteStudent,
         saveAcademy, deleteAcademy,
-        saveGraduation, deleteGraduation,
+        saveGraduation, updateGraduationRanks, deleteGraduation,
         saveSchedule, deleteSchedule,
-        saveAttendanceRecord, deleteAttendanceRecord
+        saveAttendanceRecord, deleteAttendanceRecord,
+        saveProfessor, deleteProfessor
     }}>
       {children}
     </AppContext.Provider>

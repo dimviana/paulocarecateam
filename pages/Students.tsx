@@ -72,11 +72,68 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
     );
 };
 
+interface PhotoUploadModalProps {
+    student: Student;
+    onSave: (student: Student, imageUrl: string) => void;
+    onClose: () => void;
+}
+
+const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({ student, onSave, onClose }) => {
+    const [preview, setPreview] = useState<string | null>(student.imageUrl || null);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const selectedFile = e.target.files[0];
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPreview(reader.result as string);
+            };
+            reader.readAsDataURL(selectedFile);
+        }
+    };
+
+    const handleSaveClick = () => {
+        if (preview) {
+            onSave(student, preview);
+        }
+    };
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title={`Alterar foto de ${student.name}`}>
+            <div className="flex flex-col items-center">
+                <img
+                    src={preview || `https://i.pravatar.cc/150?u=${student.cpf}`}
+                    alt="Preview"
+                    className="w-40 h-40 rounded-full object-cover mb-4 border-4 border-slate-200"
+                />
+                <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    ref={fileInputRef}
+                    className="hidden"
+                />
+                <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+                    Escolher Arquivo
+                </Button>
+                <p className="text-sm text-slate-500 mt-2">Selecione uma imagem do seu computador.</p>
+            </div>
+            <div className="flex justify-end gap-4 pt-6 mt-4 border-t border-slate-200">
+                <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+                <Button type="button" onClick={handleSaveClick} disabled={!preview}>Salvar Foto</Button>
+            </div>
+        </Modal>
+    );
+};
+
 
 const StudentsPage: React.FC = () => {
     const { students, academies, saveStudent, deleteStudent, loading, graduations } = useContext(AppContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Partial<Student> | null>(null);
+    const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+    const [studentForPhoto, setStudentForPhoto] = useState<Student | null>(null);
 
     const handleOpenModal = (student: Partial<Student> | null = null) => {
         setSelectedStudent(student);
@@ -99,6 +156,25 @@ const StudentsPage: React.FC = () => {
       }
     }
 
+    const handleOpenPhotoModal = (student: Student) => {
+        setStudentForPhoto(student);
+        setIsPhotoModalOpen(true);
+    };
+
+    const handleClosePhotoModal = () => {
+        setIsPhotoModalOpen(false);
+        setStudentForPhoto(null);
+    };
+    
+    const handleSavePhoto = async (studentToUpdate: Student, newImageUrl: string) => {
+        const { id, name, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay } = studentToUpdate;
+        await saveStudent({
+            id, name, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay,
+            imageUrl: newImageUrl
+        });
+        handleClosePhotoModal();
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center flex-wrap gap-4">
@@ -106,61 +182,83 @@ const StudentsPage: React.FC = () => {
                 <Button onClick={() => handleOpenModal({})}>Adicionar Aluno</Button>
             </div>
             
-            <Card>
-                {loading ? (
-                    <div className="text-center p-4">Carregando...</div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left text-slate-500">
-                            <thead className="text-xs text-slate-700 uppercase bg-slate-50">
-                                <tr>
-                                    <th scope="col" className="px-6 py-3">Nome</th>
-                                    <th scope="col" className="px-6 py-3">Academia</th>
-                                    <th scope="col" className="px-6 py-3">Graduação</th>
-                                    <th scope="col" className="px-6 py-3">Status Pag.</th>
-                                    <th scope="col" className="px-6 py-3 text-right">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {students.map(student => {
-                                    const belt = graduations.find(g => g.id === student.beltId);
-                                    const academy = academies.find(a => a.id === student.academyId);
-                                    return (
-                                        <tr key={student.id} className="bg-white border-b hover:bg-slate-50">
-                                            <td className="px-6 py-4 font-medium text-slate-900 whitespace-nowrap flex items-center">
-                                                <img src={`https://i.pravatar.cc/150?u=${student.cpf}`} alt={student.name} className="w-8 h-8 rounded-full mr-3" />
-                                                {student.name}
-                                            </td>
-                                            <td className="px-6 py-4">{academy?.name || 'N/A'}</td>
-                                            <td className="px-6 py-4">
-                                                {belt && (
-                                                    <div className="flex items-center">
-                                                        <span className="w-4 h-4 rounded-full mr-2 border border-slate-300" style={{ backgroundColor: belt.color }}></span>
-                                                        {belt.name}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${student.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                                    {student.paymentStatus === 'paid' ? 'Em Dia' : 'Pendente'}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right space-x-2">
-                                                <Button size="sm" variant="secondary" onClick={() => handleOpenModal(student)}>Editar</Button>
-                                                <Button size="sm" variant="danger" onClick={() => handleDeleteStudent(student.id)}>Excluir</Button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </Card>
+            {loading ? (
+                <div className="text-center p-4">Carregando...</div>
+            ) : (
+                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {students.map(student => {
+                        const belt = graduations.find(g => g.id === student.beltId);
+                        const academy = academies.find(a => a.id === student.academyId);
+                        
+                        return (
+                            <Card key={student.id} className="p-0 flex flex-col overflow-hidden transition-transform duration-200 hover:-translate-y-1 w-[328px] h-[435px]">
+                                <div className="h-2" style={{ backgroundColor: belt?.color || '#e2e8f0' }}></div>
+                                <div className="p-5 flex flex-col flex-grow">
+                                    <div className="flex items-center mb-4">
+                                        <button onClick={() => handleOpenPhotoModal(student)} className="relative group flex-shrink-0">
+                                            <img 
+                                                src={student.imageUrl || `https://i.pravatar.cc/150?u=${student.cpf}`} 
+                                                alt={student.name} 
+                                                className="w-16 h-16 rounded-full object-cover border-2 border-slate-200 group-hover:opacity-75 transition-opacity"
+                                            />
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-opacity">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                            </div>
+                                        </button>
+                                        <div className="ml-4">
+                                            <h2 className="text-xl font-bold text-slate-800">{student.name}</h2>
+                                            <p className="text-sm text-slate-500">{academy?.name || 'N/A'}</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="space-y-3 text-sm flex-grow">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-slate-600 font-medium">Pagamento:</span>
+                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${student.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                {student.paymentStatus === 'paid' ? 'Em Dia' : 'Pendente'}
+                                            </span>
+                                        </div>
+                                        {belt && (
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-slate-600 font-medium">Graduação:</span>
+                                                <div className="flex items-center">
+                                                    <span className="w-4 h-4 rounded-full mr-2 border border-slate-300" style={{ backgroundColor: belt.color }}></span>
+                                                    <span className="font-medium text-slate-700">{belt.name}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-slate-600 font-medium">Registro:</span>
+                                            <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{student.fjjpe_registration}</span>
+                                        </div>
+                                         <div className="flex justify-between items-center">
+                                            <span className="text-slate-600 font-medium">Telefone:</span>
+                                            <span className="text-slate-700">{student.phone}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-5 pt-4 border-t border-slate-200/60 flex justify-end gap-2">
+                                        <Button size="sm" variant="secondary" onClick={() => handleOpenModal(student)}>Editar</Button>
+                                        <Button size="sm" variant="danger" onClick={() => handleDeleteStudent(student.id)}>Excluir</Button>
+                                    </div>
+                                </div>
+                            </Card>
+                        );
+                    })}
+                </div>
+            )}
 
             <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={selectedStudent?.id ? 'Editar Aluno' : 'Adicionar Aluno'}>
                 <StudentForm student={selectedStudent} onSave={handleSaveStudent} onClose={handleCloseModal} />
             </Modal>
+            
+            {isPhotoModalOpen && studentForPhoto && (
+                <PhotoUploadModal
+                    student={studentForPhoto}
+                    onSave={handleSavePhoto}
+                    onClose={handleClosePhotoModal}
+                />
+            )}
         </div>
     );
 };

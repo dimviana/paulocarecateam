@@ -1,5 +1,5 @@
 
-import React, { useState, useContext, FormEvent } from 'react';
+import React, { useState, useContext, FormEvent, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Graduation } from '../types';
 import Card from '../components/ui/Card';
@@ -35,7 +35,7 @@ const GraduationForm: React.FC<GraduationFormProps> = ({ graduation, onSave, onC
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input label="Nome da Faixa" name="name" value={formData.name} onChange={handleChange} required />
-      <Input label="Ordem (Rank)" name="rank" type="number" value={formData.rank} onChange={handleChange} required />
+      <Input label="Ordem (Rank)" name="rank" type="number" value={formData.rank} onChange={handleChange} required readOnly/>
       <Input label="Cor" name="color" type="color" value={formData.color} onChange={handleChange} required />
       <Input label="Tempo Mínimo (meses)" name="minTimeInMonths" type="number" value={formData.minTimeInMonths} onChange={handleChange} required />
       <div className="flex justify-end gap-4 pt-4">
@@ -47,9 +47,15 @@ const GraduationForm: React.FC<GraduationFormProps> = ({ graduation, onSave, onC
 };
 
 const GraduationsPage: React.FC = () => {
-  const { graduations, saveGraduation, deleteGraduation, loading } = useContext(AppContext);
+  const { graduations, saveGraduation, deleteGraduation, updateGraduationRanks, loading } = useContext(AppContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedGraduation, setSelectedGraduation] = useState<Partial<Graduation> | null>(null);
+  const [localGraduations, setLocalGraduations] = useState<Graduation[]>([]);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLocalGraduations([...graduations].sort((a,b) => a.rank - b.rank));
+  }, [graduations]);
 
   const handleOpenModal = (grad: Partial<Graduation> | null = null) => {
     setSelectedGraduation(grad);
@@ -72,6 +78,37 @@ const GraduationsPage: React.FC = () => {
     }
   };
 
+  const handleDragStart = (e: React.DragEvent<HTMLTableRowElement>, grad: Graduation) => {
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedId(grad.id);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+  };
+
+  const handleDrop = (targetGrad: Graduation) => {
+    if (!draggedId || draggedId === targetGrad.id) {
+        setDraggedId(null);
+        return;
+    }
+
+    const reordered = [...localGraduations];
+    const draggedIndex = reordered.findIndex(g => g.id === draggedId);
+    const targetIndex = reordered.findIndex(g => g.id === targetGrad.id);
+
+    const [draggedItem] = reordered.splice(draggedIndex, 1);
+    reordered.splice(targetIndex, 0, draggedItem);
+    
+    setLocalGraduations(reordered);
+
+    const payload = reordered.map((g, index) => ({ id: g.id, rank: index + 1 }));
+    updateGraduationRanks(payload);
+    
+    setDraggedId(null);
+  };
+
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -93,9 +130,18 @@ const GraduationsPage: React.FC = () => {
             <tbody>
               {loading ? (
                 <tr><td colSpan={5} className="p-4 text-center">Carregando...</td></tr>
-              ) : [...graduations].sort((a,b) => a.rank - b.rank).map(grad => (
-                <tr key={grad.id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="p-4 text-slate-700">{grad.rank}</td>
+              ) : localGraduations.map((grad, index) => (
+                <tr 
+                  key={grad.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, grad)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => handleDrop(grad)}
+                  className={`border-b border-slate-100 hover:bg-slate-50 transition-opacity ${draggedId === grad.id ? 'opacity-30' : 'opacity-100'}`}
+                  style={{ cursor: 'move' }}
+                >
+                  <td className="p-4 text-slate-700">{index + 1}</td>
                   <td className="p-4 text-slate-800 font-medium">{grad.name}</td>
                   <td className="p-4">
                     <div className="flex items-center">
@@ -105,7 +151,7 @@ const GraduationsPage: React.FC = () => {
                   </td>
                   <td className="p-4 text-slate-700">{grad.minTimeInMonths} meses</td>
                   <td className="p-4 flex gap-2">
-                    <Button variant="secondary" size="sm" onClick={() => handleOpenModal(grad)}>Editar</Button>
+                    <Button variant="secondary" size="sm" onClick={() => handleOpenModal({...grad, rank: index+1})}>Editar</Button>
                     <Button variant="danger" size="sm" onClick={() => handleDelete(grad.id)}>Excluir</Button>
                   </td>
                 </tr>

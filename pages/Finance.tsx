@@ -5,6 +5,7 @@ import { Student } from '../types';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import Input from '../components/ui/Input';
 
 const PaymentHistoryModal: React.FC<{ student: Student; onClose: () => void, onRegisterPayment: () => void }> = ({ student, onClose, onRegisterPayment }) => {
     return (
@@ -38,10 +39,12 @@ const PaymentHistoryModal: React.FC<{ student: Student; onClose: () => void, onR
 
 
 const FinancePage: React.FC = () => {
-    const { students, updateStudentPayment, loading, graduations, themeSettings } = useContext(AppContext);
+    const { students, updateStudentPayment, loading, graduations, themeSettings, setThemeSettings } = useContext(AppContext);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
     const [updatedCard, setUpdatedCard] = useState<string | null>(null);
+    const [isValuesModalOpen, setIsValuesModalOpen] = useState(false);
+    const [feeAmount, setFeeAmount] = useState(themeSettings.monthlyFeeAmount);
 
     const { remindersToSend, overduePayments } = useMemo(() => {
         const today = new Date();
@@ -78,6 +81,11 @@ const FinancePage: React.FC = () => {
 
         return { remindersToSend: reminders, overduePayments: overdue };
     }, [students, themeSettings]);
+
+    const handleSaveFeeAmount = () => {
+        setThemeSettings({ ...themeSettings, monthlyFeeAmount: feeAmount });
+        setIsValuesModalOpen(false);
+    };
 
     const handleSendReminder = (phone: string, name: string) => {
         const message = `Olá ${name},%20tudo%20bem?%20Passando%20para%20lembrar%20que%20sua%20mensalidade%20está%20próxima%20do%20vencimento.%20Qualquer%20dúvida,%20estamos%20à%20disposição!`;
@@ -116,7 +124,10 @@ const FinancePage: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-slate-800">Controle Financeiro</h1>
+            <div className="flex justify-between items-center">
+                <h1 className="text-3xl font-bold text-slate-800">Controle Financeiro</h1>
+                <Button onClick={() => setIsValuesModalOpen(true)}>Valores</Button>
+            </div>
             
             {remindersToSend.length > 0 && (
                 <Card>
@@ -203,6 +214,23 @@ const FinancePage: React.FC = () => {
                     onRegisterPayment={handleRegisterPayment} 
                 />
             )}
+
+            <Modal isOpen={isValuesModalOpen} onClose={() => setIsValuesModalOpen(false)} title="Definir Valor da Mensalidade">
+                <div className="space-y-4">
+                    <Input 
+                        label="Valor Padrão da Mensalidade (R$)"
+                        type="number"
+                        value={feeAmount}
+                        onChange={(e) => setFeeAmount(parseFloat(e.target.value) || 0)}
+                        step="0.01"
+                        min="0"
+                    />
+                    <div className="flex justify-end gap-2 pt-2">
+                        <Button variant="secondary" onClick={() => setIsValuesModalOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleSaveFeeAmount}>Salvar</Button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };

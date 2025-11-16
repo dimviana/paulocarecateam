@@ -1,4 +1,4 @@
-import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Payment, AttendanceRecord } from '../types';
+import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Payment, AttendanceRecord, Professor } from '../types';
 
 let graduations: Graduation[] = [
   { id: '1', name: 'Branca', color: '#FFFFFF', minTimeInMonths: 0, rank: 1 },
@@ -18,15 +18,20 @@ let schedules: ClassSchedule[] = [
 ];
 
 let students: Student[] = [
-  { id: '1', name: 'Carlos Gracie', birthDate: '1990-08-15', cpf: '111.111.111-11', fjjpe_registration: 'FJJPE-001', phone: '5511999999991', address: 'Rua do Tatame, 123', beltId: '7', academyId: '1', firstGraduationDate: '2010-01-20', paymentStatus: 'paid', lastSeen: '2024-07-28', paymentHistory: [{id: 'p1', date: '2024-07-05', amount: 150}], paymentDueDateDay: 5 },
-  { id: '2', name: 'Hélio Gracie', birthDate: '1992-07-20', cpf: '222.222.222-22', fjjpe_registration: 'FJJPE-002', phone: '5511999999992', address: 'Avenida Ippon, 456', beltId: '5', academyId: '1', firstGraduationDate: '2012-03-10', paymentStatus: 'unpaid', lastSeen: '2024-07-27', paymentHistory: [{id: 'p2', date: '2024-06-05', amount: 150}], paymentDueDateDay: 10 },
-  { id: '3', name: 'Royce Gracie', birthDate: '1995-01-30', cpf: '333.333.333-33', fjjpe_registration: 'FJJPE-003', phone: '5511999999993', address: 'Travessa da Luta, 789', beltId: '3', academyId: '2', firstGraduationDate: '2018-06-01', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 15 },
-  { id: '4', name: 'Rickson Gracie', birthDate: '1988-08-21', cpf: '444.444.444-44', fjjpe_registration: 'FJJPE-004', phone: '5511999999994', address: 'Alameda do Armlock, 101', beltId: '4', academyId: '2', firstGraduationDate: '2015-11-15', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 20 },
+  { id: '1', name: 'Carlos Gracie', imageUrl: 'https://i.pravatar.cc/150?u=111.111.111-11', birthDate: '1990-08-15', cpf: '111.111.111-11', fjjpe_registration: 'FJJPE-001', phone: '5511999999991', address: 'Rua do Tatame, 123', beltId: '7', academyId: '1', firstGraduationDate: '2010-01-20', paymentStatus: 'paid', lastSeen: '2024-07-28', paymentHistory: [{id: 'p1', date: '2024-07-05', amount: 150}], paymentDueDateDay: 5 },
+  { id: '2', name: 'Hélio Gracie', imageUrl: 'https://i.pravatar.cc/150?u=222.222.222-22', birthDate: '1992-07-20', cpf: '222.222.222-22', fjjpe_registration: 'FJJPE-002', phone: '5511999999992', address: 'Avenida Ippon, 456', beltId: '5', academyId: '1', firstGraduationDate: '2012-03-10', paymentStatus: 'unpaid', lastSeen: '2024-07-27', paymentHistory: [{id: 'p2', date: '2024-06-05', amount: 150}], paymentDueDateDay: 10 },
+  { id: '3', name: 'Royce Gracie', imageUrl: 'https://i.pravatar.cc/150?u=333.333.333-33', birthDate: '1995-01-30', cpf: '333.333.333-33', fjjpe_registration: 'FJJPE-003', phone: '5511999999993', address: 'Travessa da Luta, 789', beltId: '3', academyId: '2', firstGraduationDate: '2018-06-01', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 15 },
+  { id: '4', name: 'Rickson Gracie', imageUrl: 'https://i.pravatar.cc/150?u=444.444.444-44', birthDate: '1988-08-21', cpf: '444.444.444-44', fjjpe_registration: 'FJJPE-004', phone: '5511999999994', address: 'Alameda do Armlock, 101', beltId: '4', academyId: '2', firstGraduationDate: '2015-11-15', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 20 },
 ];
 
 let academies: Academy[] = [
   { id: '1', name: 'Gracie Humaitá', address: 'Rio de Janeiro, RJ', responsible: 'Royler Gracie', responsibleRegistration: 'REG-001', professorId: '1', assistantIds: ['2'], imageUrl: 'https://i.imgur.com/8L3h7M0.png' },
   { id: '2', name: 'Atos Jiu-Jitsu', address: 'San Diego, CA', responsible: 'Andre Galvão', responsibleRegistration: 'REG-002', professorId: '3', assistantIds: ['4'], imageUrl: 'https://i.imgur.com/O6G3g5I.png' },
+];
+
+let professors: Professor[] = [
+    { id: '1', name: 'Royler Gracie', fjjpe_registration: 'PROF-001', cpf: '555.555.555-55', academyId: '1', graduationId: '7' },
+    { id: '2', name: 'Andre Galvão', fjjpe_registration: 'PROF-002', cpf: '666.666.666-66', academyId: '2', graduationId: '5' },
 ];
 
 let users: User[] = [
@@ -84,8 +89,9 @@ export const api = {
   getGraduations: () => simulateDelay(graduations),
   getSchedules: () => simulateDelay(schedules),
   getAttendanceRecords: () => simulateDelay(attendanceRecords),
+  getProfessors: () => simulateDelay(professors),
   
-  updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid'): Promise<Student> => {
+  updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid', amount: number): Promise<Student> => {
     const studentIndex = students.findIndex(s => s.id === studentId);
     if (studentIndex === -1) {
       throw new Error("Student not found");
@@ -98,7 +104,7 @@ export const api = {
       const newPayment: Payment = {
         id: String(Date.now()),
         date: new Date().toISOString().split('T')[0],
-        amount: 150.00, // Assuming a fixed amount
+        amount: amount,
       };
       studentToUpdate.paymentHistory = [...(studentToUpdate.paymentHistory || []), newPayment];
     }
@@ -171,6 +177,16 @@ export const api = {
         return simulateDelay(newGrad);
     }
   },
+  
+  updateGraduationRanks: (gradsWithNewRanks: { id: string, rank: number }[]): Promise<{ success: boolean }> => {
+    gradsWithNewRanks.forEach(({ id, rank }) => {
+        const grad = graduations.find(g => g.id === id);
+        if (grad) {
+            grad.rank = rank;
+        }
+    });
+    return simulateDelay({ success: true });
+  },
 
   deleteGraduation: (id: string): Promise<{ success: boolean }> => {
     graduations = graduations.filter(g => g.id !== id);
@@ -217,6 +233,25 @@ export const api = {
 
   deleteAttendanceRecord: (id: string): Promise<{ success: boolean }> => {
     attendanceRecords = attendanceRecords.filter(r => r.id !== id);
+    return simulateDelay({ success: true });
+  },
+
+  saveProfessor: (prof: Omit<Professor, 'id'> & { id?: string }): Promise<Professor> => {
+    if (prof.id) {
+        let existing = professors.find(p => p.id === prof.id);
+        if (!existing) throw new Error("Professor not found");
+        const updated = { ...existing, ...prof };
+        professors = professors.map(p => p.id === prof.id ? updated : p);
+        return simulateDelay(updated);
+    } else {
+        const newProfessor: Professor = { ...prof, id: String(Date.now()) } as Professor;
+        professors.push(newProfessor);
+        return simulateDelay(newProfessor);
+    }
+  },
+
+  deleteProfessor: (id: string): Promise<{ success: boolean }> => {
+    professors = professors.filter(p => p.id !== id);
     return simulateDelay({ success: true });
   },
 };

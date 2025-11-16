@@ -4,15 +4,15 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import Card from '../ui/Card';
 
 const attendanceData = [
-  { name: '18-June', Present: 1600, Absent: 800 },
-  { name: '19-June', Present: 1800, Absent: 1100 },
-  { name: '20-June', Present: 1900, Absent: 900 },
-  { name: '21-June', Present: 1200, Absent: 700 },
-  { name: '22-June', Present: 2000, Absent: 400 },
-  { name: '23-June', Present: 1400, Absent: 600 },
-  { name: '24-June', Present: 1100, Absent: 500 },
-  { name: '25-June', Present: 1300, Absent: 800 },
-  { name: '26-June', Present: 1800, Absent: 300 },
+  { name: '18-Jun', Presentes: 1600, Ausentes: 800 },
+  { name: '19-Jun', Presentes: 1800, Ausentes: 1100 },
+  { name: '20-Jun', Presentes: 1900, Ausentes: 900 },
+  { name: '21-Jun', Presentes: 1200, Ausentes: 700 },
+  { name: '22-Jun', Presentes: 2000, Ausentes: 400 },
+  { name: '23-Jun', Presentes: 1400, Ausentes: 600 },
+  { name: '24-Jun', Presentes: 1100, Ausentes: 500 },
+  { name: '25-Jun', Presentes: 1300, Ausentes: 800 },
+  { name: '26-Jun', Presentes: 1800, Ausentes: 300 },
 ];
 
 
@@ -22,10 +22,10 @@ const AttendanceChart: React.FC = () => {
   return (
     <Card className="h-full">
       <div className="flex justify-between items-center mb-4">
-         <h3 className="text-lg font-semibold text-slate-800">Attendance Report</h3>
+         <h3 className="text-lg font-semibold text-slate-800">Relatório de Frequência</h3>
          <div className="flex items-center space-x-4 text-sm">
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-amber-500 mr-2"></span>Present</div>
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-slate-600 mr-2"></span>Absent</div>
+            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-amber-500 mr-2"></span>Presentes</div>
+            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-slate-600 mr-2"></span>Ausentes</div>
          </div>
       </div>
       <div style={{ width: '100%', height: 300 }}>
@@ -43,8 +43,8 @@ const AttendanceChart: React.FC = () => {
                     borderRadius: '0.75rem',
                 }}
             />
-            <Bar dataKey="Present" fill="#F9A825" radius={[5, 5, 0, 0]} barSize={10} />
-            <Bar dataKey="Absent" fill="#475569" radius={[5, 5, 0, 0]} barSize={10} />
+            <Bar dataKey="Presentes" fill="#F9A825" radius={[5, 5, 0, 0]} barSize={10} />
+            <Bar dataKey="Ausentes" fill="#475569" radius={[5, 5, 0, 0]} barSize={10} />
           </BarChart>
         </ResponsiveContainer>
       </div>

@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { ThemeSettings } from './types';
 
@@ -11,6 +12,7 @@ export const initialThemeSettings: ThemeSettings = {
   reminderDaysBeforeDue: 5,
   overdueDaysAfterDue: 5,
   theme: 'light',
+  monthlyFeeAmount: 150,
   publicPageEnabled: false,
   heroHtml: `
 <div class="relative bg-white text-slate-800 text-center py-20 px-4 overflow-hidden" style="background-image: url('https://images.unsplash.com/photo-1581009137052-c40971b51c69?q=80&w=2070&auto=format&fit=crop'); background-size: cover; background-position: center;">
@@ -119,7 +121,8 @@ export const IconX = () => (
 );
 
 // FIX: Updated IconChevronDown to accept props to allow passing className.
-export const IconChevronDown = (props: JSX.IntrinsicElements['svg']) => (
+// FIX: Corrected the prop type to use React.SVGProps to resolve 'Cannot find namespace JSX' error.
+export const IconChevronDown = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polyline points="6 9 12 15 18 9"/></svg>
 );
 
@@ -136,7 +139,7 @@ export const IconGift = () => (
 );
 
 export const IconEye = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
 );
 
 export const IconEyeOff = () => (

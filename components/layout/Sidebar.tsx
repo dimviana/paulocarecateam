@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { NavLink } from 'react-router-dom';
 import { AppContext } from '../../context/AppContext';
-import { IconHome, IconUsers, IconDollarSign, IconBuilding, IconUserCheck, IconSettings, IconX, IconMedal, IconCalendar } from '../../constants';
+import { IconHome, IconUsers, IconDollarSign, IconBuilding, IconUserCheck, IconSettings, IconX, IconMedal, IconCalendar, IconBriefcase } from '../../constants';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
   const navLinks = [
     { to: "/dashboard", text: "Dashboard", icon: <IconHome />, roles: ['general_admin', 'academy_admin', 'student'] },
     { to: "/students", text: "Alunos", icon: <IconUsers />, roles: ['general_admin', 'academy_admin'] },
+    { to: "/professors", text: "Professores", icon: <IconBriefcase />, roles: ['general_admin', 'academy_admin'] },
     { to: "/graduations", text: "Graduações", icon: <IconMedal />, roles: ['general_admin'] },
     { to: "/schedules", text: "Horários", icon: <IconCalendar />, roles: ['general_admin', 'academy_admin', 'student'] },
     { to: "/attendance", text: "Frequência", icon: <IconUserCheck />, roles: ['general_admin', 'academy_admin', 'student'] },
