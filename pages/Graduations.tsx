@@ -1,5 +1,5 @@
 
-import React, { useState, useContext, FormEvent, useEffect } from 'react';
+import React, { useState, useContext, FormEvent, useEffect, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Graduation } from '../types';
 import Card from '../components/ui/Card';
@@ -47,7 +47,7 @@ const GraduationForm: React.FC<GraduationFormProps> = ({ graduation, onSave, onC
 };
 
 const GraduationsPage: React.FC = () => {
-  const { graduations, saveGraduation, deleteGraduation, updateGraduationRanks, loading } = useContext(AppContext);
+  const { graduations, saveGraduation, deleteGraduation, updateGraduationRanks, loading, students, attendanceRecords, academies } = useContext(AppContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedGraduation, setSelectedGraduation] = useState<Partial<Graduation> | null>(null);
   const [localGraduations, setLocalGraduations] = useState<Graduation[]>([]);
@@ -56,6 +56,54 @@ const GraduationsPage: React.FC = () => {
   useEffect(() => {
     setLocalGraduations([...graduations].sort((a,b) => a.rank - b.rank));
   }, [graduations]);
+
+  const eligibleForStripe = useMemo(() => {
+    const today = new Date();
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(today.getMonth() - 6);
+
+    return students
+      .map(student => {
+        if (!student.firstGraduationDate) {
+          return null;
+        }
+
+        const firstGradDate = new Date(student.firstGraduationDate);
+
+        // Time check: must be at least 6 months
+        const diffTime = today.getTime() - firstGradDate.getTime();
+        const diffDays = diffTime / (1000 * 3600 * 24);
+        if (diffDays < 180) { // Using 180 days as a proxy for 6 months
+          return null;
+        }
+        
+        const totalMonths = Math.floor(diffDays / 30.44); // Average days in a month
+
+        // Attendance check
+        const studentRecordsInPeriod = attendanceRecords.filter(r => 
+          r.studentId === student.id && new Date(r.date) >= sixMonthsAgo && new Date(r.date) <= today
+        );
+
+        if (studentRecordsInPeriod.length === 0) {
+          return null; // Not enough data to determine eligibility
+        }
+
+        const presentCount = studentRecordsInPeriod.filter(r => r.status === 'present').length;
+        const attendancePercentage = (presentCount / studentRecordsInPeriod.length) * 100;
+
+        if (attendancePercentage >= 70) {
+          return {
+            ...student,
+            attendancePercentage: Math.round(attendancePercentage),
+            trainingTimeInMonths: totalMonths,
+          };
+        }
+
+        return null;
+      })
+      .filter((s): s is NonNullable<typeof s> => s !== null) 
+      .sort((a, b) => b!.trainingTimeInMonths - a!.trainingTimeInMonths);
+  }, [students, attendanceRecords]);
 
   const handleOpenModal = (grad: Partial<Graduation> | null = null) => {
     setSelectedGraduation(grad);
@@ -113,7 +161,7 @@ const GraduationsPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-slate-800">Gerenciar Graduações</h1>
-        <Button onClick={() => handleOpenModal({})}>Adicionar Graduação</Button>
+        <Button onClick={() => handleOpenModal({ rank: localGraduations.length + 1 })}>Adicionar Graduação</Button>
       </div>
       <Card>
         <div className="overflow-x-auto">
@@ -159,6 +207,49 @@ const GraduationsPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-xl font-bold text-amber-600 mb-4">Alunos Elegíveis para Receber Grau</h2>
+        <p className="text-sm text-slate-500 mb-6">
+          Alunos com pelo menos 6 meses desde a primeira graduação e 70% ou mais de frequência nos últimos 6 meses.
+        </p>
+        {loading ? (
+          <div className="text-center p-4">Calculando elegibilidade...</div>
+        ) : eligibleForStripe.length > 0 ? (
+          <div className="space-y-4">
+            {eligibleForStripe.map(student => {
+              const belt = graduations.find(g => g.id === student.beltId);
+              const academy = academies.find(a => a.id === student.academyId);
+              return (
+                <div key={student.id} className="flex flex-col sm:flex-row items-center p-3 bg-slate-50 rounded-lg border border-slate-200 gap-4">
+                  <img src={student.imageUrl || `https://i.pravatar.cc/150?u=${student.cpf}`} alt={student.name} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
+                  <div className="flex-grow w-full grid grid-cols-1 md:grid-cols-3 gap-4 items-center text-center sm:text-left">
+                    <div>
+                      <p className="font-bold text-slate-800">{student.name}</p>
+                      <p className="text-sm text-slate-500">{academy?.name || 'N/A'}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="font-semibold text-slate-700">{belt?.name || 'N/A'}</p>
+                      <p className="text-sm text-slate-500">{student.trainingTimeInMonths} meses de treino</p>
+                    </div>
+                    <div className="w-full">
+                      <div className="flex items-center justify-center sm:justify-start">
+                        <div className="w-full bg-slate-200 rounded-full h-2.5 mr-2">
+                          <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${student.attendancePercentage}%` }}></div>
+                        </div>
+                        <span className="font-semibold text-green-600">{student.attendancePercentage}%</span>
+                      </div>
+                      <p className="text-sm text-slate-500 text-right">Frequência (6m)</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-center text-slate-500 py-4">Nenhum aluno elegível no momento.</p>
+        )}
       </Card>
 
       <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={selectedGraduation?.id ? 'Editar Graduação' : 'Adicionar Graduação'}>

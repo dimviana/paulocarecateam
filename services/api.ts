@@ -1,4 +1,4 @@
-import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Payment, AttendanceRecord, Professor } from '../types';
+import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Payment, AttendanceRecord, Professor, ActivityLog } from '../types';
 
 let graduations: Graduation[] = [
   { id: '1', name: 'Branca', color: '#FFFFFF', minTimeInMonths: 0, rank: 1 },
@@ -56,9 +56,24 @@ let attendanceRecords: AttendanceRecord[] = [
     { id: 'att7', studentId: '2', scheduleId: '4', date: '2024-07-26', status: 'absent' },
 ];
 
+let activityLogs: ActivityLog[] = [
+    { id: 'log1', actorId: '1', action: 'Login', timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(), details: 'Admin Geral realizou login no sistema.'},
+    { id: 'log2', actorId: '2', action: 'Atualização de Aluno', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), details: 'Admin Gracie atualizou o status de pagamento de Hélio Gracie para "Pendente".'}
+];
 
 const simulateDelay = <T,>(data: T): Promise<T> => 
   new Promise(resolve => setTimeout(() => resolve(data), 500));
+
+const logActivity = (actorId: string, action: string, details: string) => {
+    const newLog: ActivityLog = {
+        id: `log${Date.now()}${Math.random()}`,
+        actorId,
+        action,
+        timestamp: new Date().toISOString(),
+        details,
+    };
+    activityLogs.unshift(newLog); // Add to the beginning of the array
+};
 
 export const api = {
   login: (email: string, pass: string): Promise<{ token: string | null }> => {
@@ -70,6 +85,7 @@ export const api = {
     }
     
     if (user) {
+        logActivity(user.id, 'Login', `${user.name} realizou login.`);
         // Simulate JWT generation. In a real app, this is done on the backend with a secret key.
         const payload = {
             userId: user.id,
@@ -90,8 +106,9 @@ export const api = {
   getSchedules: () => simulateDelay(schedules),
   getAttendanceRecords: () => simulateDelay(attendanceRecords),
   getProfessors: () => simulateDelay(professors),
+  getActivityLogs: () => simulateDelay(activityLogs),
   
-  updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid', amount: number): Promise<Student> => {
+  updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid', amount: number, actorId: string): Promise<Student> => {
     const studentIndex = students.findIndex(s => s.id === studentId);
     if (studentIndex === -1) {
       throw new Error("Student not found");
@@ -110,16 +127,23 @@ export const api = {
     }
     
     students[studentIndex] = studentToUpdate;
+
+    const actor = users.find(u => u.id === actorId);
+    if (actor) {
+        logActivity(actorId, 'Pagamento', `${actor.name} atualizou o status de pagamento de ${studentToUpdate.name} para "${status === 'paid' ? 'Em Dia' : 'Pendente'}".`);
+    }
     
     return simulateDelay(studentToUpdate);
   },
   
-  saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }): Promise<Student> => {
+  saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }, actorId: string): Promise<Student> => {
+    const actor = users.find(u => u.id === actorId);
     if (student.id) {
         let existingStudent = students.find(s => s.id === student.id);
         if (!existingStudent) throw new Error("Student not found");
         const updatedStudent = { ...existingStudent, ...student };
         students = students.map(s => s.id === student.id ? updatedStudent : s);
+        if (actor) logActivity(actorId, 'Atualização de Aluno', `${actor.name} atualizou os dados de ${student.name}.`);
         return simulateDelay(updatedStudent);
     } else {
         const newStudent: Student = {
@@ -132,21 +156,27 @@ export const api = {
             paymentDueDateDay: student.paymentDueDateDay || 10,
         };
         students.push(newStudent);
+        if (actor) logActivity(actorId, 'Criação de Aluno', `${actor.name} cadastrou o novo aluno ${student.name}.`);
         return simulateDelay(newStudent);
     }
   },
 
-  deleteStudent: (studentId: string): Promise<{ success: boolean }> => {
+  deleteStudent: (studentId: string, actorId: string): Promise<{ success: boolean }> => {
+    const actor = users.find(u => u.id === actorId);
+    const student = students.find(s => s.id === studentId);
+    if (actor && student) logActivity(actorId, 'Exclusão de Aluno', `${actor.name} excluiu o aluno ${student.name}.`);
     students = students.filter(s => s.id !== studentId);
     return simulateDelay({ success: true });
   },
 
-  saveAcademy: (academy: Omit<Academy, 'id'> & { id?: string }): Promise<Academy> => {
+  saveAcademy: (academy: Omit<Academy, 'id'> & { id?: string }, actorId: string): Promise<Academy> => {
+    const actor = users.find(u => u.id === actorId);
     if (academy.id) {
         let existing = academies.find(a => a.id === academy.id);
         if (!existing) throw new Error("Academy not found");
         const updated = { ...existing, ...academy };
         academies = academies.map(a => a.id === academy.id ? updated : a);
+        if (actor) logActivity(actorId, 'Atualização de Academia', `${actor.name} atualizou os dados da academia ${academy.name}.`);
         return simulateDelay(updated);
     } else {
         const newAcademy: Academy = { 
@@ -155,67 +185,91 @@ export const api = {
             assistantIds: academy.assistantIds || [] 
         };
         academies.push(newAcademy);
+        if (actor) logActivity(actorId, 'Criação de Academia', `${actor.name} cadastrou a nova academia ${academy.name}.`);
         return simulateDelay(newAcademy);
     }
   },
 
-  deleteAcademy: (id: string): Promise<{ success: boolean }> => {
+  deleteAcademy: (id: string, actorId: string): Promise<{ success: boolean }> => {
+    const actor = users.find(u => u.id === actorId);
+    const academy = academies.find(a => a.id === id);
+    if (actor && academy) logActivity(actorId, 'Exclusão de Academia', `${actor.name} excluiu a academia ${academy.name}.`);
     academies = academies.filter(a => a.id !== id);
     return simulateDelay({ success: true });
   },
 
-  saveGraduation: (grad: Omit<Graduation, 'id'> & { id?: string }): Promise<Graduation> => {
+  saveGraduation: (grad: Omit<Graduation, 'id'> & { id?: string }, actorId: string): Promise<Graduation> => {
+    const actor = users.find(u => u.id === actorId);
     if (grad.id) {
         let existing = graduations.find(g => g.id === grad.id);
         if (!existing) throw new Error("Graduation not found");
         const updated = { ...existing, ...grad };
         graduations = graduations.map(g => g.id === grad.id ? updated : g);
+        if(actor) logActivity(actorId, 'Atualização de Graduação', `${actor.name} atualizou a graduação ${grad.name}.`);
         return simulateDelay(updated);
     } else {
         const newGrad: Graduation = { ...grad, id: String(Date.now()) } as Graduation;
         graduations.push(newGrad);
+        if(actor) logActivity(actorId, 'Criação de Graduação', `${actor.name} criou a graduação ${grad.name}.`);
         return simulateDelay(newGrad);
     }
   },
   
-  updateGraduationRanks: (gradsWithNewRanks: { id: string, rank: number }[]): Promise<{ success: boolean }> => {
+  updateGraduationRanks: (gradsWithNewRanks: { id: string, rank: number }[], actorId: string): Promise<{ success: boolean }> => {
+    const actor = users.find(u => u.id === actorId);
     gradsWithNewRanks.forEach(({ id, rank }) => {
         const grad = graduations.find(g => g.id === id);
         if (grad) {
             grad.rank = rank;
         }
     });
+    if (actor) logActivity(actorId, 'Reordenação de Graduações', `${actor.name} reordenou as faixas.`);
     return simulateDelay({ success: true });
   },
 
-  deleteGraduation: (id: string): Promise<{ success: boolean }> => {
+  deleteGraduation: (id: string, actorId: string): Promise<{ success: boolean }> => {
+    const actor = users.find(u => u.id === actorId);
+    const grad = graduations.find(g => g.id === id);
+    if (actor && grad) logActivity(actorId, 'Exclusão de Graduação', `${actor.name} excluiu a graduação ${grad.name}.`);
     graduations = graduations.filter(g => g.id !== id);
     return simulateDelay({ success: true });
   },
 
-  saveSchedule: (schedule: Omit<ClassSchedule, 'id'> & { id?: string }): Promise<ClassSchedule> => {
+  saveSchedule: (schedule: Omit<ClassSchedule, 'id'> & { id?: string }, actorId: string): Promise<ClassSchedule> => {
+    const actor = users.find(u => u.id === actorId);
     if (schedule.id) {
         let existing = schedules.find(s => s.id === schedule.id);
         if (!existing) throw new Error("Schedule not found");
         const updated = { ...existing, ...schedule };
         schedules = schedules.map(s => s.id === schedule.id ? updated : s);
+        if (actor) logActivity(actorId, 'Atualização de Horário', `${actor.name} atualizou o horário da turma ${schedule.className}.`);
         return simulateDelay(updated);
     } else {
         const newSchedule: ClassSchedule = { ...schedule, id: String(Date.now()) } as ClassSchedule;
         schedules.push(newSchedule);
+        if (actor) logActivity(actorId, 'Criação de Horário', `${actor.name} criou o horário para a turma ${schedule.className}.`);
         return simulateDelay(newSchedule);
     }
   },
 
-  deleteSchedule: (id: string): Promise<{ success: boolean }> => {
+  deleteSchedule: (id: string, actorId: string): Promise<{ success: boolean }> => {
+    const actor = users.find(u => u.id === actorId);
+    const schedule = schedules.find(s => s.id === id);
+    if(actor && schedule) logActivity(actorId, 'Exclusão de Horário', `${actor.name} excluiu o horário da turma ${schedule.className}.`);
     schedules = schedules.filter(s => s.id !== id);
     return simulateDelay({ success: true });
   },
   
-  saveAttendanceRecord: (record: Omit<AttendanceRecord, 'id'> & { id?: string }): Promise<AttendanceRecord> => {
+  saveAttendanceRecord: (record: Omit<AttendanceRecord, 'id'> & { id?: string }, actorId: string): Promise<AttendanceRecord> => {
     const existingIndex = attendanceRecords.findIndex(
         r => r.studentId === record.studentId && r.scheduleId === record.scheduleId && r.date === record.date
     );
+    const actor = users.find(u => u.id === actorId);
+    const student = students.find(s => s.id === record.studentId);
+    
+    if (actor && student) {
+        logActivity(actorId, 'Registro de Frequência', `${actor.name} registrou a frequência de ${student.name} como "${record.status === 'present' ? 'Presente' : 'Ausente'}" no dia ${record.date}.`);
+    }
 
     if (existingIndex > -1) {
         const updatedRecord = { ...attendanceRecords[existingIndex], status: record.status };
@@ -231,26 +285,38 @@ export const api = {
     }
   },
 
-  deleteAttendanceRecord: (id: string): Promise<{ success: boolean }> => {
+  deleteAttendanceRecord: (id: string, actorId: string): Promise<{ success: boolean }> => {
+    const actor = users.find(u => u.id === actorId);
+    const record = attendanceRecords.find(r => r.id === id);
+    if(record) {
+        const student = students.find(s => s.id === record.studentId);
+        if (actor && student) logActivity(actorId, 'Exclusão de Frequência', `${actor.name} removeu um registro de frequência de ${student.name} do dia ${record.date}.`);
+    }
     attendanceRecords = attendanceRecords.filter(r => r.id !== id);
     return simulateDelay({ success: true });
   },
 
-  saveProfessor: (prof: Omit<Professor, 'id'> & { id?: string }): Promise<Professor> => {
+  saveProfessor: (prof: Omit<Professor, 'id'> & { id?: string }, actorId: string): Promise<Professor> => {
+    const actor = users.find(u => u.id === actorId);
     if (prof.id) {
         let existing = professors.find(p => p.id === prof.id);
         if (!existing) throw new Error("Professor not found");
         const updated = { ...existing, ...prof };
         professors = professors.map(p => p.id === prof.id ? updated : p);
+        if(actor) logActivity(actorId, 'Atualização de Professor', `${actor.name} atualizou os dados do professor ${prof.name}.`);
         return simulateDelay(updated);
     } else {
         const newProfessor: Professor = { ...prof, id: String(Date.now()) } as Professor;
         professors.push(newProfessor);
+        if(actor) logActivity(actorId, 'Criação de Professor', `${actor.name} cadastrou o novo professor ${prof.name}.`);
         return simulateDelay(newProfessor);
     }
   },
 
-  deleteProfessor: (id: string): Promise<{ success: boolean }> => {
+  deleteProfessor: (id: string, actorId: string): Promise<{ success: boolean }> => {
+    const actor = users.find(u => u.id === actorId);
+    const prof = professors.find(p => p.id === id);
+    if(actor && prof) logActivity(actorId, 'Exclusão de Professor', `${actor.name} excluiu o professor ${prof.name}.`);
     professors = professors.filter(p => p.id !== id);
     return simulateDelay({ success: true });
   },

@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord, Professor } from '../types';
+import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog } from '../types';
 import { initialThemeSettings } from '../constants';
 import { api } from '../services/api';
 
@@ -16,6 +16,7 @@ interface AppContextType {
   users: User[];
   attendanceRecords: AttendanceRecord[];
   professors: Professor[];
+  activityLogs: ActivityLog[];
   loading: boolean;
   updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid') => Promise<void>;
   saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => Promise<void>;
@@ -56,11 +57,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [users, setUsers] = useState<User[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [professors, setProfessors] = useState<Professor[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem('authToken');
+  }, []);
+
+  const refetchActivityLogs = useCallback(async () => {
+    setActivityLogs(await api.getActivityLogs());
   }, []);
 
   useEffect(() => {
@@ -85,7 +91,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     
     const fetchData = async () => {
         setLoading(true);
-        const [studentsData, academiesData, graduationsData, schedulesData, usersData, attendanceData, professorsData] = await Promise.all([
+        const [studentsData, academiesData, graduationsData, schedulesData, usersData, attendanceData, professorsData, activityLogsData] = await Promise.all([
             api.getStudents(),
             api.getAcademies(),
             api.getGraduations(),
@@ -93,6 +99,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             api.getUsers(),
             api.getAttendanceRecords(),
             api.getProfessors(),
+            api.getActivityLogs(),
         ]);
         setStudents(studentsData);
         setAcademies(academiesData);
@@ -101,6 +108,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setUsers(usersData);
         setAttendanceRecords(attendanceData);
         setProfessors(professorsData);
+        setActivityLogs(activityLogsData);
         
         const token = localStorage.getItem('authToken');
         if (token) {
@@ -140,6 +148,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (loggedInUser) {
                 setUser(loggedInUser);
                 setUsers(allUsers);
+                refetchActivityLogs();
                 return true;
             }
         } catch (e) {
@@ -153,73 +162,101 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateStudentPayment = async (studentId: string, status: 'paid' | 'unpaid') => {
-      await api.updateStudentPayment(studentId, status, themeSettings.monthlyFeeAmount);
+      if (!user) return;
+      await api.updateStudentPayment(studentId, status, themeSettings.monthlyFeeAmount, user.id);
       setStudents(await api.getStudents());
+      refetchActivityLogs();
   }
 
   const saveStudent = async (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => {
-      await api.saveStudent(student);
+      if (!user) return;
+      await api.saveStudent(student, user.id);
       setStudents(await api.getStudents());
+      refetchActivityLogs();
   }
 
   const deleteStudent = async (studentId: string) => {
-    await api.deleteStudent(studentId);
+    if (!user) return;
+    await api.deleteStudent(studentId, user.id);
     setStudents(await api.getStudents());
+    refetchActivityLogs();
   }
 
   const saveAcademy = async (academy: Omit<Academy, 'id'> & { id?: string }) => {
-      await api.saveAcademy(academy);
+      if (!user) return;
+      await api.saveAcademy(academy, user.id);
       setAcademies(await api.getAcademies());
+      refetchActivityLogs();
   }
 
   const deleteAcademy = async (id: string) => {
-    await api.deleteAcademy(id);
+    if (!user) return;
+    await api.deleteAcademy(id, user.id);
     setAcademies(await api.getAcademies());
+    refetchActivityLogs();
   }
 
   const saveGraduation = async (grad: Omit<Graduation, 'id'> & { id?: string }) => {
-      await api.saveGraduation(grad);
+      if (!user) return;
+      await api.saveGraduation(grad, user.id);
       setGraduations(await api.getGraduations());
+      refetchActivityLogs();
   }
   
   const updateGraduationRanks = async (gradsWithNewRanks: { id: string, rank: number }[]) => {
-    await api.updateGraduationRanks(gradsWithNewRanks);
+    if (!user) return;
+    await api.updateGraduationRanks(gradsWithNewRanks, user.id);
     setGraduations(await api.getGraduations());
+    refetchActivityLogs();
   }
 
   const deleteGraduation = async (id: string) => {
-    await api.deleteGraduation(id);
+    if (!user) return;
+    await api.deleteGraduation(id, user.id);
     setGraduations(await api.getGraduations());
+    refetchActivityLogs();
   }
 
   const saveSchedule = async (schedule: Omit<ClassSchedule, 'id'> & { id?: string }) => {
-      await api.saveSchedule(schedule);
+      if (!user) return;
+      await api.saveSchedule(schedule, user.id);
       setSchedules(await api.getSchedules());
+      refetchActivityLogs();
   }
 
   const deleteSchedule = async (id: string) => {
-    await api.deleteSchedule(id);
+    if (!user) return;
+    await api.deleteSchedule(id, user.id);
     setSchedules(await api.getSchedules());
+    refetchActivityLogs();
   }
   
   const saveAttendanceRecord = async (record: Omit<AttendanceRecord, 'id'> & { id?: string }) => {
-    await api.saveAttendanceRecord(record);
+    if (!user) return;
+    await api.saveAttendanceRecord(record, user.id);
     setAttendanceRecords(await api.getAttendanceRecords());
+    refetchActivityLogs();
   };
 
   const deleteAttendanceRecord = async (id: string) => {
-    await api.deleteAttendanceRecord(id);
+    if (!user) return;
+    await api.deleteAttendanceRecord(id, user.id);
     setAttendanceRecords(await api.getAttendanceRecords());
+    refetchActivityLogs();
   };
   
   const saveProfessor = async (prof: Omit<Professor, 'id'> & { id?: string }) => {
-      await api.saveProfessor(prof);
+      if (!user) return;
+      await api.saveProfessor(prof, user.id);
       setProfessors(await api.getProfessors());
+      refetchActivityLogs();
   }
 
   const deleteProfessor = async (id: string) => {
-    await api.deleteProfessor(id);
+    if (!user) return;
+    await api.deleteProfessor(id, user.id);
     setProfessors(await api.getProfessors());
+    refetchActivityLogs();
   }
 
 
@@ -227,7 +264,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     <AppContext.Provider value={{ 
         themeSettings, setThemeSettings, 
         user, login, logout, 
-        students, academies, graduations, schedules, users, attendanceRecords, professors,
+        students, academies, graduations, schedules, users, attendanceRecords, professors, activityLogs,
         loading, 
         updateStudentPayment, saveStudent, deleteStudent,
         saveAcademy, deleteAcademy,

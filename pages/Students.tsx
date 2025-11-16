@@ -1,4 +1,4 @@
-import React, { useState, useContext, FormEvent } from 'react';
+import React, { useState, useContext, FormEvent, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Student } from '../types';
 import Card from '../components/ui/Card';
@@ -129,11 +129,46 @@ const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({ student, onSave, on
 
 
 const StudentsPage: React.FC = () => {
-    const { students, academies, saveStudent, deleteStudent, loading, graduations } = useContext(AppContext);
+    const { students, academies, saveStudent, deleteStudent, loading, graduations, attendanceRecords } = useContext(AppContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Partial<Student> | null>(null);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const [studentForPhoto, setStudentForPhoto] = useState<Student | null>(null);
+
+    const studentStripeData = useMemo(() => {
+        const data = new Map<string, { stripes: number }>();
+        students.forEach(student => {
+            if (!student.firstGraduationDate) {
+                data.set(student.id, { stripes: 0 });
+                return;
+            }
+
+            const firstGradDate = new Date(student.firstGraduationDate);
+            const today = new Date();
+            const diffTime = today.getTime() - firstGradDate.getTime();
+            const diffDays = diffTime / (1000 * 3600 * 24);
+            const totalMonths = Math.floor(diffDays / 30.44);
+
+            const potentialStripes = Math.min(Math.floor(totalMonths / 6), 4);
+
+            const studentRecords = attendanceRecords.filter(r => r.studentId === student.id);
+            if (studentRecords.length === 0) {
+                data.set(student.id, { stripes: 0 });
+                return;
+            }
+
+            const presentCount = studentRecords.filter(r => r.status === 'present').length;
+            const attendancePercentage = (presentCount / studentRecords.length) * 100;
+
+            if (attendancePercentage >= 70) {
+                data.set(student.id, { stripes: potentialStripes });
+            } else {
+                data.set(student.id, { stripes: 0 });
+            }
+        });
+        return data;
+    }, [students, attendanceRecords]);
+
 
     const handleOpenModal = (student: Partial<Student> | null = null) => {
         setSelectedStudent(student);
@@ -189,6 +224,7 @@ const StudentsPage: React.FC = () => {
                     {students.map(student => {
                         const belt = graduations.find(g => g.id === student.beltId);
                         const academy = academies.find(a => a.id === student.academyId);
+                        const { stripes } = studentStripeData.get(student.id) || { stripes: 0 };
                         
                         return (
                             <Card key={student.id} className="p-0 flex flex-col overflow-hidden transition-transform duration-200 hover:-translate-y-1 w-[328px] h-[435px]">
@@ -202,7 +238,7 @@ const StudentsPage: React.FC = () => {
                                                 className="w-16 h-16 rounded-full object-cover border-2 border-slate-200 group-hover:opacity-75 transition-opacity"
                                             />
                                             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-opacity">
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                                             </div>
                                         </button>
                                         <div className="ml-4">
@@ -211,7 +247,7 @@ const StudentsPage: React.FC = () => {
                                         </div>
                                     </div>
                                     
-                                    <div className="space-y-3 text-sm flex-grow">
+                                    <div className="space-y-3 text-sm">
                                         <div className="flex justify-between items-center">
                                             <span className="text-slate-600 font-medium">Pagamento:</span>
                                             <span className={`px-2 py-1 rounded-full text-xs font-semibold ${student.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -237,9 +273,24 @@ const StudentsPage: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    <div className="mt-5 pt-4 border-t border-slate-200/60 flex justify-end gap-2">
-                                        <Button size="sm" variant="secondary" onClick={() => handleOpenModal(student)}>Editar</Button>
-                                        <Button size="sm" variant="danger" onClick={() => handleDeleteStudent(student.id)}>Excluir</Button>
+                                    <div className="mt-auto">
+                                        <div className="pt-4 mt-4">
+                                            <div 
+                                                className="w-full h-7 rounded-md flex items-center justify-end" 
+                                                style={{ backgroundColor: belt?.color || '#e2e8f0', border: '1px solid rgba(0,0,0,0.1)' }}
+                                                title={`${belt?.name} - ${stripes} grau(s)`}
+                                            >
+                                                <div className="h-full w-1/4 bg-black flex items-center justify-center space-x-1 p-1">
+                                                    {Array.from({ length: stripes }).map((_, index) => (
+                                                        <div key={index} className="h-5 w-1 bg-white"></div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="mt-4 pt-4 border-t border-slate-200/60 flex justify-end gap-2">
+                                            <Button size="sm" variant="secondary" onClick={() => handleOpenModal(student)}>Editar</Button>
+                                            <Button size="sm" variant="danger" onClick={() => handleDeleteStudent(student.id)}>Excluir</Button>
+                                        </div>
                                     </div>
                                 </div>
                             </Card>

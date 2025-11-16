@@ -111,3 +111,11 @@ export interface AttendanceRecord {
   date: string; // YYYY-MM-DD
   status: 'present' | 'absent';
 }
+
+export interface ActivityLog {
+  id: string;
+  actorId: string;
+  action: string;
+  timestamp: string;
+  details: string;
+}
