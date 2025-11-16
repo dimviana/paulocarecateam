@@ -1,4 +1,3 @@
-
 import React, { useContext, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Link as RouterLink } from 'react-router-dom';
@@ -6,6 +5,11 @@ import Button from '../components/ui/Button';
 
 const PublicPage: React.FC = () => {
     const { themeSettings } = useContext(AppContext);
+
+    const processedFooterHtml = (themeSettings.footerHtml || '').replace(
+        '{{{copyright_line}}}',
+        `&copy; ${new Date().getFullYear()} ${themeSettings.copyrightText} - Versão ${themeSettings.systemVersion}`
+    );
 
     useEffect(() => {
         if (themeSettings.customJs) {
@@ -59,7 +63,7 @@ const PublicPage: React.FC = () => {
                 </main>
                 
                 {/* Footer */}
-                <footer dangerouslySetInnerHTML={{ __html: themeSettings.footerHtml || '' }} />
+                <footer dangerouslySetInnerHTML={{ __html: processedFooterHtml }} />
             </div>
         </>
     );

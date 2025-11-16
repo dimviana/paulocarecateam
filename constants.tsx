@@ -53,7 +53,7 @@ export const initialThemeSettings: ThemeSettings = {
   `,
   footerHtml: `
 <div class="py-8 bg-slate-100 text-center text-slate-500">
-    <p>&copy; ${new Date().getFullYear()} Jiu-Jitsu Hub. Todos os direitos reservados.</p>
+    <p>{{{copyright_line}}}</p>
     <p>Desenvolvido com a Arte Suave em mente.</p>
 </div>
   `,
@@ -98,6 +98,8 @@ html {
   // PIX Payment
   pixKey: '',
   pixHolderName: '',
+  copyrightText: 'ABILDEVELOPER',
+  systemVersion: '1.0.0',
 };
 
 

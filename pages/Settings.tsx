@@ -22,7 +22,7 @@ const SettingsPage: React.FC = () => {
     const { themeSettings, setThemeSettings, activityLogs, users, user } = useContext(AppContext);
     const [settings, setSettings] = useState(themeSettings);
     const [saved, setSaved] = useState(false);
-    const [activeTab, setActiveTab] = useState<'system' | 'webpage' | 'activities' | 'pagamentos'>('system');
+    const [activeTab, setActiveTab] = useState<'system' | 'webpage' | 'activities' | 'pagamentos' | 'direitos'>('system');
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
@@ -77,6 +77,12 @@ const SettingsPage: React.FC = () => {
                         className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'activities' ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]' : 'border-transparent text-[var(--theme-text-primary)]/60 hover:text-[var(--theme-text-primary)]/80 hover:border-gray-300'}`}
                     >
                         Atividades
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('direitos')}
+                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'direitos' ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]' : 'border-transparent text-[var(--theme-text-primary)]/60 hover:text-[var(--theme-text-primary)]/80 hover:border-gray-300'}`}
+                    >
+                        Direitos
                     </button>
                 </nav>
             </div>
@@ -212,6 +218,29 @@ const SettingsPage: React.FC = () => {
                                  <Textarea label="CSS Personalizado" name="customCss" value={settings.customCss} onChange={handleChange} />
                                  <Textarea label="JavaScript Personalizado" name="customJs" value={settings.customJs} onChange={handleChange} />
                             </>
+                        )}
+
+                        {activeTab === 'direitos' && (
+                             <div className="space-y-6 animate-fade-in-down">
+                                <h2 className="text-xl font-bold text-[var(--theme-accent)] border-b border-[var(--theme-text-primary)]/10 pb-2">Direitos Autorais e Versão</h2>
+                                <p className="text-sm text-[var(--theme-text-primary)]/70 -mt-4">
+                                  Personalize o texto de copyright e a versão exibidos no rodapé do sistema.
+                                </p>
+                                <Input 
+                                  label="Texto de Copyright" 
+                                  name="copyrightText" 
+                                  value={settings.copyrightText} 
+                                  onChange={handleChange}
+                                  placeholder="Ex: © 2024 Sua Empresa"
+                                />
+                                <Input 
+                                  label="Versão do Sistema" 
+                                  name="systemVersion" 
+                                  value={settings.systemVersion} 
+                                  onChange={handleChange}
+                                  placeholder="Ex: 1.0.0"
+                                />
+                            </div>
                         )}
                         
                         <div className="flex justify-end items-center gap-4 pt-4 border-t border-[var(--theme-text-primary)]/10 mt-6">

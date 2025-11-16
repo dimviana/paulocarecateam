@@ -124,6 +124,9 @@ export interface ThemeSettings {
   // PIX Payment
   pixKey: string;
   pixHolderName: string;
+  // Copyright
+  copyrightText: string;
+  systemVersion: string;
 }
 
 export interface NewsArticle {
