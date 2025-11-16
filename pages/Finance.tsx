@@ -6,6 +6,8 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
+import FinancialStatusChart from '../components/charts/FinancialStatusChart';
+import { IconUsers, IconDollarSign, IconUpload } from '../constants';
 
 const PaymentHistoryModal: React.FC<{ student: Student; onClose: () => void, onRegisterPayment: () => void }> = ({ student, onClose, onRegisterPayment }) => {
     return (
@@ -37,14 +39,100 @@ const PaymentHistoryModal: React.FC<{ student: Student; onClose: () => void, onR
     );
 };
 
+const UploadProofModal: React.FC<{ student: Student; onClose: () => void, onConfirm: () => Promise<void> }> = ({ student, onClose, onConfirm }) => {
+    const [proofFile, setProofFile] = useState<File | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            if (e.target.files[0].type === 'application/pdf') {
+                setProofFile(e.target.files[0]);
+            } else {
+                alert('Por favor, selecione um arquivo PDF.');
+                e.target.value = '';
+                setProofFile(null);
+            }
+        }
+    };
+
+    const handleSaveClick = async () => {
+        if (!proofFile) return;
+        setIsSaving(true);
+        await onConfirm();
+        setIsSaving(false);
+        onClose();
+    };
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title={`Enviar Comprovante de ${student.name}`}>
+            <div className="space-y-4">
+                <p className="text-slate-600">Para registrar o pagamento, é necessário fazer o upload do comprovante em formato PDF.</p>
+                <label
+                    htmlFor="receipt-upload"
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100"
+                >
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <IconUpload className="w-8 h-8 mb-3 text-slate-400" />
+                        <p className="mb-2 text-sm text-slate-500">
+                            <span className="font-semibold">Clique para enviar o comprovante</span>
+                        </p>
+                        <p className="text-xs text-slate-500">Apenas arquivos PDF (obrigatório)</p>
+                    </div>
+                    <input id="receipt-upload" type="file" className="hidden" accept="application/pdf" onChange={handleFileChange} />
+                </label>
+                
+                {proofFile && <p className="text-sm text-green-600 mt-2 text-center">Arquivo selecionado: {proofFile.name}</p>}
+            </div>
+            <div className="flex justify-end gap-4 pt-6 mt-4 border-t border-slate-200">
+                <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+                <Button onClick={handleSaveClick} disabled={!proofFile || isSaving}>
+                    {isSaving ? 'Enviando...' : 'Enviar e Confirmar Pagamento'}
+                </Button>
+            </div>
+        </Modal>
+    );
+};
+
+
+const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string }> = ({ title, value, icon, color }) => (
+    <Card className="flex items-center">
+        <div className={`p-3 rounded-lg mr-4 text-white`} style={{ backgroundColor: color }}>
+            {icon}
+        </div>
+        <div>
+            <p className="text-sm font-medium text-slate-500">{title}</p>
+            <p className="text-2xl font-bold text-slate-800">{value}</p>
+        </div>
+    </Card>
+);
+
 
 const FinancePage: React.FC = () => {
-    const { students, updateStudentPayment, loading, graduations, themeSettings, setThemeSettings } = useContext(AppContext);
+    const { students, updateStudentPayment, loading, graduations, themeSettings, setThemeSettings, user } = useContext(AppContext);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
     const [updatedCard, setUpdatedCard] = useState<string | null>(null);
     const [isValuesModalOpen, setIsValuesModalOpen] = useState(false);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [feeAmount, setFeeAmount] = useState(themeSettings.monthlyFeeAmount);
+
+    const filteredStudents = useMemo(() => {
+        if (user?.role === 'academy_admin' && user.academyId) {
+            return students.filter(student => student.academyId === user.academyId);
+        }
+        return students;
+    }, [students, user]);
+
+    const { paidStudents, unpaidStudents, totalRevenue } = useMemo(() => {
+        const paid = filteredStudents.filter(s => s.paymentStatus === 'paid');
+        const unpaid = filteredStudents.filter(s => s.paymentStatus === 'unpaid');
+        const revenue = paid.length * themeSettings.monthlyFeeAmount;
+        return {
+            paidStudents: paid.length,
+            unpaidStudents: unpaid.length,
+            totalRevenue: revenue,
+        };
+    }, [filteredStudents, themeSettings.monthlyFeeAmount]);
 
     const { remindersToSend, overduePayments } = useMemo(() => {
         const today = new Date();
@@ -53,7 +141,7 @@ const FinancePage: React.FC = () => {
         const reminders: Student[] = [];
         const overdue: Student[] = [];
 
-        students.forEach(student => {
+        filteredStudents.forEach(student => {
             if (!student.paymentDueDateDay) return;
 
             const dueDateThisMonth = new Date(today.getFullYear(), today.getMonth(), student.paymentDueDateDay);
@@ -80,7 +168,7 @@ const FinancePage: React.FC = () => {
         });
 
         return { remindersToSend: reminders, overduePayments: overdue };
-    }, [students, themeSettings]);
+    }, [filteredStudents, themeSettings]);
 
     const handleSaveFeeAmount = () => {
         setThemeSettings({ ...themeSettings, monthlyFeeAmount: feeAmount });
@@ -107,19 +195,34 @@ const FinancePage: React.FC = () => {
         setIsHistoryModalOpen(false);
     };
 
-    const handleRegisterPayment = async () => {
+    const handleRegisterPayment = () => {
         if (selectedStudent) {
-            await handleStatusUpdate(selectedStudent.id, 'paid');
-            handleCloseHistoryModal();
+            setIsUploadModalOpen(true);
+            setIsHistoryModalOpen(false);
+        }
+    };
+    
+    const confirmPayment = async () => {
+        if (selectedStudent) {
+            await updateStudentPayment(selectedStudent.id, 'paid');
+            setUpdatedCard(selectedStudent.id);
+            setTimeout(() => {
+                setUpdatedCard(null);
+            }, 2500);
         }
     };
 
-    const handleStatusUpdate = async (studentId: string, status: 'paid' | 'unpaid') => {
-        await updateStudentPayment(studentId, status);
-        setUpdatedCard(studentId);
-        setTimeout(() => {
-            setUpdatedCard(null);
-        }, 2500);
+    const handleStatusUpdate = async (student: Student, status: 'paid' | 'unpaid') => {
+        if (status === 'paid') {
+            setSelectedStudent(student);
+            setIsUploadModalOpen(true);
+        } else {
+            await updateStudentPayment(student.id, status);
+            setUpdatedCard(student.id);
+            setTimeout(() => {
+                setUpdatedCard(null);
+            }, 2500);
+        }
     };
 
     return (
@@ -127,6 +230,32 @@ const FinancePage: React.FC = () => {
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold text-slate-800">Controle Financeiro</h1>
                 <Button onClick={() => setIsValuesModalOpen(true)}>Valores</Button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1 space-y-6">
+                    <StatCard 
+                        title="Alunos em Dia" 
+                        value={paidStudents} 
+                        icon={<IconUsers className="w-6 h-6"/>} 
+                        color="#10B981" 
+                    />
+                    <StatCard 
+                        title="Alunos Pendentes" 
+                        value={unpaidStudents} 
+                        icon={<IconUsers className="w-6 h-6"/>} 
+                        color="#EF4444" 
+                    />
+                    <StatCard 
+                        title="Receita Mensal" 
+                        value={totalRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} 
+                        icon={<IconDollarSign className="w-6 h-6"/>} 
+                        color="#3B82F6" 
+                    />
+                </div>
+                <div className="lg:col-span-2">
+                    <FinancialStatusChart paidCount={paidStudents} unpaidCount={unpaidStudents} />
+                </div>
             </div>
             
             {remindersToSend.length > 0 && (
@@ -168,7 +297,7 @@ const FinancePage: React.FC = () => {
                 <div className="text-center p-4">Carregando...</div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {students.map(student => {
+                    {filteredStudents.map(student => {
                         const belt = graduations.find(g => g.id === student.beltId);
                         const isUpdated = updatedCard === student.id;
                         const cardClass = isUpdated
@@ -195,10 +324,10 @@ const FinancePage: React.FC = () => {
                                <div className="mt-auto pt-4 w-full flex flex-col sm:flex-row justify-center gap-2">
                                     <Button size="sm" variant="secondary" onClick={() => handleOpenHistoryModal(student)}>Histórico</Button>
                                     {student.paymentStatus === 'unpaid' && (
-                                        <Button size="sm" variant="success" onClick={() => handleStatusUpdate(student.id, 'paid')}>Pagar</Button>
+                                        <Button size="sm" variant="success" onClick={() => handleStatusUpdate(student, 'paid')}>Pagar</Button>
                                     )}
                                     {student.paymentStatus === 'paid' && (
-                                         <Button variant="danger" size="sm" onClick={() => handleStatusUpdate(student.id, 'unpaid')}>Tornar Inadimplente</Button>
+                                         <Button variant="danger" size="sm" onClick={() => handleStatusUpdate(student, 'unpaid')}>Tornar Inadimplente</Button>
                                     )}
                                </div>
                            </Card>
@@ -212,6 +341,17 @@ const FinancePage: React.FC = () => {
                     student={selectedStudent} 
                     onClose={handleCloseHistoryModal}
                     onRegisterPayment={handleRegisterPayment} 
+                />
+            )}
+            
+            {isUploadModalOpen && selectedStudent && (
+                <UploadProofModal
+                    student={selectedStudent}
+                    onClose={() => {
+                        setIsUploadModalOpen(false);
+                        setSelectedStudent(null);
+                    }}
+                    onConfirm={confirmPayment}
                 />
             )}
 

@@ -1,3 +1,4 @@
+
 import React, { useContext } from 'react';
 import { NavLink } from 'react-router-dom';
 import { AppContext } from '../../context/AppContext';
@@ -26,8 +27,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
   const filteredLinks = navLinks.filter(link => link.roles.includes(user?.role || ''));
 
-  const linkClasses = "flex items-center px-4 py-3 text-slate-600 hover:text-amber-600 rounded-lg transition-colors duration-200 font-medium";
-  const activeLinkClasses = "bg-amber-500 text-white shadow-md shadow-amber-500/30";
+  const linkClasses = "flex items-center px-4 py-3 text-[var(--theme-text-primary)]/80 hover:text-[var(--theme-accent)] rounded-lg transition-colors duration-200 font-medium";
+  const activeLinkClasses = "bg-[var(--theme-accent)] text-[var(--theme-button-text)] shadow-md shadow-amber-500/30";
 
   return (
     <>
@@ -39,15 +40,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
       ></div>
 
       <div
-        className={`fixed top-0 left-0 z-40 w-64 h-full bg-white border-r border-slate-200/60 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:inset-0`}
+        className={`fixed top-0 left-0 z-40 w-64 h-full bg-[var(--theme-card-bg)] border-r border-[var(--theme-text-primary)]/10 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:inset-0`}
       >
         {/* Sidebar header */}
         <div className="flex justify-between items-center h-20 px-4">
           <NavLink to="/dashboard" className="flex items-center">
             <img src={themeSettings.logoUrl} alt="Logo" className="h-10 w-auto rounded-lg" />
-            <span className="text-slate-800 text-lg font-bold ml-3">{themeSettings.systemName}</span>
+            <span className="text-[var(--theme-text-primary)] text-lg font-bold ml-3">{themeSettings.systemName}</span>
           </NavLink>
-          <button className="lg:hidden text-slate-500 hover:text-slate-800" onClick={() => setIsOpen(false)}>
+          <button className="lg:hidden text-[var(--theme-icon)] hover:text-[var(--theme-text-primary)]" onClick={() => setIsOpen(false)}>
             <IconX />
           </button>
         </div>

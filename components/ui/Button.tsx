@@ -18,8 +18,8 @@ const Button: React.FC<ButtonProps> = ({
   const baseStyles = 'inline-flex items-center justify-center font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
 
   const variantStyles = {
-    primary: 'bg-amber-500 text-white hover:bg-amber-600 focus:ring-amber-500 focus:ring-offset-slate-50',
-    secondary: 'bg-slate-100 text-slate-700 hover:bg-slate-200 focus:ring-slate-500 border border-slate-200',
+    primary: 'bg-[var(--theme-button-bg)] text-[var(--theme-button-text)] hover:brightness-95 focus:ring-[var(--theme-button-bg)] focus:ring-offset-[var(--theme-bg)]',
+    secondary: 'bg-transparent text-[var(--theme-text-primary)] hover:bg-[var(--theme-text-primary)]/10 focus:ring-slate-500 border border-[var(--theme-text-primary)]/20',
     danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
     success: 'bg-green-500 text-white hover:bg-green-600 focus:ring-green-500'
   };

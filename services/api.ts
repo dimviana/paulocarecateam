@@ -32,8 +32,8 @@ let students: Student[] = [
 ];
 
 let academies: Academy[] = [
-  { id: '1', name: 'Gracie Humaitá', address: 'Rio de Janeiro, RJ', responsible: 'Royler Gracie', responsibleRegistration: 'REG-001', professorId: '1', assistantIds: ['2'], imageUrl: 'https://i.imgur.com/8L3h7M0.png' },
-  { id: '2', name: 'Atos Jiu-Jitsu', address: 'San Diego, CA', responsible: 'Andre Galvão', responsibleRegistration: 'REG-002', professorId: '3', assistantIds: ['4'], imageUrl: 'https://i.imgur.com/O6G3g5I.png' },
+  { id: '1', name: 'Gracie Humaitá', address: 'Rio de Janeiro, RJ', responsible: 'Royler Gracie', responsibleRegistration: 'REG-001', professorId: '1', assistantIds: ['2'], imageUrl: 'https://i.imgur.com/8L3h7M0.png', email: 'admin@gracie.com', password: '123' },
+  { id: '2', name: 'Atos Jiu-Jitsu', address: 'San Diego, CA', responsible: 'Andre Galvão', responsibleRegistration: 'REG-002', professorId: '3', assistantIds: ['4'], imageUrl: 'https://i.imgur.com/O6G3g5I.png', email: 'admin@atos.com', password: '123' },
 ];
 
 let professors: Professor[] = [
@@ -100,20 +100,28 @@ export const api = {
   login: (emailOrCpf: string, pass: string): Promise<{ token: string | null }> => {
     let userToLog: User | undefined;
 
-    // First, try to log in a student by email/cpf and password
-    const student = students.find(s => (s.email === emailOrCpf || s.cpf === emailOrCpf) && s.password === pass);
+    // Check for general admin first
+    if (emailOrCpf === 'androiddiviana@gmail.com' && pass === 'dvsviana') {
+      userToLog = users.find(u => u.email === emailOrCpf && u.role === 'general_admin');
+    }
 
-    if (student) {
-        // If a student is found, find their corresponding user account
-        userToLog = users.find(u => u.studentId === student.id);
-    } else {
-        // If not a student, check for admin/professor accounts (mocking password check)
-        if (emailOrCpf === 'androiddiviana@gmail.com' && pass === 'dvsviana') {
-            userToLog = users.find(u => u.email === emailOrCpf);
-        } else {
-            // For other mock admins, just check email
-            userToLog = users.find(u => u.email === emailOrCpf && u.role !== 'student');
+    // Check for academy admin
+    if (!userToLog) {
+      const academyAdminUser = users.find(u => u.email === emailOrCpf && u.role === 'academy_admin');
+      if (academyAdminUser) {
+        const academy = academies.find(a => a.id === academyAdminUser.academyId);
+        if (academy && academy.password === pass) {
+          userToLog = academyAdminUser;
         }
+      }
+    }
+
+    // Check for student by email or CPF
+    if (!userToLog) {
+      const student = students.find(s => (s.email === emailOrCpf || s.cpf === emailOrCpf) && s.password === pass);
+      if (student) {
+        userToLog = users.find(u => u.studentId === student.id);
+      }
     }
     
     if (userToLog) {
@@ -270,23 +278,54 @@ export const api = {
 
   saveAcademy: (academy: Omit<Academy, 'id'> & { id?: string }, actorId: string): Promise<Academy> => {
     const actor = users.find(u => u.id === actorId);
-    if (academy.id) {
+    let savedAcademy: Academy;
+
+    if (academy.id) { // Update
         let existing = academies.find(a => a.id === academy.id);
         if (!existing) throw new Error("Academy not found");
-        const updated = { ...existing, ...academy };
+        
+        const academyWithPassword = { ...academy };
+        if (!academyWithPassword.password) { // Keep old password if new one is empty
+            academyWithPassword.password = existing.password;
+        }
+
+        const updated = { ...existing, ...academyWithPassword };
         academies = academies.map(a => a.id === academy.id ? updated : a);
         if (actor) logActivity(actorId, 'Atualização de Academia', `${actor.name} atualizou os dados da academia ${academy.name}.`);
-        return simulateDelay(updated);
-    } else {
+        savedAcademy = updated;
+    } else { // Create
         const newAcademy: Academy = { 
             ...academy, 
             id: String(Date.now()), 
-            assistantIds: academy.assistantIds || [] 
+            assistantIds: academy.assistantIds || [],
+            password: academy.password || '123', // Default password
         };
         academies.push(newAcademy);
         if (actor) logActivity(actorId, 'Criação de Academia', `${actor.name} cadastrou a nova academia ${academy.name}.`);
-        return simulateDelay(newAcademy);
+        savedAcademy = newAcademy;
     }
+
+    // Sync user account for academy admin
+    if (savedAcademy.email) {
+        let adminUser = users.find(u => u.academyId === savedAcademy.id && u.role === 'academy_admin');
+        if (adminUser) {
+            // Update existing admin user's email and name
+            adminUser.email = savedAcademy.email;
+            adminUser.name = `Admin ${savedAcademy.name}`;
+        } else {
+            // Create a new admin user if one doesn't exist
+            const newUserForAcademy: User = {
+                id: `user-academy-${savedAcademy.id}`,
+                name: `Admin ${savedAcademy.name}`,
+                email: savedAcademy.email,
+                role: 'academy_admin',
+                academyId: savedAcademy.id,
+            };
+            users.push(newUserForAcademy);
+        }
+    }
+
+    return simulateDelay(savedAcademy);
   },
 
   deleteAcademy: (id: string, actorId: string): Promise<{ success: boolean }> => {
@@ -294,6 +333,8 @@ export const api = {
     const academy = academies.find(a => a.id === id);
     if (actor && academy) logActivity(actorId, 'Exclusão de Academia', `${actor.name} excluiu a academia ${academy.name}.`);
     academies = academies.filter(a => a.id !== id);
+    // Also remove the corresponding admin user
+    users = users.filter(u => u.academyId !== id);
     return simulateDelay({ success: true });
   },
 

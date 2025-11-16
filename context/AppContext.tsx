@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog } from '../types';
 import { initialThemeSettings } from '../constants';
@@ -68,6 +69,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const refetchActivityLogs = useCallback(async () => {
     setActivityLogs(await api.getActivityLogs());
   }, []);
+
+  useEffect(() => {
+    const styleId = 'dynamic-theme-styles';
+    let styleElement = document.getElementById(styleId) as HTMLStyleElement | null;
+    if (!styleElement) {
+        styleElement = document.createElement('style');
+        styleElement.id = styleId;
+        document.head.appendChild(styleElement);
+    }
+
+    const {
+        primaryColor, secondaryColor, backgroundColor, cardBackgroundColor,
+        buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2
+    } = themeSettings;
+
+    styleElement.innerHTML = `
+      :root {
+        --theme-bg: ${backgroundColor};
+        --theme-card-bg: ${cardBackgroundColor};
+        --theme-text-primary: ${secondaryColor};
+        --theme-icon: ${iconColor};
+        --theme-button-bg: ${buttonColor};
+        --theme-button-text: ${buttonTextColor};
+        --theme-chart-1: ${chartColor1};
+        --theme-chart-2: ${chartColor2};
+        --theme-accent: ${primaryColor};
+      }
+    `;
+}, [themeSettings]);
+
 
   useEffect(() => {
     const verifyTokenAndSetUser = (token: string, allUsers: User[]) => {

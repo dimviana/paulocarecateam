@@ -1,3 +1,4 @@
+
 import React, { useContext, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
 import { AppContext } from '../../context/AppContext';
@@ -8,7 +9,7 @@ interface StudentAttendanceChartProps {
 }
 
 const StudentAttendanceChart: React.FC<StudentAttendanceChartProps> = ({ studentId }) => {
-    const { attendanceRecords } = useContext(AppContext);
+    const { attendanceRecords, themeSettings } = useContext(AppContext);
 
     const attendanceData = useMemo(() => {
         const studentRecords = attendanceRecords.filter(r => r.studentId === studentId);
@@ -29,16 +30,16 @@ const StudentAttendanceChart: React.FC<StudentAttendanceChartProps> = ({ student
         };
     }, [attendanceRecords, studentId]);
 
-    const COLORS = ['#F9A825', '#94A3B8']; // Amber-600, Slate-400
+    const COLORS = [themeSettings.chartColor1, themeSettings.chartColor2];
 
     return (
         <Card className="flex flex-col h-full">
-            <h3 className="text-lg font-semibold text-slate-800 mb-2">Sua Frequência</h3>
+            <h3 className="text-lg font-semibold text-[var(--theme-text-primary)] mb-2">Sua Frequência</h3>
             <div className="flex-grow w-full h-60 relative">
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="text-center">
-                        <p className="text-4xl font-bold text-amber-600">{attendanceData.percentage}%</p>
-                        <p className="text-sm text-slate-500">de Presença</p>
+                        <p className="text-4xl font-bold text-[var(--theme-accent)]">{attendanceData.percentage}%</p>
+                        <p className="text-sm text-[var(--theme-text-primary)]/70">de Presença</p>
                     </div>
                 </div>
                 <ResponsiveContainer>
@@ -62,7 +63,7 @@ const StudentAttendanceChart: React.FC<StudentAttendanceChartProps> = ({ student
                             iconType="circle" 
                             verticalAlign="bottom" 
                             height={36}
-                            formatter={(value, entry) => <span style={{ color: '#475569' }}>{value}</span>}
+                            formatter={(value, entry) => <span className="text-[var(--theme-text-primary)]/80">{value}</span>}
                          />
                     </PieChart>
                 </ResponsiveContainer>

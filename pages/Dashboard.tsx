@@ -1,5 +1,6 @@
 
 
+
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import Card from '../components/ui/Card';
@@ -35,19 +36,19 @@ const BirthdayCard: React.FC = () => {
 
     return (
         <Card>
-            <h3 className="font-semibold text-slate-800 mb-4 flex items-center">
-                <IconGift className="w-5 h-5 mr-2 text-amber-500" />
+            <h3 className="font-semibold text-[var(--theme-text-primary)] mb-4 flex items-center">
+                <IconGift className="w-5 h-5 mr-2 text-[var(--theme-accent)]" />
                 Aniversariantes de Hoje
             </h3>
             <div className="space-y-3">
                 {allBirthdays.map((person, index) => (
-                    <div key={index} className="flex items-center p-2 bg-amber-50 rounded-md">
-                        <div className="w-8 h-8 rounded-full bg-amber-200 flex items-center justify-center mr-3 flex-shrink-0">
-                            <span className="text-amber-600 font-bold">{person.name.charAt(0)}</span>
+                    <div key={index} className="flex items-center p-2 bg-[var(--theme-accent)]/10 rounded-md">
+                        <div className="w-8 h-8 rounded-full bg-[var(--theme-accent)]/30 flex items-center justify-center mr-3 flex-shrink-0">
+                            <span className="text-[var(--theme-accent)] font-bold">{person.name.charAt(0)}</span>
                         </div>
                         <div>
-                            <p className="font-semibold text-slate-700 truncate">{person.name}</p>
-                            <p className="text-xs text-slate-500">{person.type}</p>
+                            <p className="font-semibold text-[var(--theme-text-primary)]/90 truncate">{person.name}</p>
+                            <p className="text-xs text-[var(--theme-text-primary)]/70">{person.type}</p>
                         </div>
                     </div>
                 ))}
@@ -69,8 +70,8 @@ const StatCard: React.FC<StatCardProps> = ({ icon, title, value, color }) => (
             <div style={{ color: color }}>{icon}</div>
         </div>
         <div className="ml-4">
-            <p className="text-sm text-slate-500">{title}</p>
-            <p className="text-2xl font-bold text-slate-800">{value}</p>
+            <p className="text-sm text-[var(--theme-text-primary)]/70">{title}</p>
+            <p className="text-2xl font-bold text-[var(--theme-text-primary)]">{value}</p>
         </div>
     </Card>
 );
@@ -79,8 +80,8 @@ const StudentPerformanceTable: React.FC = () => {
     const { students } = useContext(AppContext);
     return (
         <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left text-slate-500">
-                <thead className="text-xs text-slate-700 uppercase bg-slate-50">
+            <table className="w-full text-sm text-left text-[var(--theme-text-primary)]/70">
+                <thead className="text-xs text-[var(--theme-text-primary)] uppercase bg-[var(--theme-bg)]">
                     <tr>
                         <th scope="col" className="px-6 py-3">Nome</th>
                         <th scope="col" className="px-6 py-3">ID</th>
@@ -90,8 +91,8 @@ const StudentPerformanceTable: React.FC = () => {
                 </thead>
                 <tbody>
                     {students.slice(0, 4).map(student => (
-                        <tr key={student.id} className="bg-white border-b hover:bg-slate-50">
-                            <td className="px-6 py-4 font-medium text-slate-900 whitespace-nowrap flex items-center">
+                        <tr key={student.id} className="bg-[var(--theme-card-bg)] border-b border-[var(--theme-text-primary)]/10 hover:bg-[var(--theme-bg)]">
+                            <td className="px-6 py-4 font-medium text-[var(--theme-text-primary)] whitespace-nowrap flex items-center">
                                 <img src={`https://i.pravatar.cc/150?u=${student.cpf}`} alt={student.name} className="w-8 h-8 rounded-full mr-3" />
                                 {student.name}
                             </td>
@@ -107,11 +108,11 @@ const StudentPerformanceTable: React.FC = () => {
 };
 
 const CommunityCard: React.FC = () => (
-    <Card className="bg-amber-400 text-center text-white relative overflow-hidden">
+    <Card className="bg-[var(--theme-accent)] text-center text-white relative overflow-hidden">
         <div className="absolute -top-4 -right-4 w-20 h-20 bg-white/20 rounded-full"></div>
         <div className="absolute -bottom-8 -left-2 w-24 h-24 border-4 border-white/20 rounded-full"></div>
         <h3 className="text-xl font-bold mb-2 relative">Junte-se à comunidade e descubra mais</h3>
-        <Button variant="secondary" className="bg-white/90 text-amber-600 hover:bg-white">Explorar Agora</Button>
+        <Button variant="secondary" className="bg-white/90 text-[var(--theme-accent)] hover:bg-white">Explorar Agora</Button>
     </Card>
 );
 
@@ -160,13 +161,13 @@ const CalendarWidget: React.FC<CalendarWidgetProps> = ({ selectedDate, onDateCha
     return (
         <Card>
             <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-slate-800 capitalize">{selectedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</h3>
+                <h3 className="font-semibold text-[var(--theme-text-primary)] capitalize">{selectedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</h3>
                 <div className="flex space-x-2">
-                    <button onClick={() => changeMonth(-1)} className="text-slate-500 hover:text-slate-800 p-1 rounded-full hover:bg-slate-100">&lt;</button>
-                    <button onClick={() => changeMonth(1)} className="text-slate-500 hover:text-slate-800 p-1 rounded-full hover:bg-slate-100">&gt;</button>
+                    <button onClick={() => changeMonth(-1)} className="text-[var(--theme-icon)] hover:text-[var(--theme-text-primary)] p-1 rounded-full hover:bg-[var(--theme-bg)]">&lt;</button>
+                    <button onClick={() => changeMonth(1)} className="text-[var(--theme-icon)] hover:text-[var(--theme-text-primary)] p-1 rounded-full hover:bg-[var(--theme-bg)]">&gt;</button>
                 </div>
             </div>
-            <div className="grid grid-cols-7 text-center text-sm text-slate-500">
+            <div className="grid grid-cols-7 text-center text-sm text-[var(--theme-text-primary)]/70">
                 {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => <div key={`${d}-${i}`} className="py-2 font-semibold">{d}</div>)}
                 {calendarCells.map((d, i) => {
                     if (d === null) return <div key={`empty-${i}`}></div>;
@@ -179,9 +180,9 @@ const CalendarWidget: React.FC<CalendarWidgetProps> = ({ selectedDate, onDateCha
                         <div key={i}
                             onClick={() => onDateChange(dayDate)}
                             className={`py-2 rounded-full relative flex items-center justify-center cursor-pointer transition-colors
-                            ${isSelected ? 'bg-amber-500 text-white font-bold' : isToday ? 'bg-slate-200' : 'hover:bg-slate-100'}`}>
+                            ${isSelected ? 'bg-[var(--theme-accent)] text-white font-bold' : isToday ? 'bg-[var(--theme-text-primary)]/10' : 'hover:bg-[var(--theme-bg)]'}`}>
                             {d}
-                            {hasSchedule && !isSelected && <span className="absolute bottom-1 h-1.5 w-1.5 bg-amber-400 rounded-full"></span>}
+                            {hasSchedule && !isSelected && <span className="absolute bottom-1 h-1.5 w-1.5 bg-[var(--theme-accent)]/80 rounded-full"></span>}
                         </div>
                     )
                 })}
@@ -209,18 +210,18 @@ const AulasDoDia: React.FC<AulasDoDiaProps> = ({ selectedDate }) => {
 
     return (
         <Card>
-            <h3 className="font-semibold text-slate-800 mb-4">{title}</h3>
+            <h3 className="font-semibold text-[var(--theme-text-primary)] mb-4">{title}</h3>
             <div className="space-y-4">
                 {selectedSchedules.length > 0 ? selectedSchedules.map(schedule => {
                     const professor = users.find(u => u.id === schedule.professorId);
                     return (
-                        <div key={schedule.id} className="p-3 bg-amber-500/10 rounded-lg">
-                            <p className="font-semibold text-amber-700">{schedule.className}</p>
-                            <p className="text-sm text-amber-600">{schedule.startTime} - {schedule.endTime}{professor && ` | Prof. ${professor.name}`}</p>
+                        <div key={schedule.id} className="p-3 bg-[var(--theme-accent)]/10 rounded-lg">
+                            <p className="font-semibold text-[var(--theme-accent)]">{schedule.className}</p>
+                            <p className="text-sm text-[var(--theme-accent)]/90">{schedule.startTime} - {schedule.endTime}{professor && ` | Prof. ${professor.name}`}</p>
                         </div>
                     );
                 }) : (
-                    <p className="text-sm text-slate-500 text-center py-4">Nenhuma aula agendada para este dia.</p>
+                    <p className="text-sm text-[var(--theme-text-primary)]/70 text-center py-4">Nenhuma aula agendada para este dia.</p>
                 )}
             </div>
         </Card>
@@ -254,8 +255,8 @@ const Dashboard: React.FC = () => {
     return (
         <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-slate-800">Bom dia, {user?.name?.split(' ')[0]}!</h1>
-              <p className="text-slate-500 mt-1">Bem-vindo à Academia</p>
+              <h1 className="text-3xl font-bold text-[var(--theme-text-primary)]">Bom dia, {user?.name?.split(' ')[0]}!</h1>
+              <p className="text-[var(--theme-text-primary)]/70 mt-1">Bem-vindo à Academia</p>
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -269,7 +270,7 @@ const Dashboard: React.FC = () => {
 
                     <Card>
                         <div className="flex justify-between items-center mb-4">
-                             <h3 className="text-lg font-semibold text-slate-800">Desempenho dos Alunos</h3>
+                             <h3 className="text-lg font-semibold text-[var(--theme-text-primary)]">Desempenho dos Alunos</h3>
                              <Button variant="secondary" size="sm">Todos <IconChevronDown className="w-4 h-4 ml-1" /></Button>
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -1,7 +1,9 @@
 
-import React from 'react';
+
+import React, { useContext } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import Card from '../ui/Card';
+import { AppContext } from '../../context/AppContext';
 
 const attendanceData = [
   { name: '18-Jun', Presentes: 1600, Ausentes: 800 },
@@ -17,15 +19,16 @@ const attendanceData = [
 
 
 const AttendanceChart: React.FC = () => {
-  const tickColor = '#64748B'; // slate-500
+  const { themeSettings } = useContext(AppContext);
+  const tickColor = 'var(--theme-text-primary)';
 
   return (
     <Card className="h-full">
       <div className="flex justify-between items-center mb-4">
-         <h3 className="text-lg font-semibold text-slate-800">Relatório de Frequência</h3>
-         <div className="flex items-center space-x-4 text-sm">
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-amber-500 mr-2"></span>Presentes</div>
-            <div className="flex items-center"><span className="w-3 h-3 rounded-full bg-slate-600 mr-2"></span>Ausentes</div>
+         <h3 className="text-lg font-semibold text-[var(--theme-text-primary)]">Relatório de Frequência</h3>
+         <div className="flex items-center space-x-4 text-sm text-[var(--theme-text-primary)]/80">
+            <div className="flex items-center"><span className="w-3 h-3 rounded-full mr-2" style={{backgroundColor: themeSettings.chartColor1}}></span>Presentes</div>
+            <div className="flex items-center"><span className="w-3 h-3 rounded-full mr-2" style={{backgroundColor: themeSettings.chartColor2}}></span>Ausentes</div>
          </div>
       </div>
       <div style={{ width: '100%', height: 300 }}>
@@ -43,8 +46,8 @@ const AttendanceChart: React.FC = () => {
                     borderRadius: '0.75rem',
                 }}
             />
-            <Bar dataKey="Presentes" fill="#F9A825" radius={[5, 5, 0, 0]} barSize={10} />
-            <Bar dataKey="Ausentes" fill="#475569" radius={[5, 5, 0, 0]} barSize={10} />
+            <Bar dataKey="Presentes" fill={themeSettings.chartColor1} radius={[5, 5, 0, 0]} barSize={10} />
+            <Bar dataKey="Ausentes" fill={themeSettings.chartColor2} radius={[5, 5, 0, 0]} barSize={10} />
           </BarChart>
         </ResponsiveContainer>
       </div>

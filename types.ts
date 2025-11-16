@@ -61,6 +61,8 @@ export interface Academy {
   professorId: string;
   assistantIds: string[];
   imageUrl?: string;
+  email?: string;
+  password?: string;
 }
 
 export interface Professor {
@@ -89,6 +91,16 @@ export interface ThemeSettings {
   systemName: string;
   primaryColor: string;
   secondaryColor: string;
+  
+  // New granular color controls
+  backgroundColor: string;
+  cardBackgroundColor: string;
+  buttonColor: string;
+  buttonTextColor: string;
+  iconColor: string;
+  chartColor1: string;
+  chartColor2: string;
+
   useGradient: boolean;
   reminderDaysBeforeDue: number;
   overdueDaysAfterDue: number;

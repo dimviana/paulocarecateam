@@ -1,24 +1,27 @@
 
-import React from 'react';
+
+import React, { useContext } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Card from '../ui/Card';
+import { AppContext } from '../../context/AppContext';
 
 const StudentBreakdownChart: React.FC = () => {
+  const { themeSettings } = useContext(AppContext);
   const data = [
     { name: 'Meninos', value: 1200 },
     { name: 'Meninas', value: 800 },
   ];
 
-  const COLORS = ['#F9A825', '#A0522D']; // Amber, Sienna (Brown)
+  const COLORS = [themeSettings.chartColor1, themeSettings.chartColor2];
 
   return (
     <Card className="flex flex-col h-full">
-        <h3 className="text-lg font-semibold text-slate-800">Divisão de Alunos</h3>
+        <h3 className="text-lg font-semibold text-[var(--theme-text-primary)]">Divisão de Alunos</h3>
         <div className="flex-grow w-full h-64 relative">
              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="text-center">
-                    <p className="text-3xl font-bold text-slate-800">2000</p>
-                    <p className="text-sm text-slate-500">Alunos</p>
+                    <p className="text-3xl font-bold text-[var(--theme-text-primary)]">2000</p>
+                    <p className="text-sm text-[var(--theme-text-primary)]/70">Alunos</p>
                 </div>
             </div>
             <ResponsiveContainer>

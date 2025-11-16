@@ -1,4 +1,5 @@
 
+
 import React, { useState, useContext, FormEvent } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
@@ -43,16 +44,16 @@ const Login: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl p-8 border border-slate-200/60 shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--theme-bg)] p-4">
+        <div className="w-full max-w-md bg-[var(--theme-card-bg)] rounded-2xl p-8 border border-[var(--theme-text-primary)]/10 shadow-lg">
             <div className="text-center">
                 <img src={themeSettings.logoUrl} alt="Logo" className="mx-auto h-16 w-auto mb-4" />
-                <h1 className="text-3xl font-bold text-slate-800 tracking-tight">{themeSettings.systemName}</h1>
-                <p className="mt-2 text-slate-600">Acesse sua conta para continuar</p>
+                <h1 className="text-3xl font-bold text-[var(--theme-text-primary)] tracking-tight">{themeSettings.systemName}</h1>
+                <p className="mt-2 text-[var(--theme-text-primary)]/70">Acesse sua conta para continuar</p>
             </div>
             <form className="mt-8 space-y-6" onSubmit={handleLogin}>
                 <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">Email ou CPF</label>
+                    <label htmlFor="email" className="block text-sm font-medium text-[var(--theme-text-primary)]/80 mb-1">Email ou CPF</label>
                     <input 
                         id="email"
                         type="text"
@@ -60,11 +61,11 @@ const Login: React.FC = () => {
                         onChange={(e) => setEmail(e.target.value)}
                         required
                         placeholder="seu@email.com ou 123.456.789-00"
-                        className="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-md px-3 py-2 focus:ring-amber-500 focus:border-amber-500 transition duration-150 ease-in-out placeholder:text-slate-400"
+                        className="w-full bg-[var(--theme-bg)] border border-[var(--theme-text-primary)]/20 text-[var(--theme-text-primary)] rounded-md px-3 py-2 focus:ring-[var(--theme-accent)] focus:border-[var(--theme-accent)] transition duration-150 ease-in-out placeholder:text-[var(--theme-text-primary)]/40"
                     />
                 </div>
                  <div>
-                    <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">Senha</label>
+                    <label htmlFor="password" className="block text-sm font-medium text-[var(--theme-text-primary)]/80 mb-1">Senha</label>
                     <div className="relative">
                         <input
                             id="password"
@@ -73,12 +74,12 @@ const Login: React.FC = () => {
                             onChange={(e) => setPassword(e.target.value)}
                             required
                             placeholder="********"
-                            className="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-md px-3 py-2 focus:ring-amber-500 focus:border-amber-500 transition duration-150 ease-in-out placeholder:text-slate-400 pr-10"
+                            className="w-full bg-[var(--theme-bg)] border border-[var(--theme-text-primary)]/20 text-[var(--theme-text-primary)] rounded-md px-3 py-2 focus:ring-[var(--theme-accent)] focus:border-[var(--theme-accent)] transition duration-150 ease-in-out placeholder:text-[var(--theme-text-primary)]/40 pr-10"
                         />
                         <button
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
-                            className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-slate-700"
+                            className="absolute inset-y-0 right-0 flex items-center pr-3 text-[var(--theme-icon)] hover:text-[var(--theme-text-primary)]"
                             aria-label={showPassword ? "Esconder senha" : "Mostrar senha"}
                         >
                             {showPassword ? <IconEyeOff /> : <IconEye />}
@@ -87,7 +88,7 @@ const Login: React.FC = () => {
                 </div>
                 {error && <p className="text-sm text-center text-red-600">{error}</p>}
                 <div>
-                    <button type="submit" disabled={loading} className="w-full inline-flex items-center justify-center font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-amber-500 text-white hover:bg-amber-600 focus:ring-amber-500 focus:ring-offset-slate-50 px-4 py-2 text-base">
+                    <button type="submit" disabled={loading} className="w-full inline-flex items-center justify-center font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--theme-button-bg)] text-[var(--theme-button-text)] hover:brightness-95 focus:ring-[var(--theme-button-bg)] focus:ring-offset-[var(--theme-bg)] px-4 py-2 text-base">
                         {loading ? 'Entrando...' : 'Entrar'}
                     </button>
                 </div>
@@ -96,10 +97,10 @@ const Login: React.FC = () => {
                 <>
                     <div className="relative my-6">
                         <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-slate-300"></div>
+                            <div className="w-full border-t border-[var(--theme-text-primary)]/20"></div>
                         </div>
                         <div className="relative flex justify-center text-sm">
-                            <span className="px-2 bg-white text-slate-500">Ou continue com</span>
+                            <span className="px-2 bg-[var(--theme-card-bg)] text-[var(--theme-text-primary)]/60">Ou continue com</span>
                         </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

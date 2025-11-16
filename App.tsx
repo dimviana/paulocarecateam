@@ -1,5 +1,6 @@
 
 
+
 import React, { useContext, useState, FormEvent, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
@@ -38,6 +39,8 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
     professorId: '',
     assistantIds: [] as string[],
     imageUrl: '',
+    email: '',
+    password: '',
     ...academy
   });
   
@@ -69,15 +72,16 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
     onSave(formData);
   };
   
-  const selectStyles = "w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-md px-3 py-2 focus:ring-amber-500 focus:border-amber-500";
+  const selectStyles = "w-full bg-[var(--theme-bg)] border border-[var(--theme-text-primary)]/20 text-[var(--theme-text-primary)] rounded-md px-3 py-2 focus:ring-[var(--theme-accent)] focus:border-[var(--theme-accent)]";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <h3 className="text-lg font-semibold text-[var(--theme-text-primary)]/90">Informações da Academia</h3>
       <Input label="Nome da Academia" name="name" value={formData.name} onChange={handleChange} required />
       <Input label="Endereço / Localização" name="address" value={formData.address} onChange={handleChange} required />
       <Input label="URL da Imagem (.png, .jpg)" name="imageUrl" value={formData.imageUrl} onChange={handleChange} placeholder="Cole a URL ou carregue abaixo" />
       
-      <div className="text-center text-slate-500 my-1 text-sm">OU</div>
+      <div className="text-center text-[var(--theme-text-primary)]/60 my-1 text-sm">OU</div>
       
       <input
         type="file"
@@ -97,8 +101,8 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
 
       {formData.imageUrl && (
           <div className="mt-4 text-center">
-              <p className="text-sm font-medium text-slate-700 mb-2">Pré-visualização:</p>
-              <img src={formData.imageUrl} alt="Pré-visualização da academia" className="w-24 h-24 rounded-lg object-cover mx-auto border border-slate-300" />
+              <p className="text-sm font-medium text-[var(--theme-text-primary)]/80 mb-2">Pré-visualização:</p>
+              <img src={formData.imageUrl} alt="Pré-visualização da academia" className="w-24 h-24 rounded-lg object-cover mx-auto border border-[var(--theme-text-primary)]/20" />
           </div>
       )}
 
@@ -106,7 +110,7 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
       <Input label="CPF/CNPJ / Registro" name="responsibleRegistration" value={formData.responsibleRegistration} onChange={handleChange} required />
       
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Professor Responsável</label>
+        <label className="block text-sm font-medium text-[var(--theme-text-primary)]/80 mb-1">Professor Responsável</label>
         <select name="professorId" value={formData.professorId} onChange={handleChange} required className={selectStyles}>
            <option value="">Selecione um professor</option>
            {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -114,7 +118,7 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Assistentes (segure Ctrl/Cmd para selecionar)</label>
+        <label className="block text-sm font-medium text-[var(--theme-text-primary)]/80 mb-1">Assistentes (segure Ctrl/Cmd para selecionar)</label>
         <select
           name="assistantIds"
           value={formData.assistantIds}
@@ -125,6 +129,10 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
           {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
+      
+      <h3 className="text-lg font-semibold text-[var(--theme-text-primary)]/90 border-t border-[var(--theme-text-primary)]/10 pt-4 mt-4">Acesso do Administrador</h3>
+      <Input label="Email de Login" name="email" type="email" value={formData.email} onChange={handleChange} placeholder="admin@suaacademia.com" />
+      <Input label="Senha de Login" name="password" type="password" value={formData.password} onChange={handleChange} placeholder={academy?.id ? 'Deixe em branco para manter a atual' : ''} />
       
       <div className="flex justify-end gap-4 pt-4">
         <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
@@ -147,19 +155,19 @@ const AcademyStudentsModal: React.FC<{ academy: Academy; onClose: () => void }> 
                     {academyStudents.map(student => {
                         const belt = graduations.find(g => g.id === student.beltId);
                         return (
-                            <li key={student.id} className="flex items-center p-2 bg-slate-50 rounded-lg">
+                            <li key={student.id} className="flex items-center p-2 bg-[var(--theme-bg)] rounded-lg">
                                 <img
                                     src={student.imageUrl || `https://i.pravatar.cc/150?u=${student.cpf}`}
                                     alt={student.name}
                                     className="w-10 h-10 rounded-full object-cover mr-3"
                                 />
                                 <div className="flex-grow">
-                                    <p className="font-semibold text-slate-800">{student.name}</p>
-                                    <p className="text-sm text-slate-500">{belt?.name || 'Sem graduação'}</p>
+                                    <p className="font-semibold text-[var(--theme-text-primary)]">{student.name}</p>
+                                    <p className="text-sm text-[var(--theme-text-primary)]/70">{belt?.name || 'Sem graduação'}</p>
                                 </div>
                                 {belt && (
                                      <span
-                                        className="w-5 h-5 rounded-full border border-slate-300"
+                                        className="w-5 h-5 rounded-full border border-[var(--theme-text-primary)]/20"
                                         style={{ backgroundColor: belt.color }}
                                         title={belt.name}
                                     ></span>
@@ -169,9 +177,9 @@ const AcademyStudentsModal: React.FC<{ academy: Academy; onClose: () => void }> 
                     })}
                 </ul>
             ) : (
-                <p className="text-center text-slate-500 py-4">Nenhum aluno encontrado para esta academia.</p>
+                <p className="text-center text-[var(--theme-text-primary)]/70 py-4">Nenhum aluno encontrado para esta academia.</p>
             )}
-            <div className="flex justify-end pt-4 mt-4 border-t border-slate-200">
+            <div className="flex justify-end pt-4 mt-4 border-t border-[var(--theme-text-primary)]/10">
                 <Button variant="secondary" onClick={onClose}>Fechar</Button>
             </div>
         </Modal>
@@ -217,7 +225,7 @@ const AcademiesPage: React.FC = () => {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-bold text-slate-800">Gerenciar Academias</h1>
+                <h1 className="text-3xl font-bold text-[var(--theme-text-primary)]">Gerenciar Academias</h1>
                 <Button onClick={() => handleOpenModal({})}>Adicionar Academia</Button>
             </div>
             
@@ -237,30 +245,30 @@ const AcademiesPage: React.FC = () => {
                                              <img 
                                                 src={academy.imageUrl || `https://i.pravatar.cc/150?u=${academy.id}`} 
                                                 alt={academy.name} 
-                                                className="w-16 h-16 rounded-full object-cover border-2 border-slate-200"
+                                                className="w-16 h-16 rounded-full object-cover border-2 border-[var(--theme-text-primary)]/10"
                                             />
                                             <div className="ml-4">
-                                                <h2 className="text-xl font-bold text-slate-800">{academy.name}</h2>
-                                                <p className="text-sm text-slate-500">{academy.address}</p>
+                                                <h2 className="text-xl font-bold text-[var(--theme-text-primary)]">{academy.name}</h2>
+                                                <p className="text-sm text-[var(--theme-text-primary)]/70">{academy.address}</p>
                                             </div>
                                         </div>
                                          <div className="space-y-3 text-sm flex-grow">
                                             <div className="flex justify-between items-center">
-                                                <span className="text-slate-600 font-medium">Responsável:</span>
-                                                <span className="text-slate-700">{academy.responsible}</span>
+                                                <span className="text-[var(--theme-text-primary)]/80 font-medium">Responsável:</span>
+                                                <span className="text-[var(--theme-text-primary)]">{academy.responsible}</span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-slate-600 font-medium">Professor:</span>
-                                                <span className="text-slate-700">{professor?.name || 'N/A'}</span>
+                                                <span className="text-[var(--theme-text-primary)]/80 font-medium">Professor:</span>
+                                                <span className="text-[var(--theme-text-primary)]">{professor?.name || 'N/A'}</span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-slate-600 font-medium">Alunos:</span>
-                                                <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{studentCount}</span>
+                                                <span className="text-[var(--theme-text-primary)]/80 font-medium">Alunos:</span>
+                                                <span className="font-mono text-xs bg-[var(--theme-bg)] px-2 py-0.5 rounded">{studentCount}</span>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div className="mt-5 pt-4 border-t border-slate-200/60 flex justify-end gap-2">
+                                    <div className="mt-5 pt-4 border-t border-[var(--theme-text-primary)]/10 flex justify-end gap-2">
                                        <Button size="sm" variant="secondary" onClick={() => handleOpenModal(academy)}>Editar</Button>
                                        <Button size="sm" variant="danger" onClick={() => handleDeleteAcademy(academy.id)}>Excluir</Button>
                                     </div>
@@ -300,7 +308,7 @@ const PublicPageWrapper: React.FC = () => {
     const { themeSettings, loading, user } = useContext(AppContext);
 
     if (loading) {
-        return <div className="h-screen w-screen flex items-center justify-center bg-slate-100 text-slate-800">Carregando...</div>;
+        return <div className="h-screen w-screen flex items-center justify-center bg-[var(--theme-bg)] text-[var(--theme-text-primary)]">Carregando...</div>;
     }
     
     // If user is logged in, always go to dashboard

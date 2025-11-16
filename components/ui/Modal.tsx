@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface ModalProps {
@@ -23,15 +24,15 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm" onClick={onClose}>
         <div 
-            className={`bg-white rounded-xl shadow-xl w-full ${sizeClasses[size]} m-4 text-slate-800 transform transition-all duration-300 scale-95 opacity-0 animate-fade-in-scale`} 
+            className={`bg-[var(--theme-card-bg)] rounded-xl shadow-xl w-full ${sizeClasses[size]} m-4 text-[var(--theme-text-primary)] transform transition-all duration-300 scale-95 opacity-0 animate-fade-in-scale`} 
             onClick={(e) => e.stopPropagation()}
             style={{animation: 'fade-in-scale 0.3s forwards'}}
         >
-            <div className="flex items-center justify-between p-4 border-b border-slate-200">
-                <h3 className="text-xl font-bold text-amber-600">{title}</h3>
+            <div className="flex items-center justify-between p-4 border-b border-[var(--theme-text-primary)]/10">
+                <h3 className="text-xl font-bold text-[var(--theme-accent)]">{title}</h3>
                 <button
                     onClick={onClose}
-                    className="text-slate-500 hover:text-slate-800 transition"
+                    className="text-[var(--theme-text-primary)]/60 hover:text-[var(--theme-text-primary)] transition"
                     aria-label="Close modal"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24" stroke="currentColor">

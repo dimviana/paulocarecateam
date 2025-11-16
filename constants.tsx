@@ -6,8 +6,18 @@ import { ThemeSettings } from './types';
 export const initialThemeSettings: ThemeSettings = {
   logoUrl: 'https://tailwindui.com/img/logos/mark.svg?color=amber&shade=500',
   systemName: 'Jiu-Jitsu Hub',
-  primaryColor: '#f59e0b', // amber-500
-  secondaryColor: '#111827', // gray-900
+  primaryColor: '#f59e0b', // amber-500 -> Accent
+  secondaryColor: '#111827', // gray-900 -> Text
+  
+  // New granular color controls defaults
+  backgroundColor: '#f8fafc', // slate-50
+  cardBackgroundColor: '#ffffff', // white
+  buttonColor: '#f59e0b', // same as primary
+  buttonTextColor: '#ffffff', // white
+  iconColor: '#64748b', // slate-500
+  chartColor1: '#f9a825', // amber-600
+  chartColor2: '#475569', // slate-600
+
   useGradient: true,
   reminderDaysBeforeDue: 5,
   overdueDaysAfterDue: 5,
@@ -93,8 +103,8 @@ html {
 export const IconUsers = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
 );
-export const IconDollarSign = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+export const IconDollarSign = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
 );
 export const IconHome = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
