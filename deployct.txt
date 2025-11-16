@@ -1,18 +1,19 @@
 #!/bin/bash
 # ==============================================================================
-# Script de Implantação para Jiu-Jitsu Hub SAAS (com SSL)
+# Script de Gerenciamento de Implantação para Jiu-Jitsu Hub SAAS
 #
-# Este script automatiza a configuração de um servidor para rodar a aplicação.
-# Instala dependências, clona/atualiza o repositório, configura MySQL, Nginx,
-# Certbot para SSL, e inicia a aplicação com PM2.
+# Este script automatiza a instalação, atualização e remoção da aplicação.
 #
 # USO:
 # 1. Coloque este script em qualquer diretório no seu servidor (ex: /tmp).
 # 2. Dê permissão de execução: chmod +x deployct.txt
 # 3. Execute o script: ./deployct.txt
+# 4. Escolha uma das opções no menu interativo.
 #
-# O script irá criar o diretório de destino, clonar o repositório do GitHub
-# e configurar todo o ambiente automaticamente.
+# OPÇÕES:
+# 1. Instalar Sistema: Realiza a configuração completa do zero.
+# 2. Atualizar Sistema: Baixa a versão mais recente do código e reinicia a app.
+# 3. Remover Sistema: Apaga a aplicação, banco de dados e configurações.
 # ==============================================================================
 
 # --- Configurações do Banco de Dados ---
@@ -35,102 +36,65 @@ check_command() {
     command -v $1 >/dev/null 2>&1
 }
 
-echo "================================================="
-echo " INICIANDO A IMPLANTAÇÃO DO JIU-JITSU HUB SAAS (COM SSL) "
-echo "================================================="
+# --- Funções de Lógica ---
 
-# 1. ATUALIZAR O SISTEMA E INSTALAR DEPENDÊNCIAS
-# ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 1/9 ] Atualizando o sistema e instalando dependências..."
-sudo apt-get update -y
-sudo apt-get install -y mysql-server nginx nodejs npm certbot python3-certbot-nginx git
+install_dependencies() {
+    echo -e "\n[ ETAPA 1/9 ] Atualizando o sistema e instalando dependências..."
+    sudo apt-get update -y
+    sudo apt-get install -y mysql-server nginx nodejs npm certbot python3-certbot-nginx git
 
-# Verificar se Node.js precisa ser de uma versão específica
-if ! check_command node || [[ $(node -v | cut -d . -f 1) < "v18" ]]; then
-    echo "-> Instalando Node.js v18..."
-    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-    sudo apt-get install -y nodejs
-else
-    echo "-> Node.js já está instalado e na versão correta."
-fi
-
-# 2. PREPARAR DIRETÓRIO E CÓDIGO FONTE
-# ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 2/9 ] Preparando o diretório e baixando o código fonte..."
-# Garante que o diretório pai existe e tem as permissões corretas
-sudo mkdir -p "$(dirname "$APP_DIR")"
-sudo chown -R $(whoami):$(whoami) "$(dirname "$APP_DIR")"
-
-# Verifica se o diretório da aplicação já é um repositório git
-if [ -d "$APP_DIR/.git" ]; then
-    echo "-> Repositório encontrado em '$APP_DIR'. Atualizando..."
-    cd "$APP_DIR"
-    git pull origin main
-    if [ $? -ne 0 ]; then
-        echo "-> ERRO: Falha ao atualizar o repositório. Verifique as permissões ou conflitos e tente novamente."
-        exit 1
+    if ! check_command node || [[ $(node -v | cut -d . -f 1) < "v18" ]]; then
+        echo "-> Instalando Node.js v18..."
+        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+    else
+        echo "-> Node.js já está instalado e na versão correta."
     fi
-else
-    echo "-> Diretório '$APP_DIR' não é um repositório. Clonando..."
-    # Remove o diretório se existir, para garantir um clone limpo
-    if [ -d "$APP_DIR" ]; then
-        echo "-> Removendo diretório existente para um clone limpo."
-        sudo rm -rf "$APP_DIR"
+}
+
+setup_source_code() {
+    echo -e "\n[ ETAPA 2/9 ] Preparando o diretório e baixando o código fonte..."
+    if [ -d "$APP_DIR/.git" ]; then
+        echo "-> AVISO: Repositório já existe. Se deseja uma instalação limpa, remova o sistema primeiro."
+        return
     fi
+
+    sudo mkdir -p "$(dirname "$APP_DIR")"
+    sudo chown -R $(whoami):$(whoami) "$(dirname "$APP_DIR")"
+
     git clone "$REPO_URL" "$APP_DIR"
     if [ $? -ne 0 ]; then
         echo "-> ERRO: Falha ao clonar o repositório."
         exit 1
     fi
-    echo "-> Repositório clonado com sucesso."
-fi
+    sudo chown -R $(whoami):$(whoami) "$APP_DIR"
+    echo "-> Código fonte clonado com sucesso."
+}
 
-sudo chown -R $(whoami):$(whoami) "$APP_DIR"
-echo "-> Código fonte está pronto."
-
-# 3. CONFIGURAR O BANCO DE DADOS MYSQL
-# ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 3/9 ] Configurando o Banco de Dados MySQL..."
-sudo mysql -u root <<EOF
+setup_database() {
+    echo -e "\n[ ETAPA 3 & 4 ] Configurando e populando o Banco de Dados MySQL..."
+    sudo mysql -u root <<EOF
 CREATE DATABASE IF NOT EXISTS $DBNAME;
 CREATE USER IF NOT EXISTS '$DBUSER'@'$DBHOST' IDENTIFIED BY '$DBPASS';
 GRANT ALL PRIVILEGES ON $DBNAME.* TO '$DBUSER'@'$DBHOST';
 FLUSH PRIVILEGES;
 EOF
-echo "-> Banco de dados e usuário configurados."
+    echo "-> Banco de dados e usuário configurados."
 
-# 4. IMPORTAR O ESQUEMA DO BANCO DE DADOS
-# ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 4/9 ] Importando o esquema do banco de dados..."
-SCHEMA_PATH="$APP_DIR/$DB_SCHEMA_FILE"
-if [ -f "$SCHEMA_PATH" ]; then
-    sudo mysql -u root $DBNAME < "$SCHEMA_PATH"
-    echo "-> Esquema do banco de dados importado com sucesso."
-else
-    echo "-> AVISO: Arquivo '$SCHEMA_PATH' não encontrado. O banco de dados permanecerá vazio."
-fi
+    SCHEMA_PATH="$APP_DIR/$DB_SCHEMA_FILE"
+    if [ -f "$SCHEMA_PATH" ]; then
+        sudo mysql -u root $DBNAME < "$SCHEMA_PATH"
+        echo "-> Esquema do banco de dados importado com sucesso."
+    else
+        echo "-> AVISO: Arquivo de schema '$SCHEMA_PATH' não encontrado."
+    fi
+}
 
-# 5. INSTALAR GERENCIADOR DE PROCESSO E SERVIDOR WEB
-# ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 5/9 ] Instalando PM2 e Serve via npm..."
-if ! check_command pm2; then sudo npm install -g pm2; fi
-if ! check_command serve; then sudo npm install -g serve; fi
-echo "-> PM2 e Serve estão instalados."
+configure_nginx_and_ssl() {
+    echo -e "\n[ ETAPA 5, 6 & 7 ] Configurando Nginx e SSL..."
+    NGINX_CONF_PATH="/etc/nginx/sites-available/$APP_DOMAIN"
 
-# 6. CONFIGURAR O NGINX (INICIALMENTE EM HTTP PARA VALIDAÇÃO)
-# ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 6/9 ] Configurando o Nginx para validação SSL..."
-NGINX_CONF_PATH="/etc/nginx/sites-available/$APP_DOMAIN"
-
-#
-# !!! AVISO IMPORTANTE !!!
-# O Certbot precisa que a porta 80 esteja temporariamente livre para este domínio
-# para validar o certificado. Se outro serviço estiver bloqueando a porta 80
-# globalmente, esta etapa PODE FALHAR.
-#
-echo "-> AVISO: A porta 80 deve estar disponível para o domínio $APP_DOMAIN para a validação do certificado SSL."
-
-sudo tee $NGINX_CONF_PATH > /dev/null <<EOF
+    sudo tee $NGINX_CONF_PATH > /dev/null <<EOF
 server {
     listen 80;
     server_name $APP_DOMAIN;
@@ -144,30 +108,25 @@ server {
 }
 EOF
 
-if [ ! -L "/etc/nginx/sites-enabled/$APP_DOMAIN" ]; then
-    sudo ln -s $NGINX_CONF_PATH /etc/nginx/sites-enabled/
-fi
+    if [ ! -L "/etc/nginx/sites-enabled/$APP_DOMAIN" ]; then
+        sudo ln -s $NGINX_CONF_PATH /etc/nginx/sites-enabled/
+    fi
 
-sudo nginx -t && sudo systemctl restart nginx
-if [ $? -ne 0 ]; then
-    echo "-> ERRO: Falha ao iniciar o Nginx. A porta 80 pode estar em uso. Verifique e tente novamente."
-    exit 1
-fi
+    sudo nginx -t && sudo systemctl restart nginx
+    if [ $? -ne 0 ]; then
+        echo "-> ERRO: Falha ao iniciar o Nginx. A porta 80 pode estar em uso."
+        exit 1
+    fi
 
-# 7. GERAR CERTIFICADO SSL COM CERTBOT
-# ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 7/9 ] Gerando certificado SSL com Certbot..."
-sudo certbot --nginx -d $APP_DOMAIN --non-interactive --agree-tos -m $ADMIN_EMAIL --redirect
-if [ $? -ne 0 ]; then
-    echo "-> ERRO: Falha ao gerar o certificado SSL. Verifique se o DNS para $APP_DOMAIN está correto e se a porta 80 está acessível."
-    exit 1
-fi
-echo "-> Certificado SSL gerado e Nginx configurado para HTTPS."
+    echo "-> Gerando certificado SSL..."
+    sudo certbot --nginx -d $APP_DOMAIN --non-interactive --agree-tos -m $ADMIN_EMAIL --redirect
+    if [ $? -ne 0 ]; then
+        echo "-> ERRO: Falha ao gerar o certificado SSL."
+        exit 1
+    fi
 
-# 8. CONFIGURAR REDIRECIONAMENTO DE PORTA HTTP ADICIONAL
-# ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 8/9 ] Configurando redirecionamento da porta $NGINX_HTTP_PORT para HTTPS..."
-sudo tee -a $NGINX_CONF_PATH > /dev/null <<EOF
+    echo "-> Configurando redirecionamento da porta $NGINX_HTTP_PORT..."
+    sudo tee -a $NGINX_CONF_PATH > /dev/null <<EOF
 
 server {
     listen $NGINX_HTTP_PORT;
@@ -175,30 +134,130 @@ server {
     return 301 https://\$host\$request_uri;
 }
 EOF
+    sudo nginx -t && sudo systemctl restart nginx
+    echo "-> Nginx e SSL configurados."
+}
 
-sudo nginx -t && sudo systemctl restart nginx
-echo "-> Nginx reiniciado com todas as configurações."
+start_application() {
+    echo -e "\n[ ETAPA 8 & 9 ] Iniciando a aplicação com PM2..."
+    if ! check_command pm2; then sudo npm install -g pm2; fi
+    if ! check_command serve; then sudo npm install -g serve; fi
 
+    APP_COMMAND="serve -s . -l $APP_PORT"
+    pm2 stop "$DBNAME" 2>/dev/null || true
+    pm2 delete "$DBNAME" 2>/dev/null || true
+    cd $APP_DIR && pm2 start "$APP_COMMAND" --name "$DBNAME"
+    pm2 startup | sudo bash -
+    pm2 save
+}
 
-# 9. INICIAR A APLICAÇÃO COM PM2
-# ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 9/9 ] Iniciando a aplicação com PM2..."
-APP_COMMAND="serve -s . -l $APP_PORT"
-pm2 stop "$DBNAME" 2>/dev/null || true
-pm2 delete "$DBNAME" 2>/dev/null || true
-cd $APP_DIR && pm2 start "$APP_COMMAND" --name "$DBNAME"
-pm2 startup | sudo bash -
-pm2 save
+print_success_message() {
+    echo "========================================="
+    echo "        OPERAÇÃO CONCLUÍDA!         "
+    echo "========================================="
+    echo "Acesse a aplicação em: https://$APP_DOMAIN"
+    echo "-----------------------------------------"
+    echo "Para gerenciar a aplicação, use os comandos PM2:"
+    echo "  - Ver logs:       pm2 logs $DBNAME"
+    echo "  - Parar:          pm2 stop $DBNAME"
+    echo "  - Reiniciar:      pm2 restart $DBNAME"
+    echo "========================================="
+}
 
-echo "========================================="
-echo "        IMPLANTAÇÃO CONCLUÍDA!         "
-echo "========================================="
-echo "Acesse a aplicação de forma segura em: https://$APP_DOMAIN"
-echo "(O acesso por http://$APP_DOMAIN:$NGINX_HTTP_PORT será redirecionado automaticamente)"
-echo "-----------------------------------------"
-echo "Para gerenciar a aplicação, use os comandos PM2:"
-echo "  - Ver logs:       pm2 logs $DBNAME"
-echo "  - Parar:          pm2 stop $DBNAME"
-echo "  - Reiniciar:      pm2 restart $DBNAME"
-echo "  - Status:         pm2 status"
-echo "========================================="
+# --- Funções do Menu ---
+
+install_system() {
+    set -e # Encerra o script se algum comando falhar
+    echo "--- INICIANDO INSTALAÇÃO COMPLETA ---"
+    install_dependencies
+    setup_source_code
+    setup_database
+    configure_nginx_and_ssl
+    start_application
+    print_success_message
+}
+
+update_system() {
+    set -e
+    echo "--- INICIANDO ATUALIZAÇÃO DO SISTEMA ---"
+    if [ ! -d "$APP_DIR/.git" ]; then
+        echo "ERRO: Diretório de instalação não encontrado em '$APP_DIR'. Execute a instalação primeiro."
+        exit 1
+    fi
+
+    echo "-> Atualizando código fonte via git pull..."
+    cd "$APP_DIR"
+    git pull origin main
+    echo "-> Código fonte atualizado."
+    
+    echo "-> Reiniciando a aplicação com PM2..."
+    pm2 restart "$DBNAME"
+    
+    echo "--- ATUALIZAÇÃO CONCLUÍDA ---"
+}
+
+remove_system() {
+    echo "--- INICIANDO REMOÇÃO DO SISTEMA ---"
+    read -p "!!! ATENÇÃO !!! Isso removerá a aplicação, o banco de dados e as configurações. Deseja continuar? (s/N): " confirm
+    if [[ "$confirm" != "s" && "$confirm" != "S" ]]; then
+        echo "Remoção cancelada."
+        exit 0
+    fi
+
+    echo "-> Parando e removendo aplicação do PM2..."
+    pm2 stop "$DBNAME" 2>/dev/null
+    pm2 delete "$DBNAME" 2>/dev/null
+    pm2 save --force
+    
+    echo "-> Removendo certificado SSL..."
+    sudo certbot delete --cert-name "$APP_DOMAIN" --non-interactive
+    
+    echo "-> Removendo configurações do Nginx..."
+    sudo rm -f "/etc/nginx/sites-available/$APP_DOMAIN"
+    sudo rm -f "/etc/nginx/sites-enabled/$APP_DOMAIN"
+    sudo nginx -t && sudo systemctl restart nginx
+    
+    echo "-> Removendo banco de dados e usuário MySQL..."
+    sudo mysql -u root <<EOF
+DROP DATABASE IF EXISTS $DBNAME;
+DROP USER IF EXISTS '$DBUSER'@'$DBHOST';
+FLUSH PRIVILEGES;
+EOF
+
+    echo "-> Removendo arquivos da aplicação..."
+    sudo rm -rf "$APP_DIR"
+    
+    echo "--- REMOÇÃO COMPLETA ---"
+    echo "AVISO: Dependências como Nginx, MySQL, Node.js não foram removidas."
+}
+
+# --- Menu Principal ---
+
+echo "================================================="
+echo "  Gerenciador de Implantação Jiu-Jitsu Hub SAAS"
+echo "================================================="
+echo "Escolha uma opção:"
+echo "  1) Instalar Sistema (Configuração completa)"
+echo "  2) Atualizar Sistema (Baixa a versão mais recente)"
+echo "  3) Remover Sistema (Apaga tudo!)"
+echo
+
+read -p "Opção [1, 2, 3]: " choice
+
+case $choice in
+    1)
+        install_system
+        ;;
+    2)
+        update_system
+        ;;
+    3)
+        remove_system
+        ;;
+    *)
+        echo "Opção inválida. Saindo."
+        exit 1
+        ;;
+esac
+
+exit 0
