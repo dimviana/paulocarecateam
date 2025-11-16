@@ -104,6 +104,10 @@ export interface ThemeSettings {
   customJs: string;
   // Security
   jwtSecret: string;
+  // Social Login
+  socialLoginEnabled: boolean;
+  googleClientId: string;
+  facebookAppId: string;
 }
 
 export interface NewsArticle {

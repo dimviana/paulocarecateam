@@ -1,3 +1,4 @@
+
 import React, { useContext, useState, FormEvent } from 'react';
 import { AppContext } from '../context/AppContext';
 import Card from '../components/ui/Card';
@@ -142,6 +143,21 @@ const SettingsPage: React.FC = () => {
                                     <Input label="Dias para lembrete (antes do venc.)" name="reminderDaysBeforeDue" type="number" min="0" value={settings.reminderDaysBeforeDue} onChange={handleChange} />
                                     <Input label="Dias para cobrança (após venc.)" name="overdueDaysAfterDue" type="number" min="0" value={settings.overdueDaysAfterDue} onChange={handleChange} />
                                 </div>
+
+                                <h2 className="text-xl font-bold text-amber-600 border-b border-slate-200 pb-2 pt-4">Login Social & API</h2>
+                                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
+                                    <label htmlFor="socialLoginEnabled" className="font-medium text-slate-700">Ativar Login com Google & Facebook</label>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="socialLoginEnabled" name="socialLoginEnabled" checked={settings.socialLoginEnabled} onChange={handleChange} className="sr-only peer" />
+                                        <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-amber-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                                    </label>
+                                </div>
+                                {settings.socialLoginEnabled && (
+                                    <div className="space-y-4 pt-2 animate-fade-in-down">
+                                        <Input label="Google Client ID" name="googleClientId" value={settings.googleClientId} onChange={handleChange} placeholder="Cole seu Google Client ID aqui" />
+                                        <Input label="Facebook App ID" name="facebookAppId" value={settings.facebookAppId} onChange={handleChange} placeholder="Cole seu Facebook App ID aqui" />
+                                    </div>
+                                )}
 
                                 <h2 className="text-xl font-bold text-amber-600 border-b border-slate-200 pb-2 pt-4">API & Segurança</h2>
                                 <div>
