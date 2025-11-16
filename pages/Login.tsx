@@ -119,7 +119,7 @@ const Login: React.FC = () => {
             </div>
         </main>
         <footer className="py-4 text-center text-sm text-[var(--theme-text-primary)]/60">
-            <p>© {new Date().getFullYear()} {themeSettings.copyrightText} - Versão {themeSettings.systemVersion}</p>
+            <p>© {new Date().getFullYear()} {themeSettings.copyrightText} - <a href="https://github.com/dimviana/paulocarecateam" target="_blank" rel="noopener noreferrer" className="hover:text-amber-600 transition-colors">Versão {themeSettings.systemVersion}</a></p>
         </footer>
     </div>
   );

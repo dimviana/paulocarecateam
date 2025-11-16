@@ -1,3 +1,5 @@
+
+
 import React, { useContext, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Link as RouterLink } from 'react-router-dom';
@@ -6,10 +8,12 @@ import Button from '../components/ui/Button';
 const PublicPage: React.FC = () => {
     const { themeSettings } = useContext(AppContext);
 
+    const versionLink = `<a href="https://github.com/dimviana/paulocarecateam" target="_blank" rel="noopener noreferrer" class="hover:text-amber-600 transition-colors">Versão ${themeSettings.systemVersion}</a>`;
     const processedFooterHtml = (themeSettings.footerHtml || '').replace(
         '{{{copyright_line}}}',
-        `&copy; ${new Date().getFullYear()} ${themeSettings.copyrightText} - Versão ${themeSettings.systemVersion}`
+        `&copy; ${new Date().getFullYear()} ${themeSettings.copyrightText} - ${versionLink}`
     );
+
 
     useEffect(() => {
         if (themeSettings.customJs) {
@@ -32,7 +36,7 @@ const PublicPage: React.FC = () => {
     return (
         <>
             <style>{themeSettings.customCss || ''}</style>
-            <div className="bg-white text-slate-800 antialiased">
+            <div className="bg-white text-slate-800 antialiased min-h-screen flex flex-col">
                 {/* Header */}
                 <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200/60">
                     <nav className="container mx-auto px-6 py-3 flex justify-between items-center">
@@ -51,7 +55,7 @@ const PublicPage: React.FC = () => {
                     </nav>
                 </header>
 
-                <main>
+                <main className="flex-grow">
                     {/* Hero */}
                     <section id="inicio" dangerouslySetInnerHTML={{ __html: themeSettings.heroHtml || '' }} />
 
