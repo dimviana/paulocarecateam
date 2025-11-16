@@ -1,11 +1,210 @@
 
-import React, { useContext, useMemo, useState } from 'react';
+
+import React, { useContext, useMemo, useState, useRef, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Student } from '../types';
 import Card from '../components/ui/Card';
 import StudentAttendanceChart from '../components/charts/StudentAttendanceChart';
-import { IconAward, IconCalendar, IconDollarSign, IconMedal, IconUpload } from '../constants';
+import { IconAward, IconCalendar, IconDollarSign, IconMedal, IconUpload, IconPix } from '../constants';
 import Button from '../components/ui/Button';
+import Modal from '../components/ui/Modal';
+import Input from '../components/ui/Input';
+
+// --- Helper Functions & Components ---
+
+const generateBRCode = (
+    key: string, name: string, amount: number, txid: string
+): string => {
+    name = name.substring(0, 25).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const city = "BRASILIA";
+
+    const format = (id: string, value: string) => {
+        const len = value.length.toString().padStart(2, '0');
+        return `${id}${len}${value}`;
+    };
+
+    const merchantAccountInfo = format('00', 'BR.GOV.BCB.PIX') + format('01', key);
+    const additionalData = format('05', txid);
+
+    const payload = [
+        format('00', '01'),
+        format('26', merchantAccountInfo),
+        format('52', '0000'),
+        format('53', '986'),
+        format('54', amount.toFixed(2)),
+        format('58', 'BR'),
+        format('59', name),
+        format('60', city),
+        format('62', additionalData),
+    ].join('');
+
+    const payloadWithCrc = payload + '6304';
+
+    let crc = 0xFFFF;
+    for (let i = 0; i < payloadWithCrc.length; i++) {
+        crc ^= payloadWithCrc.charCodeAt(i) << 8;
+        for (let j = 0; j < 8; j++) {
+            crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
+        }
+    }
+    const crc16 = (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+
+    return payloadWithCrc + crc16;
+};
+
+
+const PixPaymentModal: React.FC<{ student: Student; onClose: () => void; onProceedToUpload: () => void; }> = ({ student, onClose, onProceedToUpload }) => {
+    const { themeSettings } = useContext(AppContext);
+    const pixCodeRef = useRef<HTMLInputElement>(null);
+    const [copySuccess, setCopySuccess] = useState('');
+    const [countdown, setCountdown] = useState(300); // 5 minutes in seconds
+
+    useEffect(() => {
+        if (countdown > 0) {
+            const timer = setInterval(() => {
+                setCountdown(prev => prev - 1);
+            }, 1000);
+            return () => clearInterval(timer);
+        }
+    }, [countdown]);
+    
+    const isExpired = countdown === 0;
+    const minutes = String(Math.floor(countdown / 60)).padStart(2, '0');
+    const seconds = String(countdown % 60).padStart(2, '0');
+
+
+    const brCode = useMemo(() => {
+        if (!themeSettings.pixKey || !themeSettings.pixHolderName) {
+            return null;
+        }
+        // O txid deve ser alfanumérico e ter no máximo 25 caracteres para o payload do QR Code.
+        // Caracteres especiais como '-' não são permitidos para garantir a validade.
+        const txid = (`JJHUB${student.id}${Date.now()}`.replace(/[^a-zA-Z0-9]/g, '')).slice(0, 25);
+
+        return generateBRCode(
+            themeSettings.pixKey,
+            themeSettings.pixHolderName,
+            themeSettings.monthlyFeeAmount,
+            txid
+        );
+    }, [themeSettings, student]);
+
+    const handleCopy = () => {
+        if (pixCodeRef.current) {
+            pixCodeRef.current.select();
+            navigator.clipboard.writeText(pixCodeRef.current.value);
+            setCopySuccess('Copiado!');
+            setTimeout(() => setCopySuccess(''), 2000);
+        }
+    };
+    
+    if (!brCode) {
+        return (
+             <Modal isOpen={true} onClose={onClose} title="Pagamento via PIX">
+                 <div className="text-center">
+                    <p className="text-slate-600">A configuração de PIX não foi realizada pelo administrador.</p>
+                    <p className="text-sm text-slate-500 mt-2">Por favor, entre em contato com a academia.</p>
+                    <div className="mt-6 flex justify-end">
+                        <Button variant="secondary" onClick={onClose}>Fechar</Button>
+                    </div>
+                </div>
+             </Modal>
+        );
+    }
+    
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(brCode)}`;
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title="Pagamento via PIX">
+            <div className="space-y-4 text-center">
+                 {isExpired ? (
+                    <div className="flex flex-col items-center justify-center p-8">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-red-500 mb-4" fill="none" viewBox="0 0 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <h3 className="text-xl font-bold text-slate-800">Código PIX Expirado</h3>
+                        <p className="text-slate-600 mt-2">O tempo para pagamento acabou. Por favor, feche esta janela e clique em "Pagar Mensalidade" para gerar um novo código.</p>
+                        <Button onClick={onClose} className="mt-6">Fechar</Button>
+                    </div>
+                ) : (
+                    <>
+                        <div className="bg-amber-100 text-amber-800 font-bold p-3 rounded-lg">
+                            Este código expira em: {minutes}:{seconds}
+                        </div>
+                        <p className="text-slate-600">Pague a mensalidade no valor de <span className="font-bold">{themeSettings.monthlyFeeAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span> usando o QR Code ou o código abaixo.</p>
+                        <img src={qrCodeUrl} alt="PIX QR Code" className="mx-auto my-4 border-4 border-slate-200 rounded-lg"/>
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium text-slate-700">PIX Copia e Cola</label>
+                            <div className="flex gap-2">
+                                <Input readOnly value={brCode} ref={pixCodeRef} />
+                                <Button onClick={handleCopy} variant="secondary">{copySuccess || 'Copiar'}</Button>
+                            </div>
+                        </div>
+                         <div className="mt-6 pt-6 border-t border-slate-200 flex flex-col items-center">
+                             <p className="font-semibold text-amber-600 mb-2">Já realizou o pagamento?</p>
+                             <Button onClick={onProceedToUpload}>Anexar Comprovante</Button>
+                         </div>
+                    </>
+                )}
+            </div>
+        </Modal>
+    );
+};
+
+const UploadProofModal: React.FC<{ onConfirm: () => Promise<void>; onClose: () => void; }> = ({ onConfirm, onClose }) => {
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
+    const [isPaying, setIsPaying] = useState(false);
+    
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            if (e.target.files[0].type === 'application/pdf') {
+                setReceiptFile(e.target.files[0]);
+            } else {
+                alert('Por favor, selecione um arquivo PDF.');
+                e.target.value = ''; // Clear the input
+                setReceiptFile(null);
+            }
+        }
+    };
+    
+    const handleSendReceipt = async () => {
+        if (!receiptFile) return;
+        setIsPaying(true);
+        await onConfirm();
+        setIsPaying(false);
+        onClose();
+    };
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title="Enviar Comprovante de Pagamento">
+            <div className="space-y-4">
+                <p className="text-slate-600">Para confirmar seu pagamento, por favor, anexe o comprovante em formato PDF.</p>
+                <label
+                    htmlFor="receipt-upload"
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100"
+                >
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <IconUpload className="w-8 h-8 mb-3 text-slate-400" />
+                        <p className="mb-2 text-sm text-slate-500">
+                            <span className="font-semibold">Clique para enviar comprovante</span>
+                        </p>
+                        <p className="text-xs text-slate-500">Apenas arquivos PDF (obrigatório)</p>
+                    </div>
+                    <input id="receipt-upload" type="file" className="hidden" accept="application/pdf" onChange={handleFileChange} />
+                </label>
+                 {receiptFile && (
+                    <p className="text-center text-sm text-green-600 font-medium">Arquivo: {receiptFile.name}</p>
+                )}
+                <div className="flex justify-end gap-2 mt-4">
+                    <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+                    <Button onClick={handleSendReceipt} disabled={!receiptFile || isPaying}>
+                        {isPaying ? 'Enviando...' : 'Enviar Comprovante'}
+                    </Button>
+                </div>
+            </div>
+        </Modal>
+    )
+}
 
 const calculateTrainingTime = (startDateString?: string): { years: number; months: number; totalMonths: number } => {
   if (!startDateString) return { years: 0, months: 0, totalMonths: 0 };
@@ -53,9 +252,7 @@ interface StudentDashboardProps {
 const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentProp }) => {
     const { user, students, graduations, schedules, loading, themeSettings, updateStudentPayment } = useContext(AppContext);
 
-    const [showPaymentForm, setShowPaymentForm] = useState(false);
-    const [receiptFile, setReceiptFile] = useState<File | null>(null);
-    const [isPaying, setIsPaying] = useState(false);
+    const [paymentModalState, setPaymentModalState] = useState<'closed' | 'pix' | 'upload'>('closed');
     const [paymentSuccess, setPaymentSuccess] = useState(false);
 
     const studentDataFromContext = useMemo(() => students.find(s => s.id === user?.studentId), [students, user]);
@@ -126,25 +323,10 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentPro
         return isOverdue || isReminderPeriod;
     }, [studentData]);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            if (e.target.files[0].type === 'application/pdf') {
-                setReceiptFile(e.target.files[0]);
-            } else {
-                alert('Por favor, selecione um arquivo PDF.');
-                e.target.value = ''; // Clear the input
-                setReceiptFile(null);
-            }
-        }
-    };
 
-    const handleSendReceipt = async () => {
-        if (!studentData || !receiptFile) return;
-        setIsPaying(true);
+    const handleConfirmPayment = async () => {
+        if (!studentData) return;
         await updateStudentPayment(studentData.id, 'paid');
-        setIsPaying(false);
-        setShowPaymentForm(false);
-        setReceiptFile(null);
         setPaymentSuccess(true);
         setTimeout(() => {
             setPaymentSuccess(false);
@@ -160,6 +342,20 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentPro
 
     return (
         <div className="space-y-6">
+            {paymentModalState === 'pix' && (
+                <PixPaymentModal 
+                    student={studentData}
+                    onClose={() => setPaymentModalState('closed')}
+                    onProceedToUpload={() => setPaymentModalState('upload')}
+                />
+            )}
+            {paymentModalState === 'upload' && (
+                 <UploadProofModal 
+                    onClose={() => setPaymentModalState('closed')}
+                    onConfirm={handleConfirmPayment}
+                />
+            )}
+
             {!studentProp && (
               <div>
                   <h1 className="text-3xl font-bold text-slate-800">Olá, {studentData.name.split(' ')[0]}!</h1>
@@ -178,43 +374,19 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentPro
                             <div>
                                 <p className="text-sm font-medium text-slate-500">Mensalidade</p>
                                 {paymentSuccess ? (
-                                    <p className="text-xl font-bold text-green-600">Pagamento Enviado!</p>
+                                    <p className="text-xl font-bold text-green-600">Comprovante Enviado!</p>
                                 ) : (
                                     <p className="text-xl font-bold text-slate-800">{studentData.paymentStatus === 'paid' ? 'Em Dia' : 'Pendente'}</p>
                                 )}
                             </div>
                         </div>
-                        {shouldShowPaymentButton && !studentProp && !showPaymentForm && !paymentSuccess && (
-                            <Button size="sm" onClick={() => setShowPaymentForm(true)}>Pagar Agora</Button>
+                        {shouldShowPaymentButton && !studentProp && !paymentSuccess && (
+                             <Button size="sm" onClick={() => setPaymentModalState('pix')}>
+                                <IconPix className="w-4 h-4 mr-2" />
+                                Pagar Mensalidade
+                             </Button>
                         )}
                     </div>
-                    {showPaymentForm && (
-                        <div className="mt-4 pt-4 border-t border-slate-200 space-y-4 animate-fade-in-down">
-                            <p>Valor da mensalidade: <span className="font-bold">{themeSettings.monthlyFeeAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></p>
-                             <label
-                                htmlFor="receipt-upload"
-                                className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100"
-                            >
-                                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                    <IconUpload className="w-8 h-8 mb-3 text-slate-400" />
-                                    <p className="mb-2 text-sm text-slate-500">
-                                        <span className="font-semibold">Clique para enviar comprovante</span>
-                                    </p>
-                                    <p className="text-xs text-slate-500">Apenas arquivos PDF (obrigatório)</p>
-                                </div>
-                                <input id="receipt-upload" type="file" className="hidden" accept="application/pdf" onChange={handleFileChange} />
-                            </label>
-                            {receiptFile && (
-                                <p className="text-center text-sm text-green-600 font-medium">Arquivo: {receiptFile.name}</p>
-                            )}
-                            <div className="flex justify-end gap-2">
-                                <Button variant="secondary" size="sm" onClick={() => {setShowPaymentForm(false); setReceiptFile(null);}}>Cancelar</Button>
-                                <Button size="sm" onClick={handleSendReceipt} disabled={!receiptFile || isPaying}>
-                                    {isPaying ? 'Enviando...' : 'Enviar Comprovante'}
-                                </Button>
-                            </div>
-                        </div>
-                    )}
                 </Card>
                 <StatCard icon={<IconCalendar/>} title="Tempo de Treino" color="#3B82F6" value={`${Math.floor(trainingMonths/12)} anos e ${trainingMonths%12} meses`} />
                 <StatCard icon={<IconAward/>} title="Próxima Graduação" color="#F59E0B" value={timeToNextGrad} />

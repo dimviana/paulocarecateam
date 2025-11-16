@@ -1,4 +1,5 @@
 
+
 export interface Graduation {
   id: string;
   name: string;
@@ -120,6 +121,9 @@ export interface ThemeSettings {
   socialLoginEnabled: boolean;
   googleClientId: string;
   facebookAppId: string;
+  // PIX Payment
+  pixKey: string;
+  pixHolderName: string;
 }
 
 export interface NewsArticle {

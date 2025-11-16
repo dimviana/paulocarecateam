@@ -19,10 +19,10 @@ const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> & { l
 );
 
 const SettingsPage: React.FC = () => {
-    const { themeSettings, setThemeSettings, activityLogs, users } = useContext(AppContext);
+    const { themeSettings, setThemeSettings, activityLogs, users, user } = useContext(AppContext);
     const [settings, setSettings] = useState(themeSettings);
     const [saved, setSaved] = useState(false);
-    const [activeTab, setActiveTab] = useState<'system' | 'webpage' | 'activities'>('system');
+    const [activeTab, setActiveTab] = useState<'system' | 'webpage' | 'activities' | 'pagamentos'>('system');
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
@@ -58,6 +58,14 @@ const SettingsPage: React.FC = () => {
                     >
                         Sistema
                     </button>
+                    {user?.role === 'general_admin' && (
+                       <button
+                            onClick={() => setActiveTab('pagamentos')}
+                            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'pagamentos' ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]' : 'border-transparent text-[var(--theme-text-primary)]/60 hover:text-[var(--theme-text-primary)]/80 hover:border-gray-300'}`}
+                        >
+                            Pagamentos
+                        </button>
+                    )}
                     <button
                         onClick={() => setActiveTab('webpage')}
                         className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'webpage' ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]' : 'border-transparent text-[var(--theme-text-primary)]/60 hover:text-[var(--theme-text-primary)]/80 hover:border-gray-300'}`}
@@ -157,6 +165,30 @@ const SettingsPage: React.FC = () => {
                                     <p className="text-xs text-[var(--theme-text-primary)]/60 mt-1">Esta chave é usada para assinar os tokens de sessão. Gerar uma nova chave invalidará todas as sessões ativas.</p>
                                 </div>
                             </>
+                        )}
+                        
+                        {activeTab === 'pagamentos' && user?.role === 'general_admin' && (
+                            <div className="space-y-6 animate-fade-in-down">
+                                <h2 className="text-xl font-bold text-[var(--theme-accent)] border-b border-[var(--theme-text-primary)]/10 pb-2">Configuração PIX</h2>
+                                <p className="text-sm text-[var(--theme-text-primary)]/70 -mt-4">
+                                  Insira os dados da chave PIX que será usada para receber os pagamentos das mensalidades.
+                                </p>
+                                <Input 
+                                  label="Chave PIX" 
+                                  name="pixKey" 
+                                  value={settings.pixKey} 
+                                  onChange={handleChange}
+                                  placeholder="Email, CPF/CNPJ, Telefone ou Chave Aleatória"
+                                />
+                                <Input 
+                                  label="Nome do Titular da Chave" 
+                                  name="pixHolderName" 
+                                  value={settings.pixHolderName} 
+                                  onChange={handleChange}
+                                  placeholder="Nome que aparecerá para o pagador"
+                                  maxLength={25}
+                                />
+                            </div>
                         )}
 
                         {activeTab === 'webpage' && (

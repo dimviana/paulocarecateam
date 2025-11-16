@@ -95,6 +95,9 @@ html {
   socialLoginEnabled: false,
   googleClientId: '',
   facebookAppId: '',
+  // PIX Payment
+  pixKey: '',
+  pixHolderName: '',
 };
 
 
@@ -175,4 +178,8 @@ export const IconUpload = (props: React.SVGProps<SVGSVGElement>) => (
         <polyline points="17 8 12 3 7 8"/>
         <line x1="12" y1="3" x2="12" y2="15"/>
     </svg>
+);
+
+export const IconPix = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256" {...props}><path fill="currentColor" d="M128 24a104 104 0 1 0 104 104A104.11 104.11 0 0 0 128 24m41.4 69.83L128 128l41.4 34.17a8 8 0 0 1-10.8 11.66L112 133.7l-26.6 22a8 8 0 0 1-10.8-11.66L105.2 128L74.6 102.17a8 8 0 0 1 10.8-11.66L112 114.3l26.6-22a8 8 0 0 1 10.8 11.66"/></svg>
 );
