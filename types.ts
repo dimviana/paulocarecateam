@@ -5,6 +5,9 @@ export interface Graduation {
   color: string;
   minTimeInMonths: number;
   rank: number;
+  type: 'adult' | 'kids';
+  minAge?: number;
+  maxAge?: number;
 }
 
 export type DayOfWeek = 'Segunda-feira' | 'Terça-feira' | 'Quarta-feira' | 'Quinta-feira' | 'Sexta-feira' | 'Sábado' | 'Domingo';
@@ -45,6 +48,8 @@ export interface Student {
   paymentHistory: Payment[];
   paymentDueDateDay: number;
   imageUrl?: string;
+  stripes: number;
+  lastPromotionDate?: string;
 }
 
 export interface Academy {

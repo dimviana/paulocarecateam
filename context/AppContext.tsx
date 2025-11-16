@@ -172,6 +172,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!user) return;
       await api.saveStudent(student, user.id);
       setStudents(await api.getStudents());
+      setProfessors(await api.getProfessors());
       refetchActivityLogs();
   }
 

@@ -29,7 +29,7 @@ interface AcademyFormProps {
 }
 
 const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) => {
-  const { users } = useContext(AppContext);
+  const { professors } = useContext(AppContext);
   const [formData, setFormData] = useState({
     name: '',
     address: '',
@@ -109,7 +109,7 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
         <label className="block text-sm font-medium text-slate-700 mb-1">Professor Responsável</label>
         <select name="professorId" value={formData.professorId} onChange={handleChange} required className={selectStyles}>
            <option value="">Selecione um professor</option>
-           {users.filter(u => u.role !== 'student').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+           {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
 
@@ -122,7 +122,7 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
           multiple
           className={`${selectStyles} h-24`}
         >
-          {users.filter(u => u.role !== 'student').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
       
@@ -180,7 +180,7 @@ const AcademyStudentsModal: React.FC<{ academy: Academy; onClose: () => void }> 
 
 
 const AcademiesPage: React.FC = () => {
-    const { academies, students, users, saveAcademy, deleteAcademy, loading, themeSettings } = useContext(AppContext);
+    const { academies, students, professors, saveAcademy, deleteAcademy, loading, themeSettings } = useContext(AppContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedAcademy, setSelectedAcademy] = useState<Partial<Academy> | null>(null);
     const [academyForStudents, setAcademyForStudents] = useState<Academy | null>(null);
@@ -226,7 +226,7 @@ const AcademiesPage: React.FC = () => {
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {academies.map(academy => {
-                        const professor = users.find(u => u.id === academy.professorId);
+                        const professor = professors.find(p => p.id === academy.professorId);
                         const studentCount = students.filter(s => s.academyId === academy.id).length;
                         return (
                            <Card key={academy.id} className="p-0 flex flex-col overflow-hidden transition-transform duration-200 hover:-translate-y-1">

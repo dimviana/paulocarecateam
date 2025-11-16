@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, FormEvent, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { ClassSchedule, DayOfWeek } from '../types';
@@ -13,10 +12,10 @@ interface ScheduleFormProps {
   onClose: () => void;
 }
 
-const DAYS_OF_WEEK: DayOfWeek[] = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+const DAYS_OF_WEEK_ORDER: DayOfWeek[] = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
 const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }) => {
-  const { users, academies, user, graduations } = useContext(AppContext);
+  const { professors, academies, user, graduations } = useContext(AppContext);
   const [formData, setFormData] = useState({
     className: '',
     dayOfWeek: 'Segunda-feira' as DayOfWeek,
@@ -54,7 +53,7 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Dia da Semana</label>
         <select name="dayOfWeek" value={formData.dayOfWeek} onChange={handleChange} required className={selectStyles}>
-          {DAYS_OF_WEEK.map(day => <option key={day} value={day}>{day}</option>)}
+          {DAYS_OF_WEEK_ORDER.map(day => <option key={day} value={day}>{day}</option>)}
         </select>
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -72,7 +71,7 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
         <label className="block text-sm font-medium text-slate-700 mb-1">Professor</label>
         <select name="professorId" value={formData.professorId} onChange={handleChange} required className={selectStyles}>
            <option value="">Selecione um professor</option>
-           {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+           {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
        <div>
@@ -84,7 +83,7 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
           multiple
           className={`${selectStyles} h-24`}
         >
-          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
        {user?.role === 'general_admin' && (
@@ -106,25 +105,27 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
 
 
 const SchedulesPage: React.FC = () => {
-  const { schedules, saveSchedule, deleteSchedule, loading, users, user, graduations } = useContext(AppContext);
+  const { schedules, saveSchedule, deleteSchedule, loading, professors, academies, user, graduations } = useContext(AppContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<Partial<ClassSchedule> | null>(null);
 
   const filteredSchedules = useMemo(() => {
+    let studentSchedules: ClassSchedule[] = [];
+    if (user?.role === 'student') {
+        // Students see schedules from their academy that match their graduation level
+        const studentGrad = graduations.find(g => g.id === user?.studentId);
+        studentSchedules = schedules.filter(s => {
+            const requiredGrad = graduations.find(g => g.id === s.requiredGraduationId);
+            return s.academyId === user.academyId && (studentGrad?.rank ?? 0) >= (requiredGrad?.rank ?? 0);
+        });
+        return studentSchedules;
+    }
     if (user?.role === 'academy_admin') {
         return schedules.filter(s => s.academyId === user.academyId);
     }
     return schedules;
-  }, [schedules, user]);
+  }, [schedules, user, graduations]);
 
-  const groupedSchedules = useMemo(() => {
-    const groups = {} as Record<DayOfWeek, ClassSchedule[]>;
-    DAYS_OF_WEEK.forEach(day => groups[day] = []);
-    filteredSchedules.forEach(schedule => {
-      groups[schedule.dayOfWeek].push(schedule);
-    });
-    return groups;
-  }, [filteredSchedules]);
 
   const handleOpenModal = (schedule: Partial<ClassSchedule> | null = null) => {
     setSelectedSchedule(schedule);
@@ -152,45 +153,73 @@ const SchedulesPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-slate-800">Gerenciar Horários</h1>
+        <h1 className="text-3xl font-bold text-slate-800">Horários das Turmas</h1>
         {isAdmin && <Button onClick={() => handleOpenModal({})}>Adicionar Horário</Button>}
       </div>
       
       {loading ? (
         <div className="text-center">Carregando horários...</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {DAYS_OF_WEEK.map(day => (
-                groupedSchedules[day].length > 0 && (
-                    <Card key={day}>
-                        <h2 className="text-xl font-bold text-amber-600 mb-4">{day}</h2>
-                        <div className="space-y-4">
-                            {groupedSchedules[day].sort((a,b) => a.startTime.localeCompare(b.startTime)).map(schedule => {
-                                const requiredGrad = graduations.find(g => g.id === schedule.requiredGraduationId);
-                                return (
-                                <div key={schedule.id} className="bg-slate-50 p-3 rounded-md border border-slate-200">
-                                    <p className="font-semibold text-slate-800">{schedule.className}</p>
-                                    <p className="text-sm text-slate-700">{schedule.startTime} - {schedule.endTime}</p>
-                                    <p className="text-sm text-slate-500">Prof: {users.find(u => u.id === schedule.professorId)?.name}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredSchedules.sort((a,b) => {
+                const dayA = DAYS_OF_WEEK_ORDER.indexOf(a.dayOfWeek);
+                const dayB = DAYS_OF_WEEK_ORDER.indexOf(b.dayOfWeek);
+                if (dayA !== dayB) return dayA - dayB;
+                return a.startTime.localeCompare(b.startTime);
+            }).map(schedule => {
+                const professor = professors.find(p => p.id === schedule.professorId);
+                const academy = academies.find(a => a.id === schedule.academyId);
+                const requiredGrad = graduations.find(g => g.id === schedule.requiredGraduationId);
+                const assistants = professors.filter(p => schedule.assistantIds.includes(p.id));
+
+                return (
+                    <Card key={schedule.id} className="p-0 flex flex-col overflow-hidden transition-transform duration-200 hover:-translate-y-1">
+                        <div className="h-2 bg-amber-500"></div>
+                        <div className="p-5 flex flex-col flex-grow">
+                            <div className="flex-grow">
+                                <p className="text-sm font-semibold text-amber-600">{schedule.dayOfWeek}</p>
+                                <h2 className="text-xl font-bold text-slate-800 mt-1">{schedule.className}</h2>
+                                <p className="text-slate-500 font-medium">{schedule.startTime} - {schedule.endTime}</p>
+                                <div className="mt-4 space-y-3 text-sm">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-slate-600 font-medium">Professor:</span>
+                                        <span className="font-medium text-slate-700">{professor?.name || 'N/A'}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-slate-600 font-medium">Academia:</span>
+                                        <span className="font-medium text-slate-700">{academy?.name || 'N/A'}</span>
+                                    </div>
                                     {requiredGrad && (
-                                        <p className="text-sm text-slate-500 flex items-center mt-1">
-                                            Mín:
-                                            <span className="w-3 h-3 rounded-full mx-1.5 border border-slate-400" style={{ backgroundColor: requiredGrad.color }}></span>
-                                            {requiredGrad.name}
-                                        </p>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-slate-600 font-medium">Mínimo:</span>
+                                            <div className="flex items-center">
+                                                <span className="w-4 h-4 rounded-full mr-2 border border-slate-300" style={{ backgroundColor: requiredGrad.color }}></span>
+                                                <span className="font-medium text-slate-700">{requiredGrad.name}</span>
+                                            </div>
+                                        </div>
                                     )}
-                                    {isAdmin && (
-                                        <div className="flex gap-2 mt-2">
-                                            <Button variant="secondary" size="sm" onClick={() => handleOpenModal(schedule)}>Editar</Button>
-                                            <Button variant="danger" size="sm" onClick={() => handleDelete(schedule.id)}>Excluir</Button>
+                                    {assistants.length > 0 && (
+                                        <div className="flex justify-between items-start">
+                                            <span className="text-slate-600 font-medium pt-1">Assistentes:</span>
+                                            <div className="text-right">
+                                                {assistants.map(a => <p key={a.id} className="font-medium text-slate-700">{a.name}</p>)}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
-                            )})}
+                            </div>
+                            <div className="mt-auto">
+                                {isAdmin && (
+                                    <div className="mt-5 pt-4 border-t border-slate-200/60 flex justify-end gap-2">
+                                        <Button size="sm" variant="secondary" onClick={() => handleOpenModal(schedule)}>Editar</Button>
+                                        <Button size="sm" variant="danger" onClick={() => handleDelete(schedule.id)}>Excluir</Button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </Card>
-                )
-            ))}
+                );
+            })}
         </div>
       )}
 

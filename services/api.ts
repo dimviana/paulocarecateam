@@ -1,13 +1,19 @@
 import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Payment, AttendanceRecord, Professor, ActivityLog } from '../types';
 
 let graduations: Graduation[] = [
-  { id: '1', name: 'Branca', color: '#FFFFFF', minTimeInMonths: 0, rank: 1 },
-  { id: '2', name: 'Azul', color: '#0000FF', minTimeInMonths: 24, rank: 2 },
-  { id: '3', name: 'Roxa', color: '#800080', minTimeInMonths: 24, rank: 3 },
-  { id: '4', name: 'Marrom', color: '#A52A2A', minTimeInMonths: 18, rank: 4 },
-  { id: '5', name: 'Preta', color: '#000000', minTimeInMonths: 12, rank: 5 },
-  { id: '6', name: 'Coral', color: '#FF7F50', minTimeInMonths: 36, rank: 6 },
-  { id: '7', name: 'Vermelha', color: '#FF0000', minTimeInMonths: 60, rank: 7 },
+  // Kids
+  { id: '8', name: 'Cinza', color: '#808080', minTimeInMonths: 0, rank: 1, type: 'kids', minAge: 4, maxAge: 6 },
+  { id: '9', name: 'Amarela', color: '#FFFF00', minTimeInMonths: 0, rank: 2, type: 'kids', minAge: 7, maxAge: 15 },
+  { id: '10', name: 'Laranja', color: '#FFA500', minTimeInMonths: 0, rank: 3, type: 'kids', minAge: 10, maxAge: 15 },
+  { id: '11', name: 'Verde', color: '#008000', minTimeInMonths: 0, rank: 4, type: 'kids', minAge: 13, maxAge: 15 },
+  // Adults
+  { id: '1', name: 'Branca', color: '#FFFFFF', minTimeInMonths: 0, rank: 5, type: 'adult' },
+  { id: '2', name: 'Azul', color: '#0000FF', minTimeInMonths: 12, rank: 6, type: 'adult' }, // Min time from white for adults, or from green at 16 for kids.
+  { id: '3', name: 'Roxa', color: '#800080', minTimeInMonths: 24, rank: 7, type: 'adult' },
+  { id: '4', name: 'Marrom', color: '#A52A2A', minTimeInMonths: 18, rank: 8, type: 'adult' },
+  { id: '5', name: 'Preta', color: '#000000', minTimeInMonths: 12, rank: 9, type: 'adult' },
+  { id: '6', name: 'Coral', color: '#FF7F50', minTimeInMonths: 36, rank: 10, type: 'adult' },
+  { id: '7', name: 'Vermelha', color: '#FF0000', minTimeInMonths: 60, rank: 11, type: 'adult' },
 ];
 
 let schedules: ClassSchedule[] = [
@@ -18,10 +24,11 @@ let schedules: ClassSchedule[] = [
 ];
 
 let students: Student[] = [
-  { id: '1', name: 'Carlos Gracie', email: 'carlos@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=111.111.111-11', birthDate: '1990-08-15', cpf: '111.111.111-11', fjjpe_registration: 'FJJPE-001', phone: '5511999999991', address: 'Rua do Tatame, 123', beltId: '7', academyId: '1', firstGraduationDate: '2010-01-20', paymentStatus: 'paid', lastSeen: '2024-07-28', paymentHistory: [{id: 'p1', date: '2024-07-05', amount: 150}], paymentDueDateDay: 5 },
-  { id: '2', name: 'Hélio Gracie', email: 'helio@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=222.222.222-22', birthDate: '1992-07-20', cpf: '222.222.222-22', fjjpe_registration: 'FJJPE-002', phone: '5511999999992', address: 'Avenida Ippon, 456', beltId: '5', academyId: '1', firstGraduationDate: '2012-03-10', paymentStatus: 'unpaid', lastSeen: '2024-07-27', paymentHistory: [{id: 'p2', date: '2024-06-05', amount: 150}], paymentDueDateDay: 10 },
-  { id: '3', name: 'Royce Gracie', email: 'royce@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=333.333.333-33', birthDate: '1995-01-30', cpf: '333.333.333-33', fjjpe_registration: 'FJJPE-003', phone: '5511999999993', address: 'Travessa da Luta, 789', beltId: '3', academyId: '2', firstGraduationDate: '2018-06-01', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 15 },
-  { id: '4', name: 'Rickson Gracie', email: 'rickson@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=444.444.444-44', birthDate: '1988-08-21', cpf: '444.444.444-44', fjjpe_registration: 'FJJPE-004', phone: '5511999999994', address: 'Alameda do Armlock, 101', beltId: '4', academyId: '2', firstGraduationDate: '2015-11-15', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 20 },
+  { id: '1', name: 'Carlos Gracie', email: 'carlos@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=111.111.111-11', birthDate: '1990-08-15', cpf: '111.111.111-11', fjjpe_registration: 'FJJPE-001', phone: '5511999999991', address: 'Rua do Tatame, 123', beltId: '7', academyId: '1', firstGraduationDate: '2010-01-20', lastPromotionDate: '2020-01-20', paymentStatus: 'paid', lastSeen: '2024-07-28', paymentHistory: [{id: 'p1', date: '2024-07-05', amount: 150}], paymentDueDateDay: 5, stripes: 4 },
+  { id: '2', name: 'Hélio Gracie', email: 'helio@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=222.222.222-22', birthDate: '1992-07-20', cpf: '222.222.222-22', fjjpe_registration: 'FJJPE-002', phone: '5511999999992', address: 'Avenida Ippon, 456', beltId: '5', academyId: '1', firstGraduationDate: '2012-03-10', lastPromotionDate: '2021-04-01', paymentStatus: 'paid', lastSeen: '2024-07-27', paymentHistory: [{id: 'p2', date: '2024-06-05', amount: 150}], paymentDueDateDay: 10, stripes: 4 },
+  { id: '3', name: 'Royce Gracie', email: 'royce@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=333.333.333-33', birthDate: '1995-01-30', cpf: '333.333.333-33', fjjpe_registration: 'FJJPE-003', phone: '5511999999993', address: 'Travessa da Luta, 789', beltId: '3', academyId: '2', firstGraduationDate: '2018-06-01', lastPromotionDate: '2023-08-01', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 15, stripes: 1 },
+  { id: '4', name: 'Rickson Gracie', email: 'rickson@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=444.444.444-44', birthDate: '1988-08-21', cpf: '444.444.444-44', fjjpe_registration: 'FJJPE-004', phone: '5511999999994', address: 'Alameda do Armlock, 101', beltId: '4', academyId: '2', firstGraduationDate: '2015-11-15', lastPromotionDate: '2022-01-15', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 20, stripes: 2 },
+  { id: '5', name: 'Criança Exemplo', email: 'kid@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=555.123.456-78', birthDate: '2014-07-15', cpf: '555.123.456-78', fjjpe_registration: 'FJJPE-005', phone: '5511999999995', address: 'Rua do Kimono, 123', beltId: '9', academyId: '1', firstGraduationDate: '2020-01-20', lastPromotionDate: '2022-08-15', paymentStatus: 'paid', lastSeen: '2024-07-28', paymentHistory: [{id: 'p5', date: '2024-07-05', amount: 150}], paymentDueDateDay: 5, stripes: 4 },
 ];
 
 let academies: Academy[] = [
@@ -42,6 +49,7 @@ let users: User[] = [
   { id: 'user-2', name: 'Hélio Gracie (Aluno)', email: 'helio@aluno.com', role: 'student', studentId: '2', academyId: '1' },
   { id: 'user-3', name: 'Royce Gracie (Aluno)', email: 'royce@aluno.com', role: 'student', studentId: '3', academyId: '2' },
   { id: 'user-4', name: 'Rickson Gracie (Aluno)', email: 'rickson@aluno.com', role: 'student', studentId: '4', academyId: '2' },
+  { id: 'user-5', name: 'Criança Exemplo (Aluno)', email: 'kid@aluno.com', role: 'student', studentId: '5', academyId: '1' },
 ];
 
 let news: NewsArticle[] = [
@@ -53,10 +61,20 @@ let attendanceRecords: AttendanceRecord[] = [
     { id: 'att1', studentId: '1', scheduleId: '1', date: '2024-07-29', status: 'present' },
     { id: 'att2', studentId: '1', scheduleId: '4', date: '2024-07-26', status: 'present' },
     { id: 'att3', studentId: '1', scheduleId: '1', date: '2024-07-22', status: 'absent' },
-    { id: 'att4', studentId: '1', scheduleId: '4', date: '2024-07-19', status: 'present' },
-    { id: 'att5', studentId: '1', scheduleId: '1', date: '2024-07-15', status: 'present' },
-    { id: 'att6', studentId: '2', scheduleId: '1', date: '2024-07-29', status: 'present' },
-    { id: 'att7', studentId: '2', scheduleId: '4', date: '2024-07-26', status: 'absent' },
+    { id: 'att_h1', studentId: '2', scheduleId: '1', date: '2024-07-29', status: 'present' },
+    { id: 'att_h2', studentId: '2', scheduleId: '4', date: '2024-07-26', status: 'present' },
+    { id: 'att_h3', studentId: '2', scheduleId: '1', date: '2024-07-22', status: 'present' },
+    { id: 'att_h4', studentId: '2', scheduleId: '4', date: '2024-07-19', status: 'present' },
+    { id: 'att_h5', studentId: '2', scheduleId: '1', date: '2024-07-15', status: 'absent' },
+    { id: 'att_h6', studentId: '2', scheduleId: '4', date: '2024-07-12', status: 'present' },
+    { id: 'att_h7', studentId: '2', scheduleId: '1', date: '2024-07-08', status: 'present' },
+    { id: 'att_h8', studentId: '2', scheduleId: '4', date: '2024-07-05', status: 'present' },
+    { id: 'att_h9', studentId: '2', scheduleId: '1', date: '2024-07-01', status: 'present' },
+    { id: 'att_c1', studentId: '5', scheduleId: '2', date: '2024-07-30', status: 'present' },
+    { id: 'att_c2', studentId: '5', scheduleId: '2', date: '2024-07-23', status: 'present' },
+    { id: 'att_c3', studentId: '5', scheduleId: '2', date: '2024-07-16', status: 'present' },
+    { id: 'att_c4', studentId: '5', scheduleId: '2', date: '2024-07-09', status: 'present' },
+    { id: 'att_c5', studentId: '5', scheduleId: '2', date: '2024-07-02', status: 'absent' },
 ];
 
 let activityLogs: ActivityLog[] = [
@@ -170,7 +188,31 @@ export const api = {
         }
 
         const updatedStudent = { ...existingStudent, ...studentWithPassword };
-        students[studentIndex] = updatedStudent;
+        students = students.map((s, i) => i === studentIndex ? updatedStudent : s);
+        
+        if (updatedStudent.beltId !== existingStudent.beltId) {
+            const newBelt = graduations.find(g => g.id === updatedStudent.beltId);
+            logActivity(actorId || 'system', 'Promoção de Faixa', `${actor?.name || 'Sistema'} promoveu ${updatedStudent.name} para a faixa ${newBelt?.name}.`);
+            
+            // Auto-promote to professor on black belt
+            if (newBelt?.name === 'Preta') {
+                const existingProfessor = professors.find(p => p.cpf === updatedStudent.cpf);
+                if (!existingProfessor) {
+                    const newProfessor: Professor = {
+                        id: `prof-${updatedStudent.id}`,
+                        name: updatedStudent.name,
+                        fjjpe_registration: updatedStudent.fjjpe_registration,
+                        cpf: updatedStudent.cpf,
+                        academyId: updatedStudent.academyId,
+                        graduationId: updatedStudent.beltId,
+                        imageUrl: updatedStudent.imageUrl,
+                        blackBeltDate: new Date().toISOString().split('T')[0],
+                    };
+                    professors.push(newProfessor);
+                    logActivity(actorId || 'system', 'Promoção a Professor', `${updatedStudent.name} foi automaticamente promovido a professor ao atingir a faixa preta.`);
+                }
+            }
+        }
 
         // Update corresponding user record
         const userIndex = users.findIndex(u => u.studentId === student.id);
@@ -179,7 +221,9 @@ export const api = {
             users[userIndex].email = student.email;
         }
 
-        if (actor) logActivity(actorId, 'Atualização de Aluno', `${actor.name} atualizou os dados de ${student.name}.`);
+        if (actor && updatedStudent.beltId === existingStudent.beltId) {
+            logActivity(actorId, 'Atualização de Aluno', `${actor.name} atualizou os dados de ${student.name}.`);
+        }
         return simulateDelay(updatedStudent);
 
     } else { // Creating new student
@@ -191,7 +235,8 @@ export const api = {
             paymentHistory: [],
             fjjpe_registration: student.fjjpe_registration || `FJJPE-${Math.floor(Math.random() * 1000)}`,
             paymentDueDateDay: student.paymentDueDateDay || 10,
-            password: student.password || '123'
+            password: student.password || '123',
+            stripes: student.stripes || 0,
         };
         students.push(newStudent);
 

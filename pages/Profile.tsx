@@ -70,6 +70,7 @@ const ProfilePage: React.FC = () => {
                         <p><strong>Telefone:</strong> {studentData.phone}</p>
                         <p><strong>Endereço:</strong> {studentData.address}</p>
                         <p><strong>Tempo de Treino:</strong> {trainingTime}</p>
+                        <p><strong>Vencimento da Mensalidade:</strong> Dia {studentData.paymentDueDateDay} de cada mês</p>
                          <p><strong>Status Financeiro:</strong> 
                             <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${studentData.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                 {studentData.paymentStatus === 'paid' ? 'Em Dia' : 'Inadimplente'}

@@ -1,6 +1,8 @@
+
+
 import React, { useState, useContext, FormEvent, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
-import { Student } from '../types';
+import { Student, Graduation } from '../types';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -50,7 +52,9 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
         beltId: '',
         academyId: '',
         firstGraduationDate: '',
+        lastPromotionDate: '',
         paymentDueDateDay: 10,
+        stripes: 0,
         ...student,
     });
     const [cpfError, setCpfError] = useState('');
@@ -69,7 +73,7 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
 
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
-        if (!validateCPF(formData.cpf)) {
+        if (formData.cpf && !validateCPF(formData.cpf)) {
             setCpfError('Por favor, insira um CPF válido.');
             return;
         }
@@ -101,7 +105,7 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
                 <label className="block text-sm font-medium text-slate-700 mb-1">Graduação (Faixa)</label>
                 <select name="beltId" value={formData.beltId} onChange={handleChange} required className="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-md px-3 py-2 focus:ring-amber-500 focus:border-amber-500">
                     <option value="">Selecione a Graduação</option>
-                    {graduations.map(grad => <option key={grad.id} value={grad.id}>{grad.name}</option>)}
+                    {graduations.sort((a,b) => a.rank - b.rank).map(grad => <option key={grad.id} value={grad.id}>{grad.name}</option>)}
                 </select>
             </div>
              <div>
@@ -112,7 +116,9 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
                 </select>
             </div>
             <Input label="Data da Primeira Graduação" name="firstGraduationDate" type="date" value={formData.firstGraduationDate} onChange={handleChange} required />
+            <Input label="Data da Última Promoção" name="lastPromotionDate" type="date" value={formData.lastPromotionDate} onChange={handleChange} />
             <Input label="Dia do Vencimento da Mensalidade" name="paymentDueDateDay" type="number" min="1" max="31" value={formData.paymentDueDateDay} onChange={handleChange} required />
+            <Input label="Graus na Faixa" name="stripes" type="number" min="0" max="9" value={formData.stripes} onChange={handleChange} />
 
             <div className="flex justify-end gap-4 pt-4">
                 <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
@@ -178,6 +184,18 @@ const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({ student, onSave, on
 };
 
 
+const calculateAge = (birthDate: string): number => {
+    if (!birthDate) return 0;
+    const today = new Date();
+    const birthDateObj = new Date(birthDate);
+    let age = today.getFullYear() - birthDateObj.getFullYear();
+    const m = today.getMonth() - birthDateObj.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDateObj.getDate())) {
+        age--;
+    }
+    return age;
+};
+
 const StudentsPage: React.FC = () => {
     const { students, academies, saveStudent, deleteStudent, loading, graduations, attendanceRecords } = useContext(AppContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -185,41 +203,142 @@ const StudentsPage: React.FC = () => {
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const [studentForPhoto, setStudentForPhoto] = useState<Student | null>(null);
     const [dashboardStudent, setDashboardStudent] = useState<Student | null>(null);
+    const [activeTab, setActiveTab] = useState<'adults' | 'kids'>('adults');
 
-    const studentStripeData = useMemo(() => {
-        const data = new Map<string, { stripes: number }>();
-        students.forEach(student => {
-            if (!student.firstGraduationDate) {
-                data.set(student.id, { stripes: 0 });
-                return;
+    const eligibilityData = useMemo(() => {
+        const data = new Map<string, { eligible: boolean; nextBelt: Graduation | null; reason: string }>();
+        if (!students.length || !graduations.length) return data;
+        
+        const sortedGraduations = [...graduations].sort((a, b) => a.rank - b.rank);
+
+        for (const student of students) {
+            const currentBelt = sortedGraduations.find(g => g.id === student.beltId);
+            if (!currentBelt) {
+                data.set(student.id, { eligible: false, nextBelt: null, reason: "Faixa atual não encontrada." });
+                continue;
             }
 
-            const firstGradDate = new Date(student.firstGraduationDate);
-            const today = new Date();
-            const diffTime = today.getTime() - firstGradDate.getTime();
-            const diffDays = diffTime / (1000 * 3600 * 24);
-            const totalMonths = Math.floor(diffDays / 30.44);
-
-            const potentialStripes = Math.min(Math.floor(totalMonths / 6), 4);
-
-            const studentRecords = attendanceRecords.filter(r => r.studentId === student.id);
-            if (studentRecords.length === 0) {
-                data.set(student.id, { stripes: 0 });
-                return;
+            const nextBelt = sortedGraduations.find(g => g.rank > currentBelt.rank);
+            if (!nextBelt) {
+                data.set(student.id, { eligible: false, nextBelt: null, reason: "Graduação máxima atingida." });
+                continue;
             }
 
-            const presentCount = studentRecords.filter(r => r.status === 'present').length;
-            const attendancePercentage = (presentCount / studentRecords.length) * 100;
-
-            if (attendancePercentage >= 70) {
-                data.set(student.id, { stripes: potentialStripes });
-            } else {
-                data.set(student.id, { stripes: 0 });
+            const promotionDate = student.lastPromotionDate || student.firstGraduationDate;
+            if (!promotionDate) {
+                 data.set(student.id, { eligible: false, nextBelt, reason: "Data de promoção não encontrada." });
+                continue;
             }
-        });
+
+            const promotionDateObj = new Date(promotionDate);
+            const now = new Date();
+            const monthsSincePromotion = (now.getFullYear() - promotionDateObj.getFullYear()) * 12 + (now.getMonth() - promotionDateObj.getMonth());
+            
+            const age = calculateAge(student.birthDate);
+
+            // Kids' belt logic
+            if (currentBelt.type === 'kids') {
+                const adultBlueBelt = sortedGraduations.find(g => g.name === 'Azul' && g.type === 'adult');
+                if (currentBelt.name === 'Verde' && age >= 16 && adultBlueBelt) {
+                    data.set(student.id, { eligible: true, nextBelt: adultBlueBelt, reason: `Atingiu 16 anos na faixa verde.` });
+                    continue;
+                }
+                
+                if (nextBelt.type === 'kids' && nextBelt.minAge && age >= nextBelt.minAge) {
+                    data.set(student.id, { eligible: true, nextBelt, reason: `Atingiu a idade mínima de ${nextBelt.minAge} anos.` });
+                    continue;
+                }
+                data.set(student.id, { eligible: false, nextBelt, reason: `Idade insuficiente (${age} anos).` });
+                continue; // End kids logic
+            }
+            
+            // Adult belt logic
+            if (currentBelt.type === 'adult') {
+                const relevantRecords = attendanceRecords.filter(r => r.studentId === student.id && new Date(r.date) >= new Date(promotionDate));
+                const presentCount = relevantRecords.filter(r => r.status === 'present').length;
+                const totalRecords = relevantRecords.length;
+                const frequency = totalRecords > 0 ? (presentCount / totalRecords) * 100 : 0;
+                
+                if (frequency <= 70) {
+                    data.set(student.id, { eligible: false, nextBelt, reason: `Requer >70% de frequência (atualmente ${Math.round(frequency)}%).` });
+                    continue;
+                }
+
+                // Black Belt to Coral
+                if (currentBelt.name === 'Preta') {
+                    if (student.stripes < 6) {
+                        data.set(student.id, { eligible: false, nextBelt, reason: `Requer 6 graus na faixa preta (atualmente ${student.stripes}).` });
+                        continue;
+                    }
+                    if (monthsSincePromotion >= 84) { // 7 years
+                        data.set(student.id, { eligible: true, nextBelt, reason: `Cumpriu 7 anos como 6º grau.` });
+                        continue;
+                    }
+                    data.set(student.id, { eligible: false, nextBelt, reason: `Requer 7 anos (84 meses) como 6º grau (atualmente ${monthsSincePromotion} meses).` });
+                    continue;
+                }
+
+                // Coral Belt to Red
+                if (currentBelt.name === 'Coral') {
+                     if (student.stripes < 8) {
+                        data.set(student.id, { eligible: false, nextBelt, reason: `Requer 8 graus na faixa coral (atualmente ${student.stripes}).` });
+                        continue;
+                    }
+                     if (monthsSincePromotion >= 120) { // 10 years
+                        data.set(student.id, { eligible: true, nextBelt, reason: `Cumpriu 10 anos como 8º grau.` });
+                        continue;
+                    }
+                    data.set(student.id, { eligible: false, nextBelt, reason: `Requer 10 anos (120 meses) como 8º grau (atualmente ${monthsSincePromotion} meses).` });
+                    continue;
+                }
+
+                // Standard adult belts (White, Blue, Purple, Brown)
+                if (student.stripes < 4) {
+                    data.set(student.id, { eligible: false, nextBelt, reason: `Requer 4 graus (atualmente ${student.stripes}).` });
+                    continue;
+                }
+
+                if (monthsSincePromotion >= currentBelt.minTimeInMonths) {
+                    data.set(student.id, { eligible: true, nextBelt, reason: `Cumpriu o tempo mínimo na faixa.` });
+                    continue;
+                }
+                data.set(student.id, { eligible: false, nextBelt, reason: `Requer ${currentBelt.minTimeInMonths} meses na faixa (atualmente ${monthsSincePromotion}).` });
+                continue;
+            }
+        }
         return data;
-    }, [students, attendanceRecords]);
+    }, [students, graduations, attendanceRecords]);
 
+    const filteredStudents = useMemo(() => {
+        if (activeTab === 'adults') {
+            return students.filter(student => calculateAge(student.birthDate) >= 16);
+        }
+        return students.filter(student => calculateAge(student.birthDate) < 16);
+    }, [students, activeTab]);
+
+
+    const handlePromoteStudent = async (studentId: string) => {
+        const student = students.find(s => s.id === studentId);
+        const eligibility = eligibilityData.get(studentId);
+        
+        if (!student || !eligibility || !eligibility.eligible || !eligibility.nextBelt) {
+            alert('Este aluno não está elegível para promoção.');
+            return;
+        }
+
+        if (window.confirm(`Promover ${student.name} para a faixa ${eligibility.nextBelt.name}?`)) {
+            // Destructure to remove fields that should not be passed to saveStudent and to keep the existing password
+            const { paymentStatus, lastSeen, paymentHistory, password, ...studentToSave } = student;
+            
+            const promotedStudentData = {
+                ...studentToSave,
+                beltId: eligibility.nextBelt.id,
+                stripes: 0, // Always reset stripes to 0 upon promotion
+                lastPromotionDate: new Date().toISOString().split('T')[0],
+            };
+            await saveStudent(promotedStudentData);
+        }
+    };
 
     const handleOpenModal = (student: Partial<Student> | null = null) => {
         setSelectedStudent(student);
@@ -253,9 +372,9 @@ const StudentsPage: React.FC = () => {
     };
     
     const handleSavePhoto = async (studentToUpdate: Student, newImageUrl: string) => {
-        const { id, name, email, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay } = studentToUpdate;
+        const { id, name, email, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay, stripes, lastPromotionDate } = studentToUpdate;
         await saveStudent({
-            id, name, email, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay,
+            id, name, email, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay, stripes, lastPromotionDate,
             imageUrl: newImageUrl
         });
         handleClosePhotoModal();
@@ -267,18 +386,44 @@ const StudentsPage: React.FC = () => {
                 <h1 className="text-3xl font-bold text-slate-800">Alunos</h1>
                 <Button onClick={() => handleOpenModal({})}>Adicionar Aluno</Button>
             </div>
+
+            <div className="border-b border-slate-200">
+                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button
+                        onClick={() => setActiveTab('adults')}
+                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                            activeTab === 'adults'
+                                ? 'border-amber-500 text-amber-600'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                        }`}
+                    >
+                        Adultos ({students.filter(s => calculateAge(s.birthDate) >= 16).length})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('kids')}
+                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                            activeTab === 'kids'
+                                ? 'border-amber-500 text-amber-600'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                        }`}
+                    >
+                        Infantil/Infanto Juvenil ({students.filter(s => calculateAge(s.birthDate) < 16).length})
+                    </button>
+                </nav>
+            </div>
             
             {loading ? (
                 <div className="text-center p-4">Carregando...</div>
             ) : (
                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {students.map(student => {
+                    {filteredStudents.length > 0 ? filteredStudents.map(student => {
                         const belt = graduations.find(g => g.id === student.beltId);
                         const academy = academies.find(a => a.id === student.academyId);
-                        const { stripes } = studentStripeData.get(student.id) || { stripes: 0 };
+                        const stripes = student.stripes;
+                        const eligibility = eligibilityData.get(student.id);
                         
                         return (
-                            <Card key={student.id} className="p-0 flex flex-col overflow-hidden transition-transform duration-200 hover:-translate-y-1 w-[328px] h-[435px]">
+                            <Card key={student.id} className="p-0 flex flex-col overflow-hidden transition-transform duration-200 hover:-translate-y-1 w-[328px]">
                                 <div className="h-2" style={{ backgroundColor: belt?.color || '#e2e8f0' }}></div>
                                 <div className="p-5 flex flex-col flex-grow">
                                     <div className="flex items-center mb-4">
@@ -315,6 +460,10 @@ const StudentsPage: React.FC = () => {
                                             </div>
                                         )}
                                         <div className="flex justify-between items-center">
+                                            <span className="text-slate-600 font-medium">Idade:</span>
+                                            <span className="font-medium text-slate-700">{calculateAge(student.birthDate)} anos</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
                                             <span className="text-slate-600 font-medium">Registro:</span>
                                             <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{student.fjjpe_registration}</span>
                                         </div>
@@ -338,6 +487,17 @@ const StudentsPage: React.FC = () => {
                                                 </div>
                                             </div>
                                         </div>
+                                        
+                                        {eligibility && eligibility.eligible && eligibility.nextBelt && (
+                                            <div className="mt-4 p-3 bg-green-100 rounded-lg text-center border border-green-200">
+                                                <p className="font-bold text-green-800">Elegível para {eligibility.nextBelt.name}!</p>
+                                                <p className="text-xs text-green-700">{eligibility.reason}</p>
+                                                <Button size="sm" variant="success" className="w-full mt-2" onClick={() => handlePromoteStudent(student.id)}>
+                                                    Promover Aluno
+                                                </Button>
+                                            </div>
+                                        )}
+
                                         <div className="mt-4 pt-4 border-t border-slate-200/60 flex justify-end gap-2">
                                             <Button size="sm" variant="secondary" onClick={() => setDashboardStudent(student)}>Dashboard</Button>
                                             <Button size="sm" variant="secondary" onClick={() => handleOpenModal(student)}>Editar</Button>
@@ -347,7 +507,11 @@ const StudentsPage: React.FC = () => {
                                 </div>
                             </Card>
                         );
-                    })}
+                    }) : (
+                        <div className="col-span-full text-center py-10 text-slate-500">
+                            <p>Nenhum aluno encontrado nesta categoria.</p>
+                        </div>
+                    )}
                 </div>
             )}
 

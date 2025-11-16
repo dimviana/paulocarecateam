@@ -1,3 +1,4 @@
+
 import React, { useContext, useMemo, useState } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Student } from '../types';
@@ -22,6 +23,17 @@ const calculateTrainingTime = (startDateString?: string): { years: number; month
   return { years, months, totalMonths: years * 12 + months };
 };
 
+const calculateAge = (birthDate: string): number => {
+    const today = new Date();
+    const birthDateObj = new Date(birthDate);
+    let age = today.getFullYear() - birthDateObj.getFullYear();
+    const m = today.getMonth() - birthDateObj.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDateObj.getDate())) {
+        age--;
+    }
+    return age;
+};
+
 const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string | React.ReactNode; color: string }> = ({ icon, title, value, color }) => (
   <Card className="flex items-center p-5">
     <div className={`p-3 rounded-lg mr-4`} style={{ backgroundColor: `${color}1A`}}>
@@ -39,7 +51,7 @@ interface StudentDashboardProps {
 }
 
 const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentProp }) => {
-    const { user, students, graduations, schedules, attendanceRecords, loading, themeSettings, updateStudentPayment } = useContext(AppContext);
+    const { user, students, graduations, schedules, loading, themeSettings, updateStudentPayment } = useContext(AppContext);
 
     const [showPaymentForm, setShowPaymentForm] = useState(false);
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -55,17 +67,24 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentPro
     const { totalMonths: trainingMonths } = calculateTrainingTime(studentData?.firstGraduationDate);
 
     const timeToNextGrad = useMemo(() => {
-        if (!graduation || !nextGraduation) return null;
+        if (!studentData || !graduation || !nextGraduation) return "Parabéns!";
+
+        const age = calculateAge(studentData.birthDate);
+        
+        // Kids' system logic
+        if (age < 16 && graduation.type === 'kids' && nextGraduation.minAge) {
+            if (age >= nextGraduation.minAge) {
+                return "Já tem idade!";
+            }
+            return `Elegível aos ${nextGraduation.minAge} anos`;
+        }
+        
+        // Adult system logic (existing)
         const timeNeeded = graduation.minTimeInMonths;
+        if (timeNeeded === 0) return "N/A"; // e.g. for white belt
         const timeRemaining = Math.max(0, timeNeeded - (trainingMonths % timeNeeded));
         return `${timeRemaining} meses`;
-    }, [graduation, nextGraduation, trainingMonths]);
-    
-    const stripes = useMemo(() => {
-        if (!graduation || graduation.minTimeInMonths <= 0) return 0;
-        const monthsInCurrentBelt = trainingMonths % graduation.minTimeInMonths;
-        return Math.min(Math.floor(monthsInCurrentBelt / 6), 4);
-    }, [trainingMonths, graduation]);
+    }, [graduation, nextGraduation, trainingMonths, studentData]);
     
     const studentSchedules = useMemo(() => {
       if (!studentData) return [];
@@ -82,6 +101,30 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentPro
       }
       return upcoming.slice(0, 5);
     }, [schedules, studentData]);
+
+    const shouldShowPaymentButton = useMemo(() => {
+        if (!studentData || studentData.paymentStatus !== 'unpaid') {
+            return false;
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dueDateDay = studentData.paymentDueDateDay;
+
+        const dueDateThisMonth = new Date(today.getFullYear(), today.getMonth(), dueDateDay);
+        const isOverdue = today > dueDateThisMonth;
+        
+        let upcomingDueDate = new Date(today.getFullYear(), today.getMonth(), dueDateDay);
+        if (today.getDate() > dueDateDay) {
+            upcomingDueDate.setMonth(upcomingDueDate.getMonth() + 1);
+        }
+        
+        const timeDiff = upcomingDueDate.getTime() - today.getTime();
+        const daysUntilDue = Math.ceil(timeDiff / (1000 * 3600 * 24));
+        const isReminderPeriod = daysUntilDue <= 5;
+
+        return isOverdue || isReminderPeriod;
+    }, [studentData]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -113,6 +156,8 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentPro
         return <div className="text-center">Carregando seus dados...</div>;
     }
 
+    const stripes = studentData.stripes;
+
     return (
         <div className="space-y-6">
             {!studentProp && (
@@ -139,7 +184,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentPro
                                 )}
                             </div>
                         </div>
-                        {studentData.paymentStatus === 'unpaid' && !studentProp && !showPaymentForm && !paymentSuccess && (
+                        {shouldShowPaymentButton && !studentProp && !showPaymentForm && !paymentSuccess && (
                             <Button size="sm" onClick={() => setShowPaymentForm(true)}>Pagar Agora</Button>
                         )}
                     </div>
@@ -172,7 +217,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentPro
                     )}
                 </Card>
                 <StatCard icon={<IconCalendar/>} title="Tempo de Treino" color="#3B82F6" value={`${Math.floor(trainingMonths/12)} anos e ${trainingMonths%12} meses`} />
-                <StatCard icon={<IconAward/>} title="Próxima Graduação" color="#F59E0B" value={timeToNextGrad || "Parabéns!"} />
+                <StatCard icon={<IconAward/>} title="Próxima Graduação" color="#F59E0B" value={timeToNextGrad} />
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
