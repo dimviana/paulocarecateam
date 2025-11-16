@@ -1,3 +1,4 @@
+
 export interface Graduation {
   id: string;
   name: string;
@@ -29,6 +30,8 @@ export interface Payment {
 export interface Student {
   id: string;
   name: string;
+  email: string;
+  password?: string;
   birthDate: string;
   cpf: string;
   fjjpe_registration: string;

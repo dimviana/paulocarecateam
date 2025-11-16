@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface ModalProps {
@@ -6,15 +5,25 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  size?: 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl';
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'lg' }) => {
   if (!isOpen) return null;
+
+  const sizeClasses = {
+    md: 'max-w-md',
+    lg: 'max-w-lg',
+    xl: 'max-w-xl',
+    '2xl': 'max-w-2xl',
+    '3xl': 'max-w-3xl',
+    '4xl': 'max-w-4xl',
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm" onClick={onClose}>
         <div 
-            className="bg-white rounded-xl shadow-xl w-full max-w-lg m-4 text-slate-800 transform transition-all duration-300 scale-95 opacity-0 animate-fade-in-scale" 
+            className={`bg-white rounded-xl shadow-xl w-full ${sizeClasses[size]} m-4 text-slate-800 transform transition-all duration-300 scale-95 opacity-0 animate-fade-in-scale`} 
             onClick={(e) => e.stopPropagation()}
             style={{animation: 'fade-in-scale 0.3s forwards'}}
         >

@@ -6,6 +6,28 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
 
+const validateCPF = (cpf: string): boolean => {
+    if (typeof cpf !== 'string') return false;
+    cpf = cpf.replace(/[^\d]+/g, '');
+    if (cpf.length !== 11 || !!cpf.match(/(\d)\1{10}/)) return false;
+
+    const digits = cpf.split('').map(el => +el);
+
+    const rest = (count: number): number => {
+        let sum = 0;
+        for (let i = 0; i < count; i++) {
+        sum += digits[i] * (count + 1 - i);
+        }
+        const remainder = sum % 11;
+        return remainder < 2 ? 0 : 11 - remainder;
+    };
+
+    if (rest(9) !== digits[9]) return false;
+    if (rest(10) !== digits[10]) return false;
+
+    return true;
+};
+
 // Form component
 interface ProfessorFormProps {
   professor: Partial<Professor> | null;
@@ -23,14 +45,26 @@ const ProfessorForm: React.FC<ProfessorFormProps> = ({ professor, onSave, onClos
     graduationId: '',
     ...professor,
   });
+  const [cpfError, setCpfError] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    if (name === 'cpf') {
+        if (value && !validateCPF(value)) {
+            setCpfError('CPF inválido');
+        } else {
+            setCpfError('');
+        }
+    }
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+    if (!validateCPF(formData.cpf)) {
+        setCpfError('Por favor, insira um CPF válido.');
+        return;
+    }
     onSave(formData as any);
   };
 
@@ -40,7 +74,10 @@ const ProfessorForm: React.FC<ProfessorFormProps> = ({ professor, onSave, onClos
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input label="Nome do Professor" name="name" value={formData.name} onChange={handleChange} required />
       <Input label="Registro FJJPE" name="fjjpe_registration" value={formData.fjjpe_registration} onChange={handleChange} required />
-      <Input label="CPF" name="cpf" value={formData.cpf} onChange={handleChange} required />
+      <div>
+        <Input label="CPF" name="cpf" value={formData.cpf} onChange={handleChange} required />
+        {cpfError && <p className="text-sm text-red-500 mt-1">{cpfError}</p>}
+      </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Academia</label>
         <select name="academyId" value={formData.academyId} onChange={handleChange} required className={selectStyles}>
@@ -57,7 +94,7 @@ const ProfessorForm: React.FC<ProfessorFormProps> = ({ professor, onSave, onClos
       </div>
       <div className="flex justify-end gap-4 pt-4">
         <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
-        <Button type="submit">Salvar</Button>
+        <Button type="submit" disabled={!!cpfError}>Salvar</Button>
       </div>
     </form>
   );

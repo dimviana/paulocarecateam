@@ -1,3 +1,4 @@
+
 import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Payment, AttendanceRecord, Professor, ActivityLog } from '../types';
 
 let graduations: Graduation[] = [
@@ -18,10 +19,10 @@ let schedules: ClassSchedule[] = [
 ];
 
 let students: Student[] = [
-  { id: '1', name: 'Carlos Gracie', imageUrl: 'https://i.pravatar.cc/150?u=111.111.111-11', birthDate: '1990-08-15', cpf: '111.111.111-11', fjjpe_registration: 'FJJPE-001', phone: '5511999999991', address: 'Rua do Tatame, 123', beltId: '7', academyId: '1', firstGraduationDate: '2010-01-20', paymentStatus: 'paid', lastSeen: '2024-07-28', paymentHistory: [{id: 'p1', date: '2024-07-05', amount: 150}], paymentDueDateDay: 5 },
-  { id: '2', name: 'Hélio Gracie', imageUrl: 'https://i.pravatar.cc/150?u=222.222.222-22', birthDate: '1992-07-20', cpf: '222.222.222-22', fjjpe_registration: 'FJJPE-002', phone: '5511999999992', address: 'Avenida Ippon, 456', beltId: '5', academyId: '1', firstGraduationDate: '2012-03-10', paymentStatus: 'unpaid', lastSeen: '2024-07-27', paymentHistory: [{id: 'p2', date: '2024-06-05', amount: 150}], paymentDueDateDay: 10 },
-  { id: '3', name: 'Royce Gracie', imageUrl: 'https://i.pravatar.cc/150?u=333.333.333-33', birthDate: '1995-01-30', cpf: '333.333.333-33', fjjpe_registration: 'FJJPE-003', phone: '5511999999993', address: 'Travessa da Luta, 789', beltId: '3', academyId: '2', firstGraduationDate: '2018-06-01', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 15 },
-  { id: '4', name: 'Rickson Gracie', imageUrl: 'https://i.pravatar.cc/150?u=444.444.444-44', birthDate: '1988-08-21', cpf: '444.444.444-44', fjjpe_registration: 'FJJPE-004', phone: '5511999999994', address: 'Alameda do Armlock, 101', beltId: '4', academyId: '2', firstGraduationDate: '2015-11-15', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 20 },
+  { id: '1', name: 'Carlos Gracie', email: 'carlos@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=111.111.111-11', birthDate: '1990-08-15', cpf: '111.111.111-11', fjjpe_registration: 'FJJPE-001', phone: '5511999999991', address: 'Rua do Tatame, 123', beltId: '7', academyId: '1', firstGraduationDate: '2010-01-20', paymentStatus: 'paid', lastSeen: '2024-07-28', paymentHistory: [{id: 'p1', date: '2024-07-05', amount: 150}], paymentDueDateDay: 5 },
+  { id: '2', name: 'Hélio Gracie', email: 'helio@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=222.222.222-22', birthDate: '1992-07-20', cpf: '222.222.222-22', fjjpe_registration: 'FJJPE-002', phone: '5511999999992', address: 'Avenida Ippon, 456', beltId: '5', academyId: '1', firstGraduationDate: '2012-03-10', paymentStatus: 'unpaid', lastSeen: '2024-07-27', paymentHistory: [{id: 'p2', date: '2024-06-05', amount: 150}], paymentDueDateDay: 10 },
+  { id: '3', name: 'Royce Gracie', email: 'royce@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=333.333.333-33', birthDate: '1995-01-30', cpf: '333.333.333-33', fjjpe_registration: 'FJJPE-003', phone: '5511999999993', address: 'Travessa da Luta, 789', beltId: '3', academyId: '2', firstGraduationDate: '2018-06-01', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 15 },
+  { id: '4', name: 'Rickson Gracie', email: 'rickson@aluno.com', password: '123', imageUrl: 'https://i.pravatar.cc/150?u=444.444.444-44', birthDate: '1988-08-21', cpf: '444.444.444-44', fjjpe_registration: 'FJJPE-004', phone: '5511999999994', address: 'Alameda do Armlock, 101', beltId: '4', academyId: '2', firstGraduationDate: '2015-11-15', paymentStatus: 'paid', lastSeen: '2024-07-29', paymentHistory: [], paymentDueDateDay: 20 },
 ];
 
 let academies: Academy[] = [
@@ -39,6 +40,9 @@ let users: User[] = [
   { id: '2', name: 'Admin Gracie', email: 'admin@gracie.com', role: 'academy_admin', academyId: '1', birthDate: '1988-05-25' },
   { id: '3', name: 'Admin Atos', email: 'admin@atos.com', role: 'academy_admin', academyId: '2' },
   { id: '4', name: 'Carlos Gracie (Aluno)', email: 'carlos@aluno.com', role: 'student', studentId: '1', academyId: '1' },
+  { id: 'user-2', name: 'Hélio Gracie (Aluno)', email: 'helio@aluno.com', role: 'student', studentId: '2', academyId: '1' },
+  { id: 'user-3', name: 'Royce Gracie (Aluno)', email: 'royce@aluno.com', role: 'student', studentId: '3', academyId: '2' },
+  { id: 'user-4', name: 'Rickson Gracie (Aluno)', email: 'rickson@aluno.com', role: 'student', studentId: '4', academyId: '2' },
 ];
 
 let news: NewsArticle[] = [
@@ -76,19 +80,29 @@ const logActivity = (actorId: string, action: string, details: string) => {
 };
 
 export const api = {
-  login: (email: string, pass: string): Promise<{ token: string | null }> => {
-    let user: User | undefined;
-    if (email === 'androiddiviana@gmail.com' && pass === 'dvsviana') {
-        user = users.find(u => u.email === email);
+  login: (emailOrCpf: string, pass: string): Promise<{ token: string | null }> => {
+    let userToLog: User | undefined;
+
+    // First, try to log in a student by email/cpf and password
+    const student = students.find(s => (s.email === emailOrCpf || s.cpf === emailOrCpf) && s.password === pass);
+
+    if (student) {
+        // If a student is found, find their corresponding user account
+        userToLog = users.find(u => u.studentId === student.id);
     } else {
-        user = users.find(u => u.email === email);
+        // If not a student, check for admin/professor accounts (mocking password check)
+        if (emailOrCpf === 'androiddiviana@gmail.com' && pass === 'dvsviana') {
+            userToLog = users.find(u => u.email === emailOrCpf);
+        } else {
+            // For other mock admins, just check email
+            userToLog = users.find(u => u.email === emailOrCpf && u.role !== 'student');
+        }
     }
     
-    if (user) {
-        logActivity(user.id, 'Login', `${user.name} realizou login.`);
-        // Simulate JWT generation. In a real app, this is done on the backend with a secret key.
+    if (userToLog) {
+        logActivity(userToLog.id, 'Login', `${userToLog.name} realizou login.`);
         const payload = {
-            userId: user.id,
+            userId: userToLog.id,
             iat: Date.now(),
             exp: Date.now() + 1000 * 60 * 60 * 24, // 24 hour expiration
         };
@@ -138,14 +152,32 @@ export const api = {
   
   saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }, actorId: string): Promise<Student> => {
     const actor = users.find(u => u.id === actorId);
-    if (student.id) {
-        let existingStudent = students.find(s => s.id === student.id);
-        if (!existingStudent) throw new Error("Student not found");
-        const updatedStudent = { ...existingStudent, ...student };
-        students = students.map(s => s.id === student.id ? updatedStudent : s);
+    if (student.id) { // Editing existing student
+        const studentIndex = students.findIndex(s => s.id === student.id);
+        if (studentIndex === -1) throw new Error("Student not found");
+
+        const existingStudent = students[studentIndex];
+        
+        // Keep old password if new one is empty or undefined
+        const studentWithPassword = { ...student };
+        if (!studentWithPassword.password) {
+            studentWithPassword.password = existingStudent.password;
+        }
+
+        const updatedStudent = { ...existingStudent, ...studentWithPassword };
+        students[studentIndex] = updatedStudent;
+
+        // Update corresponding user record
+        const userIndex = users.findIndex(u => u.studentId === student.id);
+        if (userIndex > -1) {
+            users[userIndex].name = `${student.name} (Aluno)`;
+            users[userIndex].email = student.email;
+        }
+
         if (actor) logActivity(actorId, 'Atualização de Aluno', `${actor.name} atualizou os dados de ${student.name}.`);
         return simulateDelay(updatedStudent);
-    } else {
+
+    } else { // Creating new student
         const newStudent: Student = {
             ...student,
             id: String(Date.now()),
@@ -154,8 +186,21 @@ export const api = {
             paymentHistory: [],
             fjjpe_registration: student.fjjpe_registration || `FJJPE-${Math.floor(Math.random() * 1000)}`,
             paymentDueDateDay: student.paymentDueDateDay || 10,
+            password: student.password || '123'
         };
         students.push(newStudent);
+
+        // Create a new user record for the student
+        const newUserForStudent: User = {
+            id: `user-${newStudent.id}`,
+            name: `${newStudent.name} (Aluno)`,
+            email: newStudent.email,
+            role: 'student',
+            studentId: newStudent.id,
+            academyId: newStudent.academyId,
+        };
+        users.push(newUserForStudent);
+
         if (actor) logActivity(actorId, 'Criação de Aluno', `${actor.name} cadastrou o novo aluno ${student.name}.`);
         return simulateDelay(newStudent);
     }
@@ -165,7 +210,11 @@ export const api = {
     const actor = users.find(u => u.id === actorId);
     const student = students.find(s => s.id === studentId);
     if (actor && student) logActivity(actorId, 'Exclusão de Aluno', `${actor.name} excluiu o aluno ${student.name}.`);
+    
+    // Also delete the corresponding user account
+    users = users.filter(u => u.studentId !== studentId);
     students = students.filter(s => s.id !== studentId);
+    
     return simulateDelay({ success: true });
   },
 

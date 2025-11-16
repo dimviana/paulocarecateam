@@ -1,4 +1,5 @@
 
+
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import Card from '../components/ui/Card';
@@ -7,6 +8,7 @@ import AttendanceChart from '../components/charts/AttendanceChart';
 import Button from '../components/ui/Button';
 import { IconUsers, IconBriefcase, IconBookOpen, IconChevronDown } from '../constants';
 import { DayOfWeek } from '../types';
+import StudentDashboard from './StudentDashboard';
 
 // --- Helper Functions ---
 const toYYYYMMDD = (date: Date) => date.toISOString().split('T')[0];
@@ -194,6 +196,11 @@ const Dashboard: React.FC = () => {
         return <div className="text-center">Carregando dados...</div>;
     }
     
+    // If user is a student, show the student-specific dashboard
+    if (user?.role === 'student') {
+        return <StudentDashboard />;
+    }
+
     const totalTeachers = users.filter(u => u.role !== 'student').length;
 
     const stats = [

@@ -5,6 +5,29 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
+import StudentDashboard from './StudentDashboard';
+
+const validateCPF = (cpf: string): boolean => {
+    if (typeof cpf !== 'string') return false;
+    cpf = cpf.replace(/[^\d]+/g, '');
+    if (cpf.length !== 11 || !!cpf.match(/(\d)\1{10}/)) return false;
+
+    const digits = cpf.split('').map(el => +el);
+
+    const rest = (count: number): number => {
+        let sum = 0;
+        for (let i = 0; i < count; i++) {
+        sum += digits[i] * (count + 1 - i);
+        }
+        const remainder = sum % 11;
+        return remainder < 2 ? 0 : 11 - remainder;
+    };
+
+    if (rest(9) !== digits[9]) return false;
+    if (rest(10) !== digits[10]) return false;
+
+    return true;
+};
 
 // Define StudentForm component inside the same file to avoid re-rendering issues and keep it self-contained.
 interface StudentFormProps {
@@ -17,6 +40,8 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
     const { academies, graduations } = useContext(AppContext);
     const [formData, setFormData] = useState({
         name: '',
+        email: '',
+        password: '',
         birthDate: '',
         cpf: '',
         fjjpe_registration: '',
@@ -28,23 +53,48 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
         paymentDueDateDay: 10,
         ...student,
     });
+    const [cpfError, setCpfError] = useState('');
     
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
+         if (name === 'cpf') {
+            if (value && !validateCPF(value)) {
+                setCpfError('CPF inválido');
+            } else {
+                setCpfError('');
+            }
+        }
         setFormData(prev => ({ ...prev, [name]: type === 'number' ? parseInt(value) || 0 : value }));
     };
 
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
+        if (!validateCPF(formData.cpf)) {
+            setCpfError('Por favor, insira um CPF válido.');
+            return;
+        }
         onSave(formData as any);
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <Input label="Nome" name="name" value={formData.name} onChange={handleChange} required />
+            <Input label="Email" name="email" type="email" value={formData.email} onChange={handleChange} required />
+            <Input 
+                label="Senha" 
+                name="password" 
+                type="password" 
+                value={formData.password} 
+                onChange={handleChange} 
+                placeholder={student?.id ? 'Deixe em branco para manter a atual' : ''}
+                required={!student?.id} 
+            />
             <Input label="Registro FJJPE" name="fjjpe_registration" value={formData.fjjpe_registration} onChange={handleChange} required />
             <Input label="Data de Nascimento" name="birthDate" type="date" value={formData.birthDate} onChange={handleChange} required />
-            <Input label="CPF" name="cpf" value={formData.cpf} onChange={handleChange} required />
+            <div>
+              <Input label="CPF" name="cpf" value={formData.cpf} onChange={handleChange} required />
+              {cpfError && <p className="text-sm text-red-500 mt-1">{cpfError}</p>}
+            </div>
             <Input label="Telefone" name="phone" value={formData.phone} onChange={handleChange} required />
             <Input label="Endereço" name="address" value={formData.address} onChange={handleChange} required />
             <div>
@@ -66,7 +116,7 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
 
             <div className="flex justify-end gap-4 pt-4">
                 <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
-                <Button type="submit">Salvar</Button>
+                <Button type="submit" disabled={!!cpfError}>Salvar</Button>
             </div>
         </form>
     );
@@ -134,6 +184,7 @@ const StudentsPage: React.FC = () => {
     const [selectedStudent, setSelectedStudent] = useState<Partial<Student> | null>(null);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const [studentForPhoto, setStudentForPhoto] = useState<Student | null>(null);
+    const [dashboardStudent, setDashboardStudent] = useState<Student | null>(null);
 
     const studentStripeData = useMemo(() => {
         const data = new Map<string, { stripes: number }>();
@@ -202,9 +253,9 @@ const StudentsPage: React.FC = () => {
     };
     
     const handleSavePhoto = async (studentToUpdate: Student, newImageUrl: string) => {
-        const { id, name, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay } = studentToUpdate;
+        const { id, name, email, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay } = studentToUpdate;
         await saveStudent({
-            id, name, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay,
+            id, name, email, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay,
             imageUrl: newImageUrl
         });
         handleClosePhotoModal();
@@ -288,6 +339,7 @@ const StudentsPage: React.FC = () => {
                                             </div>
                                         </div>
                                         <div className="mt-4 pt-4 border-t border-slate-200/60 flex justify-end gap-2">
+                                            <Button size="sm" variant="secondary" onClick={() => setDashboardStudent(student)}>Dashboard</Button>
                                             <Button size="sm" variant="secondary" onClick={() => handleOpenModal(student)}>Editar</Button>
                                             <Button size="sm" variant="danger" onClick={() => handleDeleteStudent(student.id)}>Excluir</Button>
                                         </div>
@@ -309,6 +361,17 @@ const StudentsPage: React.FC = () => {
                     onSave={handleSavePhoto}
                     onClose={handleClosePhotoModal}
                 />
+            )}
+
+            {dashboardStudent && (
+                <Modal 
+                    isOpen={!!dashboardStudent} 
+                    onClose={() => setDashboardStudent(null)} 
+                    title={`Dashboard de ${dashboardStudent.name}`}
+                    size="4xl"
+                >
+                    <StudentDashboard student={dashboardStudent} />
+                </Modal>
             )}
         </div>
     );

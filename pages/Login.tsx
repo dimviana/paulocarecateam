@@ -40,14 +40,14 @@ const Login: React.FC = () => {
             </div>
             <form className="mt-8 space-y-6" onSubmit={handleLogin}>
                 <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                    <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">Email ou CPF</label>
                     <input 
                         id="email"
-                        type="email"
+                        type="text"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
-                        placeholder="seu@email.com"
+                        placeholder="seu@email.com ou 123.456.789-00"
                         className="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-md px-3 py-2 focus:ring-amber-500 focus:border-amber-500 transition duration-150 ease-in-out placeholder:text-slate-400"
                     />
                 </div>
