@@ -1,0 +1,176 @@
+#!/bin/bash
+# ==============================================================================
+# Script de Implantação para Jiu-Jitsu Hub SAAS (com MySQL)
+#
+# Este script automatiza a configuração de um servidor para rodar a aplicação.
+# Ele instala dependências, configura o banco de dados MySQL, configura
+# o Nginx como proxy reverso na porta 3002 e inicia a aplicação com PM2.
+#
+# USO:
+# 1. Coloque este script e o arquivo `bancodedados.txt` na raiz do projeto.
+# 2. Dê permissão de execução: chmod +x deployct.txt
+# 3. Execute o script: ./deployct.txt
+# ==============================================================================
+
+# --- Configurações do Banco de Dados ---
+DBNAME="paulocarecateam"
+DBUSER="paulocarecateam"
+DBPASS="Fr35Aa4DkZ8KhEuq2asf"
+DBHOST="localhost" # O host do banco de dados é localhost
+DB_SCHEMA_FILE="bancodedados.txt"
+
+# --- Configurações da Aplicação ---
+APP_PORT="3001" # Porta interna em que o 'serve' rodará
+NGINX_PORT="3002" # Porta externa que o Nginx irá escutar
+APP_DOMAIN="paulocarecateam.abildeveloper.com.br"
+APP_DIR=$(pwd) # Assume que o script está na raiz do projeto
+
+# --- Funções Auxiliares ---
+check_command() {
+    command -v $1 >/dev/null 2>&1
+}
+
+echo "================================================="
+echo " INICIANDO A IMPLANTAÇÃO DO JIU-JITSU HUB SAAS (MySQL) "
+echo "================================================="
+
+# 1. ATUALIZAR O SISTEMA E VERIFICAR DEPENDÊNCIAS
+# ------------------------------------------------------------------------------
+echo -e "\n[ ETAPA 1/6 ] Atualizando o sistema e verificando dependências..."
+sudo apt-get update -y
+
+# Verificar MySQL
+if ! check_command mysql; then
+    echo "-> Instalando MySQL Server..."
+    sudo apt-get install mysql-server -y
+else
+    echo "-> MySQL já está instalado."
+fi
+
+# Verificar Nginx
+if ! check_command nginx; then
+    echo "-> Instalando Nginx..."
+    sudo apt-get install nginx -y
+else
+    echo "-> Nginx já está instalado."
+fi
+
+# Verificar Node.js e npm (necessários para 'serve' e 'pm2')
+if ! check_command node; then
+    echo "-> Instalando Node.js e npm..."
+    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+else
+    echo "-> Node.js já está instalado."
+fi
+
+# 2. CONFIGURAR O BANCO DE DADOS MYSQL
+# ------------------------------------------------------------------------------
+echo -e "\n[ ETAPA 2/6 ] Configurando o Banco de Dados MySQL..."
+# Executa os comandos SQL de forma não interativa para criar banco e usuário.
+# IF NOT EXISTS previne erros se o script for executado novamente.
+sudo mysql -u root <<EOF
+CREATE DATABASE IF NOT EXISTS $DBNAME;
+CREATE USER IF NOT EXISTS '$DBUSER'@'$DBHOST' IDENTIFIED BY '$DBPASS';
+GRANT ALL PRIVILEGES ON $DBNAME.* TO '$DBUSER'@'$DBHOST';
+FLUSH PRIVILEGES;
+EOF
+echo "-> Banco de dados e usuário configurados."
+
+# 3. IMPORTAR O ESQUEMA DO BANCO DE DADOS
+# ------------------------------------------------------------------------------
+echo -e "\n[ ETAPA 3/6 ] Importando o esquema do banco de dados..."
+if [ -f "$DB_SCHEMA_FILE" ]; then
+    # Conecta ao banco de dados e executa os comandos do arquivo de esquema
+    sudo mysql -u root $DBNAME < "$DB_SCHEMA_FILE"
+    echo "-> Esquema do banco de dados importado com sucesso."
+else
+    echo "-> AVISO: Arquivo '$DB_SCHEMA_FILE' não encontrado. O banco de dados permanecerá vazio."
+fi
+
+# 4. INSTALAR GERENCIADOR DE PROCESSO E SERVIDOR WEB
+# ------------------------------------------------------------------------------
+echo -e "\n[ ETAPA 4/6 ] Instalando PM2 e Serve via npm..."
+if ! check_command pm2; then
+    sudo npm install -g pm2
+else
+    echo "-> PM2 já está instalado."
+fi
+if ! check_command serve; then
+    sudo npm install -g serve
+else
+    echo "-> Serve já está instalado."
+fi
+
+# 5. CONFIGURAR O NGINX COMO PROXY REVERSO
+# ------------------------------------------------------------------------------
+echo -e "\n[ ETAPA 5/6 ] Configurando o Nginx para rodar na porta $NGINX_PORT..."
+NGINX_CONF_PATH="/etc/nginx/sites-available/$APP_DOMAIN"
+
+# Cria o arquivo de configuração do Nginx para o domínio
+# A diretiva 'listen' foi alterada para $NGINX_PORT para evitar conflitos com a porta 80
+sudo tee $NGINX_CONF_PATH > /dev/null <<EOF
+server {
+    listen $NGINX_PORT;
+    server_name $APP_DOMAIN;
+
+    access_log /var/log/nginx/$APP_DOMAIN.access.log;
+    error_log /var/log/nginx/$APP_DOMAIN.error.log;
+
+    location / {
+        proxy_pass http://localhost:$APP_PORT;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-NginX-Proxy true;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+EOF
+
+# Habilita o site criando um link simbólico (se ainda não existir)
+if [ ! -L "/etc/nginx/sites-enabled/$APP_DOMAIN" ]; then
+    sudo ln -s $NGINX_CONF_PATH /etc/nginx/sites-enabled/
+    echo "-> Configuração do site Nginx habilitada."
+fi
+
+# Testa a configuração do Nginx e reinicia o serviço para aplicar as mudanças
+sudo nginx -t
+if [ $? -eq 0 ]; then
+    echo "-> Configuração do Nginx válida. Reiniciando Nginx..."
+    sudo systemctl restart nginx
+else
+    echo "-> ERRO: Configuração do Nginx inválida. Verifique o arquivo $NGINX_CONF_PATH."
+    exit 1
+fi
+
+# 6. INICIAR A APLICAÇÃO COM PM2
+# ------------------------------------------------------------------------------
+echo -e "\n[ ETAPA 6/6 ] Iniciando a aplicação com PM2..."
+# O comando 'serve -s .' serve o diretório atual e é ideal para Single Page Applications (SPAs) como React.
+APP_COMMAND="serve -s . -l $APP_PORT"
+
+# Para e remove a instância antiga para garantir uma inicialização limpa
+pm2 stop "$DBNAME" 2>/dev/null || true
+pm2 delete "$DBNAME" 2>/dev/null || true
+
+# Inicia a nova instância da aplicação
+cd $APP_DIR && pm2 start "$APP_COMMAND" --name "$DBNAME"
+
+# Configura o PM2 para iniciar automaticamente no boot do sistema
+pm2 startup | sudo bash -
+pm2 save
+
+echo "========================================="
+echo "        IMPLANTAÇÃO CONCLUÍDA!         "
+echo "========================================="
+echo "Acesse a aplicação em: http://$APP_DOMAIN:$NGINX_PORT"
+echo "Para gerenciar a aplicação, use os comandos PM2:"
+echo "  - Ver logs:       pm2 logs $DBNAME"
+echo "  - Parar:          pm2 stop $DBNAME"
+echo "  - Reiniciar:      pm2 restart $DBNAME"
+echo "  - Status:         pm2 status"
+echo "========================================="

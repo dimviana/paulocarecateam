@@ -1,0 +1,203 @@
+-- Esquema do Banco de Dados para o Jiu-Jitsu Hub SAAS (MySQL)
+
+-- -----------------------------------------------------
+-- Tabela: academies
+-- Armazena informações sobre cada academia/filial.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS academies (
+    id VARCHAR(255) PRIMARY KEY, -- Identificador único da academia
+    name TEXT NOT NULL, -- Nome da academia
+    address TEXT, -- Endereço da academia
+    responsible TEXT, -- Nome do responsável pela academia
+    responsibleRegistration TEXT, -- CPF/CNPJ ou registro do responsável
+    professorId TEXT, -- FK para a tabela professors (professor principal)
+    imageUrl TEXT, -- URL da imagem/logo da academia
+    email VARCHAR(255) UNIQUE, -- Email de login para o admin da academia
+    password TEXT -- Senha de login (deve ser armazenada como hash)
+);
+
+-- -----------------------------------------------------
+-- Tabela: professors
+-- Armazena informações sobre os professores.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS professors (
+    id VARCHAR(255) PRIMARY KEY, -- Identificador único do professor
+    name TEXT NOT NULL, -- Nome completo do professor
+    fjjpe_registration TEXT, -- Número de registro na federação
+    cpf VARCHAR(255) UNIQUE, -- CPF do professor
+    academyId TEXT, -- FK para a tabela academies
+    graduationId TEXT, -- FK para a tabela graduations
+    imageUrl TEXT, -- URL da foto do professor
+    blackBeltDate DATE -- Data em que recebeu a faixa preta
+);
+
+-- -----------------------------------------------------
+-- Tabela: graduations
+-- Define o sistema de faixas (graduações) do Jiu-Jitsu.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS graduations (
+    id VARCHAR(255) PRIMARY KEY, -- Identificador único da graduação
+    name TEXT NOT NULL, -- Nome da faixa (ex: Branca, Azul, Preta)
+    color VARCHAR(255) NOT NULL, -- Cor em hexadecimal (ex: #FFFFFF)
+    minTimeInMonths INTEGER, -- Tempo mínimo em meses para a próxima graduação
+    `rank` INTEGER NOT NULL, -- Ordem hierárquica da faixa. `rank` é uma palavra reservada, então é escapada.
+    type VARCHAR(255) CHECK(type IN ('adult', 'kids')), -- Se é uma faixa de adulto ou infantil
+    minAge INTEGER, -- Idade mínima para faixas infantis
+    maxAge INTEGER -- Idade máxima para faixas infantis
+);
+
+-- -----------------------------------------------------
+-- Tabela: students
+-- Armazena os dados de todos os alunos.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS students (
+    id VARCHAR(255) PRIMARY KEY, -- Identificador único do aluno
+    name TEXT NOT NULL, -- Nome completo do aluno
+    email VARCHAR(255) UNIQUE, -- Email do aluno
+    password TEXT, -- Senha de login (deve ser armazenada como hash)
+    birthDate DATE, -- Data de nascimento
+    cpf VARCHAR(255) UNIQUE, -- CPF do aluno
+    fjjpe_registration TEXT, -- Número de registro na federação
+    phone TEXT, -- Telefone de contato
+    address TEXT, -- Endereço do aluno
+    beltId TEXT, -- FK para a tabela graduations (faixa atual)
+    academyId TEXT, -- FK para a tabela academies
+    firstGraduationDate DATE, -- Data da primeira graduação
+    lastPromotionDate DATE, -- Data da última promoção de faixa
+    paymentStatus VARCHAR(255) CHECK(paymentStatus IN ('paid', 'unpaid')), -- Status da mensalidade
+    paymentDueDateDay INTEGER, -- Dia do mês para vencimento da mensalidade
+    imageUrl TEXT, -- URL da foto do aluno
+    stripes INTEGER DEFAULT 0 -- Número de graus na faixa atual
+);
+
+-- -----------------------------------------------------
+-- Tabela: payment_history
+-- Armazena o histórico de pagamentos de cada aluno.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS payment_history (
+    id VARCHAR(255) PRIMARY KEY, -- Identificador único do pagamento
+    studentId TEXT, -- FK para a tabela students
+    `date` DATE NOT NULL, -- Data em que o pagamento foi efetuado. `date` é palavra reservada.
+    amount REAL NOT NULL -- Valor do pagamento
+);
+
+-- -----------------------------------------------------
+-- Tabela: class_schedules
+-- Define a grade de horários das aulas.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS class_schedules (
+    id VARCHAR(255) PRIMARY KEY, -- Identificador único do horário
+    className TEXT NOT NULL, -- Nome da turma/aula
+    dayOfWeek TEXT NOT NULL, -- Dia da semana
+    startTime TEXT NOT NULL, -- Horário de início
+    endTime TEXT NOT NULL, -- Horário de fim
+    professorId TEXT, -- FK para a tabela professors
+    academyId TEXT, -- FK para a tabela academies
+    requiredGraduationId TEXT -- FK para a tabela graduations (graduação mínima para participar)
+);
+
+-- -----------------------------------------------------
+-- Tabela: schedule_assistants
+-- Tabela de junção para múltiplos assistentes em uma aula.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS schedule_assistants (
+    scheduleId VARCHAR(255), -- FK para class_schedules
+    assistantId VARCHAR(255), -- FK para professors
+    PRIMARY KEY (scheduleId, assistantId)
+);
+
+-- -----------------------------------------------------
+-- Tabela: attendance_records
+-- Registra a frequência dos alunos nas aulas.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS attendance_records (
+    id VARCHAR(255) PRIMARY KEY, -- Identificador único do registro de frequência
+    studentId TEXT, -- FK para a tabela students
+    scheduleId TEXT, -- FK para a tabela class_schedules
+    `date` DATE NOT NULL, -- Data da aula. `date` é palavra reservada.
+    status VARCHAR(255) CHECK(status IN ('present', 'absent')) -- Status da presença
+);
+
+-- -----------------------------------------------------
+-- Tabela: users
+-- Armazena os usuários do sistema para controle de acesso.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS users (
+    id VARCHAR(255) PRIMARY KEY, -- Identificador único do usuário
+    name TEXT NOT NULL, -- Nome do usuário
+    email VARCHAR(255) UNIQUE, -- Email de login
+    `role` VARCHAR(255) CHECK(`role` IN ('general_admin', 'academy_admin', 'student')), -- Papel do usuário. `role` é palavra reservada.
+    academyId TEXT, -- FK para academies (se for admin de academia)
+    studentId TEXT, -- FK para students (se for aluno)
+    birthDate DATE -- Data de nascimento (para aniversariantes do dia)
+);
+
+-- -----------------------------------------------------
+-- Tabela: activity_logs
+-- Registra as ações importantes realizadas no sistema.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id VARCHAR(255) PRIMARY KEY, -- Identificador único do log
+    actorId TEXT, -- FK para a tabela users (quem realizou a ação)
+    action TEXT NOT NULL, -- Tipo de ação (ex: 'Login', 'Update Student')
+    `timestamp` DATETIME NOT NULL, -- Data e hora da ação. `timestamp` é palavra reservada.
+    details TEXT -- Descrição detalhada da ação
+);
+
+-- -----------------------------------------------------
+-- Tabela: news_articles
+-- Armazena notícias e comunicados.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS news_articles (
+    id VARCHAR(255) PRIMARY KEY, -- Identificador único da notícia
+    title TEXT NOT NULL, -- Título da notícia
+    content TEXT NOT NULL, -- Conteúdo da notícia
+    imageUrl TEXT, -- URL da imagem da notícia
+    `date` DATE NOT NULL -- Data de publicação. `date` é palavra reservada.
+);
+
+-- -----------------------------------------------------
+-- Tabela: theme_settings
+-- Armazena todas as configurações de personalização do sistema.
+-- Geralmente terá apenas uma linha.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS theme_settings (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT, -- Chave primária auto-incremento, mais idiomático para MySQL
+    logoUrl TEXT,
+    systemName TEXT,
+    primaryColor TEXT,
+    secondaryColor TEXT,
+    backgroundColor TEXT,
+    cardBackgroundColor TEXT,
+    buttonColor TEXT,
+    buttonTextColor TEXT,
+    iconColor TEXT,
+    chartColor1 TEXT,
+    chartColor2 TEXT,
+    useGradient BOOLEAN,
+    reminderDaysBeforeDue INTEGER,
+    overdueDaysAfterDue INTEGER,
+    theme TEXT,
+    monthlyFeeAmount REAL,
+    publicPageEnabled BOOLEAN,
+    heroHtml TEXT,
+    aboutHtml TEXT,
+    branchesHtml TEXT,
+    footerHtml TEXT,
+    customCss TEXT,
+    customJs TEXT,
+    jwtSecret TEXT,
+    socialLoginEnabled BOOLEAN,
+    googleClientId TEXT,
+    facebookAppId TEXT,
+    pixKey TEXT,
+    pixHolderName TEXT,
+    copyrightText TEXT,
+    systemVersion TEXT
+);
+
+-- Insere uma linha de configurações padrão se a tabela estiver vazia.
+-- A aplicação irá ler e atualizar esta linha.
+INSERT INTO theme_settings (id)
+SELECT 1
+WHERE NOT EXISTS (SELECT 1 FROM theme_settings WHERE id = 1);
