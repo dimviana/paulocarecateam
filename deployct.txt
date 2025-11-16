@@ -1,29 +1,34 @@
 #!/bin/bash
 # ==============================================================================
-# Script de Implantação para Jiu-Jitsu Hub SAAS (com MySQL)
+# Script de Implantação para Jiu-Jitsu Hub SAAS (com SSL)
 #
 # Este script automatiza a configuração de um servidor para rodar a aplicação.
-# Ele instala dependências, configura o banco de dados MySQL, configura
-# o Nginx como proxy reverso na porta 3002 e inicia a aplicação com PM2.
+# Instala dependências, clona/atualiza o repositório, configura MySQL, Nginx,
+# Certbot para SSL, e inicia a aplicação com PM2.
 #
 # USO:
-# 1. Coloque este script e o arquivo `bancodedados.txt` na raiz do projeto.
+# 1. Coloque este script em qualquer diretório no seu servidor (ex: /tmp).
 # 2. Dê permissão de execução: chmod +x deployct.txt
 # 3. Execute o script: ./deployct.txt
+#
+# O script irá criar o diretório de destino, clonar o repositório do GitHub
+# e configurar todo o ambiente automaticamente.
 # ==============================================================================
 
 # --- Configurações do Banco de Dados ---
 DBNAME="paulocarecateam"
 DBUSER="paulocarecateam"
 DBPASS="Fr35Aa4DkZ8KhEuq2asf"
-DBHOST="localhost" # O host do banco de dados é localhost
-DB_SCHEMA_FILE="bancodedados.txt"
+DBHOST="localhost"
+DB_SCHEMA_FILE="bancodedados.txt" # Nome do arquivo de schema dentro do repositório
 
 # --- Configurações da Aplicação ---
-APP_PORT="3001" # Porta interna em que o 'serve' rodará
-NGINX_PORT="3002" # Porta externa que o Nginx irá escutar
+APP_PORT="3001"
+NGINX_HTTP_PORT="3002"
 APP_DOMAIN="paulocarecateam.abildeveloper.com.br"
-APP_DIR=$(pwd) # Assume que o script está na raiz do projeto
+ADMIN_EMAIL="androiddiviana@gmail.com" # Email para registro do Certbot
+APP_DIR="/home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildeveloper.com.br"
+REPO_URL="https://github.com/dimviana/paulocarecateam.git"
 
 # --- Funções Auxiliares ---
 check_command() {
@@ -31,44 +36,61 @@ check_command() {
 }
 
 echo "================================================="
-echo " INICIANDO A IMPLANTAÇÃO DO JIU-JITSU HUB SAAS (MySQL) "
+echo " INICIANDO A IMPLANTAÇÃO DO JIU-JITSU HUB SAAS (COM SSL) "
 echo "================================================="
 
-# 1. ATUALIZAR O SISTEMA E VERIFICAR DEPENDÊNCIAS
+# 1. ATUALIZAR O SISTEMA E INSTALAR DEPENDÊNCIAS
 # ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 1/6 ] Atualizando o sistema e verificando dependências..."
+echo -e "\n[ ETAPA 1/9 ] Atualizando o sistema e instalando dependências..."
 sudo apt-get update -y
+sudo apt-get install -y mysql-server nginx nodejs npm certbot python3-certbot-nginx git
 
-# Verificar MySQL
-if ! check_command mysql; then
-    echo "-> Instalando MySQL Server..."
-    sudo apt-get install mysql-server -y
-else
-    echo "-> MySQL já está instalado."
-fi
-
-# Verificar Nginx
-if ! check_command nginx; then
-    echo "-> Instalando Nginx..."
-    sudo apt-get install nginx -y
-else
-    echo "-> Nginx já está instalado."
-fi
-
-# Verificar Node.js e npm (necessários para 'serve' e 'pm2')
-if ! check_command node; then
-    echo "-> Instalando Node.js e npm..."
+# Verificar se Node.js precisa ser de uma versão específica
+if ! check_command node || [[ $(node -v | cut -d . -f 1) < "v18" ]]; then
+    echo "-> Instalando Node.js v18..."
     curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
     sudo apt-get install -y nodejs
 else
-    echo "-> Node.js já está instalado."
+    echo "-> Node.js já está instalado e na versão correta."
 fi
 
-# 2. CONFIGURAR O BANCO DE DADOS MYSQL
+# 2. PREPARAR DIRETÓRIO E CÓDIGO FONTE
 # ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 2/6 ] Configurando o Banco de Dados MySQL..."
-# Executa os comandos SQL de forma não interativa para criar banco e usuário.
-# IF NOT EXISTS previne erros se o script for executado novamente.
+echo -e "\n[ ETAPA 2/9 ] Preparando o diretório e baixando o código fonte..."
+# Garante que o diretório pai existe e tem as permissões corretas
+sudo mkdir -p "$(dirname "$APP_DIR")"
+sudo chown -R $(whoami):$(whoami) "$(dirname "$APP_DIR")"
+
+# Verifica se o diretório da aplicação já é um repositório git
+if [ -d "$APP_DIR/.git" ]; then
+    echo "-> Repositório encontrado em '$APP_DIR'. Atualizando..."
+    cd "$APP_DIR"
+    git pull origin main
+    if [ $? -ne 0 ]; then
+        echo "-> ERRO: Falha ao atualizar o repositório. Verifique as permissões ou conflitos e tente novamente."
+        exit 1
+    fi
+else
+    echo "-> Diretório '$APP_DIR' não é um repositório. Clonando..."
+    # Remove o diretório se existir, para garantir um clone limpo
+    if [ -d "$APP_DIR" ]; then
+        echo "-> Removendo diretório existente para um clone limpo."
+        sudo rm -rf "$APP_DIR"
+    fi
+    git clone "$REPO_URL" "$APP_DIR"
+    if [ $? -ne 0 ]; then
+        echo "-> ERRO: Falha ao clonar o repositório."
+        exit 1
+    fi
+    echo "-> Repositório clonado com sucesso."
+fi
+
+sudo chown -R $(whoami):$(whoami) "$APP_DIR"
+echo "-> Código fonte está pronto."
+
+# 3. CONFIGURAR O BANCO DE DADOS MYSQL
+# ------------------------------------------------------------------------------
+echo -e "\n[ ETAPA 3/9 ] Configurando o Banco de Dados MySQL..."
 sudo mysql -u root <<EOF
 CREATE DATABASE IF NOT EXISTS $DBNAME;
 CREATE USER IF NOT EXISTS '$DBUSER'@'$DBHOST' IDENTIFIED BY '$DBPASS';
@@ -77,97 +99,103 @@ FLUSH PRIVILEGES;
 EOF
 echo "-> Banco de dados e usuário configurados."
 
-# 3. IMPORTAR O ESQUEMA DO BANCO DE DADOS
+# 4. IMPORTAR O ESQUEMA DO BANCO DE DADOS
 # ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 3/6 ] Importando o esquema do banco de dados..."
-if [ -f "$DB_SCHEMA_FILE" ]; then
-    # Conecta ao banco de dados e executa os comandos do arquivo de esquema
-    sudo mysql -u root $DBNAME < "$DB_SCHEMA_FILE"
+echo -e "\n[ ETAPA 4/9 ] Importando o esquema do banco de dados..."
+SCHEMA_PATH="$APP_DIR/$DB_SCHEMA_FILE"
+if [ -f "$SCHEMA_PATH" ]; then
+    sudo mysql -u root $DBNAME < "$SCHEMA_PATH"
     echo "-> Esquema do banco de dados importado com sucesso."
 else
-    echo "-> AVISO: Arquivo '$DB_SCHEMA_FILE' não encontrado. O banco de dados permanecerá vazio."
+    echo "-> AVISO: Arquivo '$SCHEMA_PATH' não encontrado. O banco de dados permanecerá vazio."
 fi
 
-# 4. INSTALAR GERENCIADOR DE PROCESSO E SERVIDOR WEB
+# 5. INSTALAR GERENCIADOR DE PROCESSO E SERVIDOR WEB
 # ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 4/6 ] Instalando PM2 e Serve via npm..."
-if ! check_command pm2; then
-    sudo npm install -g pm2
-else
-    echo "-> PM2 já está instalado."
-fi
-if ! check_command serve; then
-    sudo npm install -g serve
-else
-    echo "-> Serve já está instalado."
-fi
+echo -e "\n[ ETAPA 5/9 ] Instalando PM2 e Serve via npm..."
+if ! check_command pm2; then sudo npm install -g pm2; fi
+if ! check_command serve; then sudo npm install -g serve; fi
+echo "-> PM2 e Serve estão instalados."
 
-# 5. CONFIGURAR O NGINX COMO PROXY REVERSO
+# 6. CONFIGURAR O NGINX (INICIALMENTE EM HTTP PARA VALIDAÇÃO)
 # ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 5/6 ] Configurando o Nginx para rodar na porta $NGINX_PORT..."
+echo -e "\n[ ETAPA 6/9 ] Configurando o Nginx para validação SSL..."
 NGINX_CONF_PATH="/etc/nginx/sites-available/$APP_DOMAIN"
 
-# Cria o arquivo de configuração do Nginx para o domínio
-# A diretiva 'listen' foi alterada para $NGINX_PORT para evitar conflitos com a porta 80
+#
+# !!! AVISO IMPORTANTE !!!
+# O Certbot precisa que a porta 80 esteja temporariamente livre para este domínio
+# para validar o certificado. Se outro serviço estiver bloqueando a porta 80
+# globalmente, esta etapa PODE FALHAR.
+#
+echo "-> AVISO: A porta 80 deve estar disponível para o domínio $APP_DOMAIN para a validação do certificado SSL."
+
 sudo tee $NGINX_CONF_PATH > /dev/null <<EOF
 server {
-    listen $NGINX_PORT;
+    listen 80;
     server_name $APP_DOMAIN;
-
-    access_log /var/log/nginx/$APP_DOMAIN.access.log;
-    error_log /var/log/nginx/$APP_DOMAIN.error.log;
 
     location / {
         proxy_pass http://localhost:$APP_PORT;
+        proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header Host \$http_host;
-        proxy_set_header X-NginX-Proxy true;
-
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
     }
 }
 EOF
 
-# Habilita o site criando um link simbólico (se ainda não existir)
 if [ ! -L "/etc/nginx/sites-enabled/$APP_DOMAIN" ]; then
     sudo ln -s $NGINX_CONF_PATH /etc/nginx/sites-enabled/
-    echo "-> Configuração do site Nginx habilitada."
 fi
 
-# Testa a configuração do Nginx e reinicia o serviço para aplicar as mudanças
-sudo nginx -t
-if [ $? -eq 0 ]; then
-    echo "-> Configuração do Nginx válida. Reiniciando Nginx..."
-    sudo systemctl restart nginx
-else
-    echo "-> ERRO: Configuração do Nginx inválida. Verifique o arquivo $NGINX_CONF_PATH."
+sudo nginx -t && sudo systemctl restart nginx
+if [ $? -ne 0 ]; then
+    echo "-> ERRO: Falha ao iniciar o Nginx. A porta 80 pode estar em uso. Verifique e tente novamente."
     exit 1
 fi
 
-# 6. INICIAR A APLICAÇÃO COM PM2
+# 7. GERAR CERTIFICADO SSL COM CERTBOT
 # ------------------------------------------------------------------------------
-echo -e "\n[ ETAPA 6/6 ] Iniciando a aplicação com PM2..."
-# O comando 'serve -s .' serve o diretório atual e é ideal para Single Page Applications (SPAs) como React.
-APP_COMMAND="serve -s . -l $APP_PORT"
+echo -e "\n[ ETAPA 7/9 ] Gerando certificado SSL com Certbot..."
+sudo certbot --nginx -d $APP_DOMAIN --non-interactive --agree-tos -m $ADMIN_EMAIL --redirect
+if [ $? -ne 0 ]; then
+    echo "-> ERRO: Falha ao gerar o certificado SSL. Verifique se o DNS para $APP_DOMAIN está correto e se a porta 80 está acessível."
+    exit 1
+fi
+echo "-> Certificado SSL gerado e Nginx configurado para HTTPS."
 
-# Para e remove a instância antiga para garantir uma inicialização limpa
+# 8. CONFIGURAR REDIRECIONAMENTO DE PORTA HTTP ADICIONAL
+# ------------------------------------------------------------------------------
+echo -e "\n[ ETAPA 8/9 ] Configurando redirecionamento da porta $NGINX_HTTP_PORT para HTTPS..."
+sudo tee -a $NGINX_CONF_PATH > /dev/null <<EOF
+
+server {
+    listen $NGINX_HTTP_PORT;
+    server_name $APP_DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
+EOF
+
+sudo nginx -t && sudo systemctl restart nginx
+echo "-> Nginx reiniciado com todas as configurações."
+
+
+# 9. INICIAR A APLICAÇÃO COM PM2
+# ------------------------------------------------------------------------------
+echo -e "\n[ ETAPA 9/9 ] Iniciando a aplicação com PM2..."
+APP_COMMAND="serve -s . -l $APP_PORT"
 pm2 stop "$DBNAME" 2>/dev/null || true
 pm2 delete "$DBNAME" 2>/dev/null || true
-
-# Inicia a nova instância da aplicação
 cd $APP_DIR && pm2 start "$APP_COMMAND" --name "$DBNAME"
-
-# Configura o PM2 para iniciar automaticamente no boot do sistema
 pm2 startup | sudo bash -
 pm2 save
 
 echo "========================================="
 echo "        IMPLANTAÇÃO CONCLUÍDA!         "
 echo "========================================="
-echo "Acesse a aplicação em: http://$APP_DOMAIN:$NGINX_PORT"
+echo "Acesse a aplicação de forma segura em: https://$APP_DOMAIN"
+echo "(O acesso por http://$APP_DOMAIN:$NGINX_HTTP_PORT será redirecionado automaticamente)"
+echo "-----------------------------------------"
 echo "Para gerenciar a aplicação, use os comandos PM2:"
 echo "  - Ver logs:       pm2 logs $DBNAME"
 echo "  - Parar:          pm2 stop $DBNAME"
