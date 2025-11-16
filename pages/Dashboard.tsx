@@ -1,6 +1,3 @@
-
-
-
 import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import Card from '../components/ui/Card';
@@ -251,7 +248,7 @@ const Dashboard: React.FC = () => {
         { icon: <IconBriefcase />, title: 'Total de Professores', value: String(totalTeachers), color: '#10B981' },
         { icon: <IconBookOpen />, title: 'Total de Turmas', value: '25', color: '#8B5CF6' },
     ];
-
+    
     return (
         <div className="space-y-6">
             <div>

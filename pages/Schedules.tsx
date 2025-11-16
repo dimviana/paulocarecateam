@@ -31,9 +31,9 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({ schedule, onSave, onClose }
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (name === 'assistantIds' && e.target instanceof HTMLSelectElement) {
-      const selectedIds = Array.from(e.target.options)
-        .filter(option => option.selected)
-        .map(option => option.value);
+      // FIX: Use selectedOptions and explicitly type `option` to resolve errors on `.selected` and `.value`.
+      const selectedIds = Array.from(e.target.selectedOptions)
+        .map((option: HTMLOptionElement) => option.value);
       setFormData(prev => ({ ...prev, assistantIds: selectedIds }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));

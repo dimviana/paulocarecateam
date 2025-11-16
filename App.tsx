@@ -1,6 +1,3 @@
-
-
-
 import React, { useContext, useState, FormEvent, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
@@ -49,7 +46,8 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (name === 'assistantIds' && e.target instanceof HTMLSelectElement) {
-      const selectedIds = Array.from(e.target.selectedOptions).map(option => option.value);
+      // FIX: Explicitly type `option` as HTMLOptionElement to resolve TS error.
+      const selectedIds = Array.from(e.target.selectedOptions).map((option: HTMLOptionElement) => option.value);
       setFormData(prev => ({ ...prev, assistantIds: selectedIds }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
