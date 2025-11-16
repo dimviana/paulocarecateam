@@ -1,4 +1,3 @@
-
 import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Payment, AttendanceRecord, Professor, ActivityLog } from '../types';
 
 let graduations: Graduation[] = [
@@ -31,8 +30,8 @@ let academies: Academy[] = [
 ];
 
 let professors: Professor[] = [
-    { id: '1', name: 'Royler Gracie', fjjpe_registration: 'PROF-001', cpf: '555.555.555-55', academyId: '1', graduationId: '7' },
-    { id: '2', name: 'Andre Galvão', fjjpe_registration: 'PROF-002', cpf: '666.666.666-66', academyId: '2', graduationId: '5' },
+    { id: '1', name: 'Royler Gracie', fjjpe_registration: 'PROF-001', cpf: '555.555.555-55', academyId: '1', graduationId: '7', imageUrl: `https://i.pravatar.cc/150?u=555.555.555-55`, blackBeltDate: '1975-07-30' },
+    { id: '2', name: 'Andre Galvão', fjjpe_registration: 'PROF-002', cpf: '666.666.666-66', academyId: '2', graduationId: '5', imageUrl: `https://i.pravatar.cc/150?u=666.666.666-66`, blackBeltDate: '2004-07-30' },
 ];
 
 let users: User[] = [
@@ -144,7 +143,13 @@ export const api = {
 
     const actor = users.find(u => u.id === actorId);
     if (actor) {
-        logActivity(actorId, 'Pagamento', `${actor.name} atualizou o status de pagamento de ${studentToUpdate.name} para "${status === 'paid' ? 'Em Dia' : 'Pendente'}".`);
+        let details = '';
+        if (actor.role === 'student') {
+            details = `${studentToUpdate.name} registrou o pagamento de sua mensalidade (comprovante anexado).`;
+        } else {
+            details = `${actor.name} atualizou o status de pagamento de ${studentToUpdate.name} para "${status === 'paid' ? 'Em Dia' : 'Pendente'}".`;
+        }
+        logActivity(actorId, 'Pagamento', details);
     }
     
     return simulateDelay(studentToUpdate);

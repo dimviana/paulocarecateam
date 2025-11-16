@@ -65,6 +65,8 @@ export interface Professor {
   cpf: string;
   academyId: string;
   graduationId: string;
+  imageUrl?: string;
+  blackBeltDate?: string;
 }
 
 export interface User {

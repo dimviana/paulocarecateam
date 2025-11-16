@@ -1,4 +1,5 @@
-import React, { useState, useContext, FormEvent } from 'react';
+
+import React, { useState, useContext, FormEvent, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Professor } from '../types';
 import Card from '../components/ui/Card';
@@ -43,6 +44,7 @@ const ProfessorForm: React.FC<ProfessorFormProps> = ({ professor, onSave, onClos
     cpf: '',
     academyId: '',
     graduationId: '',
+    blackBeltDate: '',
     ...professor,
   });
   const [cpfError, setCpfError] = useState('');
@@ -92,6 +94,16 @@ const ProfessorForm: React.FC<ProfessorFormProps> = ({ professor, onSave, onClos
           {graduations.sort((a, b) => a.rank - b.rank).map(grad => <option key={grad.id} value={grad.id}>{grad.name}</option>)}
         </select>
       </div>
+      <div>
+        <Input
+            label="Data da Faixa Preta"
+            name="blackBeltDate"
+            type="date"
+            value={formData.blackBeltDate}
+            onChange={handleChange}
+        />
+        <p className="text-xs text-slate-500 mt-1 px-1">Usado para calcular os graus para faixas preta e superiores.</p>
+      </div>
       <div className="flex justify-end gap-4 pt-4">
         <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
         <Button type="submit" disabled={!!cpfError}>Salvar</Button>
@@ -100,11 +112,101 @@ const ProfessorForm: React.FC<ProfessorFormProps> = ({ professor, onSave, onClos
   );
 };
 
+interface PhotoUploadModalProps {
+    professor: Professor;
+    onSave: (professor: Professor, imageUrl: string) => void;
+    onClose: () => void;
+}
+
+const PhotoUploadModal: React.FC<PhotoUploadModalProps> = ({ professor, onSave, onClose }) => {
+    const [preview, setPreview] = useState<string | null>(professor.imageUrl || null);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const selectedFile = e.target.files[0];
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPreview(reader.result as string);
+            };
+            reader.readAsDataURL(selectedFile);
+        }
+    };
+
+    const handleSaveClick = () => {
+        if (preview) {
+            onSave(professor, preview);
+        }
+    };
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title={`Alterar foto de ${professor.name}`}>
+            <div className="flex flex-col items-center">
+                <img
+                    src={preview || `https://i.pravatar.cc/150?u=${professor.cpf}`}
+                    alt="Preview"
+                    className="w-40 h-40 rounded-full object-cover mb-4 border-4 border-slate-200"
+                />
+                <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    ref={fileInputRef}
+                    className="hidden"
+                />
+                <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+                    Escolher Arquivo
+                </Button>
+                <p className="text-sm text-slate-500 mt-2">Selecione uma imagem do seu computador.</p>
+            </div>
+            <div className="flex justify-end gap-4 pt-6 mt-4 border-t border-slate-200">
+                <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+                <Button type="button" onClick={handleSaveClick} disabled={!preview}>Salvar Foto</Button>
+            </div>
+        </Modal>
+    );
+};
+
+
 // Main page component
 const ProfessorsPage: React.FC = () => {
   const { professors, academies, graduations, saveProfessor, deleteProfessor, loading } = useContext(AppContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProfessor, setSelectedProfessor] = useState<Partial<Professor> | null>(null);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  const [professorForPhoto, setProfessorForPhoto] = useState<Professor | null>(null);
+
+  const professorDanData = useMemo(() => {
+    const data = new Map<string, { dan: number }>();
+    const blackBeltRank = graduations.find(g => g.name === 'Preta')?.rank || 5;
+
+    professors.forEach(prof => {
+        const profGraduation = graduations.find(g => g.id === prof.graduationId);
+        if (!prof.blackBeltDate || !profGraduation || profGraduation.rank < blackBeltRank) {
+            data.set(prof.id, { dan: 0 });
+            return;
+        }
+
+        const blackBeltDate = new Date(prof.blackBeltDate);
+        const today = new Date();
+        const yearsAsBlackBelt = (today.getTime() - blackBeltDate.getTime()) / (1000 * 3600 * 24 * 365.25);
+
+        let dan = 0;
+        if (yearsAsBlackBelt >= 48) dan = 9;
+        else if (yearsAsBlackBelt >= 38) dan = 8;
+        else if (yearsAsBlackBelt >= 31) dan = 7;
+        else if (yearsAsBlackBelt >= 24) dan = 6;
+        else if (yearsAsBlackBelt >= 19) dan = 5;
+        else if (yearsAsBlackBelt >= 14) dan = 4;
+        else if (yearsAsBlackBelt >= 9) dan = 3;
+        else if (yearsAsBlackBelt >= 6) dan = 2;
+        else if (yearsAsBlackBelt >= 3) dan = 1;
+
+        data.set(prof.id, { dan });
+    });
+    return data;
+  }, [professors, graduations]);
+
 
   const handleOpenModal = (prof: Partial<Professor> | null = null) => {
     setSelectedProfessor(prof);
@@ -127,60 +229,121 @@ const ProfessorsPage: React.FC = () => {
     }
   };
 
+  const handleOpenPhotoModal = (prof: Professor) => {
+    setProfessorForPhoto(prof);
+    setIsPhotoModalOpen(true);
+  };
+
+  const handleClosePhotoModal = () => {
+      setIsPhotoModalOpen(false);
+      setProfessorForPhoto(null);
+  };
+  
+  const handleSavePhoto = async (profToUpdate: Professor, newImageUrl: string) => {
+      const { id, name, fjjpe_registration, cpf, academyId, graduationId, blackBeltDate } = profToUpdate;
+      await saveProfessor({
+          id, name, fjjpe_registration, cpf, academyId, graduationId, blackBeltDate,
+          imageUrl: newImageUrl
+      });
+      handleClosePhotoModal();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-slate-800">Gerenciar Professores</h1>
         <Button onClick={() => handleOpenModal({})}>Adicionar Professor</Button>
       </div>
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="border-b border-slate-200">
-              <tr>
-                <th className="p-4 text-sm font-semibold text-slate-600">Professor</th>
-                <th className="p-4 text-sm font-semibold text-slate-600">Registro FJJPE</th>
-                <th className="p-4 text-sm font-semibold text-slate-600">CPF</th>
-                <th className="p-4 text-sm font-semibold text-slate-600">Academia</th>
-                <th className="p-4 text-sm font-semibold text-slate-600">Graduação</th>
-                <th className="p-4 text-sm font-semibold text-slate-600">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={6} className="p-4 text-center">Carregando...</td></tr>
-              ) : professors.map(prof => {
+
+      {loading ? (
+        <div className="text-center p-4">Carregando...</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {professors.map(prof => {
                 const academy = academies.find(a => a.id === prof.academyId);
                 const graduation = graduations.find(g => g.id === prof.graduationId);
+                const { dan } = professorDanData.get(prof.id) || { dan: 0 };
+                
                 return (
-                  <tr key={prof.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="p-4 text-slate-800 font-medium">{prof.name}</td>
-                    <td className="p-4 text-slate-700">{prof.fjjpe_registration}</td>
-                    <td className="p-4 text-slate-700">{prof.cpf}</td>
-                    <td className="p-4 text-slate-700">{academy?.name || 'N/A'}</td>
-                    <td className="p-4 text-slate-700">
-                      {graduation ? (
-                        <div className="flex items-center">
-                           <span className="w-4 h-4 rounded-full mr-2 border border-slate-300" style={{ backgroundColor: graduation.color }}></span>
-                           <span>{graduation.name}</span>
+                    <Card key={prof.id} className="p-0 flex flex-col overflow-hidden transition-transform duration-200 hover:-translate-y-1 w-[328px]">
+                        <div className="h-2" style={{ backgroundColor: graduation?.color || '#e2e8f0' }}></div>
+                        <div className="p-5 flex flex-col flex-grow">
+                            <div className="flex items-center mb-4">
+                                <button onClick={() => handleOpenPhotoModal(prof)} className="relative group flex-shrink-0">
+                                    <img 
+                                        src={prof.imageUrl || `https://i.pravatar.cc/150?u=${prof.cpf}`} 
+                                        alt={prof.name} 
+                                        className="w-16 h-16 rounded-full object-cover border-2 border-slate-200 group-hover:opacity-75 transition-opacity"
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-opacity">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                    </div>
+                                </button>
+                                <div className="ml-4">
+                                    <h2 className="text-xl font-bold text-slate-800">{prof.name}</h2>
+                                    <p className="text-sm text-slate-500">{academy?.name || 'N/A'}</p>
+                                </div>
+                            </div>
+                            
+                            <div className="space-y-3 text-sm flex-grow">
+                                {graduation && (
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-slate-600 font-medium">Graduação:</span>
+                                        <div className="flex items-center">
+                                            <span className="w-4 h-4 rounded-full mr-2 border border-slate-300" style={{ backgroundColor: graduation.color }}></span>
+                                            <span className="font-medium text-slate-700">{graduation.name}</span>
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-600 font-medium">Registro:</span>
+                                    <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{prof.fjjpe_registration}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-600 font-medium">CPF:</span>
+                                    <span className="text-slate-700">{prof.cpf}</span>
+                                </div>
+                            </div>
+
+                            <div className="mt-auto">
+                                <div className="pt-4 mt-4">
+                                    <div 
+                                        className="w-full h-7 rounded-md flex items-center justify-end" 
+                                        style={{ backgroundColor: graduation?.color || '#e2e8f0', border: '1px solid rgba(0,0,0,0.1)' }}
+                                        title={`${graduation?.name}${dan > 0 ? ` - ${dan}º Dan` : ''}`}
+                                    >
+                                        {dan > 0 && (
+                                            <div className="h-full w-auto min-w-[25%] bg-black flex items-center justify-center space-x-1 p-1">
+                                                {Array.from({ length: dan }).map((_, index) => (
+                                                    <div key={index} className="h-5 w-1 bg-white"></div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="mt-4 pt-4 border-t border-slate-200/60 flex justify-end gap-2">
+                                    <Button size="sm" variant="secondary" onClick={() => handleOpenModal(prof)}>Editar</Button>
+                                    <Button size="sm" variant="danger" onClick={() => handleDelete(prof.id)}>Excluir</Button>
+                                </div>
+                            </div>
                         </div>
-                      ) : 'N/A'}
-                    </td>
-                    <td className="p-4 flex gap-2">
-                      <Button variant="secondary" size="sm" onClick={() => handleOpenModal(prof)}>Editar</Button>
-                      <Button variant="danger" size="sm" onClick={() => handleDelete(prof.id)}>Excluir</Button>
-                    </td>
-                  </tr>
+                    </Card>
                 );
-              })}
-            </tbody>
-          </table>
+            })}
         </div>
-      </Card>
+      )}
 
       <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={selectedProfessor?.id ? 'Editar Professor' : 'Adicionar Professor'}>
         <ProfessorForm professor={selectedProfessor} onSave={handleSave} onClose={handleCloseModal} />
       </Modal>
+
+      {isPhotoModalOpen && professorForPhoto && (
+          <PhotoUploadModal
+              professor={professorForPhoto}
+              onSave={handleSavePhoto}
+              onClose={handleClosePhotoModal}
+          />
+      )}
     </div>
   );
 };

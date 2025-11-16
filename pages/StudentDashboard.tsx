@@ -1,9 +1,10 @@
-import React, { useContext, useMemo } from 'react';
+import React, { useContext, useMemo, useState } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Student } from '../types';
 import Card from '../components/ui/Card';
 import StudentAttendanceChart from '../components/charts/StudentAttendanceChart';
-import { IconAward, IconCalendar, IconDollarSign, IconMedal } from '../constants';
+import { IconAward, IconCalendar, IconDollarSign, IconMedal, IconUpload } from '../constants';
+import Button from '../components/ui/Button';
 
 const calculateTrainingTime = (startDateString?: string): { years: number; months: number; totalMonths: number } => {
   if (!startDateString) return { years: 0, months: 0, totalMonths: 0 };
@@ -38,7 +39,12 @@ interface StudentDashboardProps {
 }
 
 const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentProp }) => {
-    const { user, students, graduations, schedules, attendanceRecords, loading } = useContext(AppContext);
+    const { user, students, graduations, schedules, attendanceRecords, loading, themeSettings, updateStudentPayment } = useContext(AppContext);
+
+    const [showPaymentForm, setShowPaymentForm] = useState(false);
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
+    const [isPaying, setIsPaying] = useState(false);
+    const [paymentSuccess, setPaymentSuccess] = useState(false);
 
     const studentDataFromContext = useMemo(() => students.find(s => s.id === user?.studentId), [students, user]);
     const studentData = studentProp || studentDataFromContext;
@@ -62,19 +68,45 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentPro
     }, [trainingMonths, graduation]);
     
     const studentSchedules = useMemo(() => {
+      if (!studentData) return [];
       const today = new Date();
-      const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ...
+      const dayOfWeek = today.getDay(); 
       const upcoming = [];
       for(let i=0; i<7; i++){
         const targetDay = (dayOfWeek + i) % 7;
         const daySchedules = schedules.filter(s => {
           const scheduleDayMap = {'Domingo': 0, 'Segunda-feira': 1, 'Terça-feira': 2, 'Quarta-feira': 3, 'Quinta-feira': 4, 'Sexta-feira': 5, 'Sábado': 6};
-          return s.academyId === studentData?.academyId && scheduleDayMap[s.dayOfWeek] === targetDay;
+          return s.academyId === studentData.academyId && scheduleDayMap[s.dayOfWeek] === targetDay;
         });
         upcoming.push(...daySchedules.map(s => ({...s, dayOffset: i})));
       }
-      return upcoming.slice(0, 5); // Limit to next 5 classes
+      return upcoming.slice(0, 5);
     }, [schedules, studentData]);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            if (e.target.files[0].type === 'application/pdf') {
+                setReceiptFile(e.target.files[0]);
+            } else {
+                alert('Por favor, selecione um arquivo PDF.');
+                e.target.value = ''; // Clear the input
+                setReceiptFile(null);
+            }
+        }
+    };
+
+    const handleSendReceipt = async () => {
+        if (!studentData || !receiptFile) return;
+        setIsPaying(true);
+        await updateStudentPayment(studentData.id, 'paid');
+        setIsPaying(false);
+        setShowPaymentForm(false);
+        setReceiptFile(null);
+        setPaymentSuccess(true);
+        setTimeout(() => {
+            setPaymentSuccess(false);
+        }, 3000);
+    };
 
 
     if (loading || !studentData || !graduation) {
@@ -90,15 +122,55 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentPro
               </div>
             )}
 
-
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard icon={<IconMedal/>} title="Graduação Atual" color="#8B5CF6" value={graduation.name} />
-                <StatCard 
-                    icon={<IconDollarSign/>} 
-                    title="Mensalidade" 
-                    color={studentData.paymentStatus === 'paid' ? '#10B981' : '#EF4444'} 
-                    value={studentData.paymentStatus === 'paid' ? 'Em Dia' : 'Pendente'} 
-                />
+                <Card className="p-5">
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-center">
+                            <div className={`p-3 rounded-lg mr-4`} style={{ backgroundColor: `${studentData.paymentStatus === 'paid' ? '#10B981' : '#EF4444'}1A`}}>
+                                <div style={{ color: studentData.paymentStatus === 'paid' ? '#10B981' : '#EF4444' }}><IconDollarSign/></div>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-slate-500">Mensalidade</p>
+                                {paymentSuccess ? (
+                                    <p className="text-xl font-bold text-green-600">Pagamento Enviado!</p>
+                                ) : (
+                                    <p className="text-xl font-bold text-slate-800">{studentData.paymentStatus === 'paid' ? 'Em Dia' : 'Pendente'}</p>
+                                )}
+                            </div>
+                        </div>
+                        {studentData.paymentStatus === 'unpaid' && !studentProp && !showPaymentForm && !paymentSuccess && (
+                            <Button size="sm" onClick={() => setShowPaymentForm(true)}>Pagar Agora</Button>
+                        )}
+                    </div>
+                    {showPaymentForm && (
+                        <div className="mt-4 pt-4 border-t border-slate-200 space-y-4 animate-fade-in-down">
+                            <p>Valor da mensalidade: <span className="font-bold">{themeSettings.monthlyFeeAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></p>
+                             <label
+                                htmlFor="receipt-upload"
+                                className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100"
+                            >
+                                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                    <IconUpload className="w-8 h-8 mb-3 text-slate-400" />
+                                    <p className="mb-2 text-sm text-slate-500">
+                                        <span className="font-semibold">Clique para enviar comprovante</span>
+                                    </p>
+                                    <p className="text-xs text-slate-500">Apenas arquivos PDF (obrigatório)</p>
+                                </div>
+                                <input id="receipt-upload" type="file" className="hidden" accept="application/pdf" onChange={handleFileChange} />
+                            </label>
+                            {receiptFile && (
+                                <p className="text-center text-sm text-green-600 font-medium">Arquivo: {receiptFile.name}</p>
+                            )}
+                            <div className="flex justify-end gap-2">
+                                <Button variant="secondary" size="sm" onClick={() => {setShowPaymentForm(false); setReceiptFile(null);}}>Cancelar</Button>
+                                <Button size="sm" onClick={handleSendReceipt} disabled={!receiptFile || isPaying}>
+                                    {isPaying ? 'Enviando...' : 'Enviar Comprovante'}
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </Card>
                 <StatCard icon={<IconCalendar/>} title="Tempo de Treino" color="#3B82F6" value={`${Math.floor(trainingMonths/12)} anos e ${trainingMonths%12} meses`} />
                 <StatCard icon={<IconAward/>} title="Próxima Graduação" color="#F59E0B" value={timeToNextGrad || "Parabéns!"} />
             </div>
@@ -162,7 +234,6 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student: studentPro
                     <p className="text-slate-500 text-center">Nenhuma aula encontrada para você esta semana.</p>
                 )}
             </Card>
-
         </div>
     );
 };

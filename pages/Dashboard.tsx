@@ -6,7 +6,7 @@ import Card from '../components/ui/Card';
 import StudentBreakdownChart from '../components/charts/PaymentsChart';
 import AttendanceChart from '../components/charts/AttendanceChart';
 import Button from '../components/ui/Button';
-import { IconUsers, IconBriefcase, IconBookOpen, IconChevronDown } from '../constants';
+import { IconUsers, IconBriefcase, IconBookOpen, IconChevronDown, IconGift } from '../constants';
 import { DayOfWeek } from '../types';
 import StudentDashboard from './StudentDashboard';
 
@@ -14,6 +14,48 @@ import StudentDashboard from './StudentDashboard';
 const toYYYYMMDD = (date: Date) => date.toISOString().split('T')[0];
 
 // --- Sub-components for Dashboard ---
+
+const BirthdayCard: React.FC = () => {
+    const { students, users } = useContext(AppContext);
+
+    const today = new Date();
+    const todayMonthDay = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    const birthdayStudents = students.filter(s => s.birthDate && s.birthDate.substring(5) === todayMonthDay);
+    const birthdayUsers = users.filter(u => u.role !== 'student' && u.birthDate && u.birthDate.substring(5) === todayMonthDay);
+
+    const allBirthdays = [
+        ...birthdayStudents.map(s => ({ name: s.name, type: 'Aluno' })),
+        ...birthdayUsers.map(u => ({ name: u.name, type: 'Professor' }))
+    ];
+
+    if (allBirthdays.length === 0) {
+        return null;
+    }
+
+    return (
+        <Card>
+            <h3 className="font-semibold text-slate-800 mb-4 flex items-center">
+                <IconGift className="w-5 h-5 mr-2 text-amber-500" />
+                Aniversariantes de Hoje
+            </h3>
+            <div className="space-y-3">
+                {allBirthdays.map((person, index) => (
+                    <div key={index} className="flex items-center p-2 bg-amber-50 rounded-md">
+                        <div className="w-8 h-8 rounded-full bg-amber-200 flex items-center justify-center mr-3 flex-shrink-0">
+                            <span className="text-amber-600 font-bold">{person.name.charAt(0)}</span>
+                        </div>
+                        <div>
+                            <p className="font-semibold text-slate-700 truncate">{person.name}</p>
+                            <p className="text-xs text-slate-500">{person.type}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </Card>
+    );
+};
+
 
 interface StatCardProps {
     icon: React.ReactNode;
@@ -243,6 +285,7 @@ const Dashboard: React.FC = () => {
 
                 {/* Right Sidebar */}
                 <div className="lg:col-span-4 space-y-6">
+                    <BirthdayCard />
                     <CommunityCard />
                     <CalendarWidget selectedDate={selectedDate} onDateChange={setSelectedDate} />
                     <AulasDoDia selectedDate={selectedDate} />
