@@ -8,6 +8,7 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
 import StudentDashboard from './StudentDashboard';
+import { IconAward } from '../constants';
 
 const validateCPF = (cpf: string): boolean => {
     if (typeof cpf !== 'string') return false;
@@ -55,20 +56,40 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
         lastPromotionDate: '',
         paymentDueDateDay: 10,
         stripes: 0,
+        isCompetitor: false,
+        lastCompetition: '',
         ...student,
+        medals: student?.medals || { gold: 0, silver: 0, bronze: 0 },
     });
     const [cpfError, setCpfError] = useState('');
     
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
-         if (name === 'cpf') {
+        const { checked } = e.target as HTMLInputElement;
+
+        if (name === 'cpf') {
             if (value && !validateCPF(value)) {
                 setCpfError('CPF inválido');
             } else {
                 setCpfError('');
             }
         }
-        setFormData(prev => ({ ...prev, [name]: type === 'number' ? parseInt(value) || 0 : value }));
+        
+        if (type === 'checkbox') {
+             setFormData(prev => ({ ...prev, [name]: checked }));
+        } else if (name.startsWith('medals-')) {
+            const medalType = name.split('-')[1] as keyof NonNullable<Student['medals']>;
+             setFormData(prev => ({
+                ...prev,
+                medals: {
+                    ...(prev.medals || { gold: 0, silver: 0, bronze: 0 }),
+                    [medalType]: parseInt(value) || 0
+                }
+             }));
+        }
+        else {
+            setFormData(prev => ({ ...prev, [name]: type === 'number' ? parseInt(value) || 0 : value }));
+        }
     };
 
     const handleSubmit = (e: FormEvent) => {
@@ -119,6 +140,33 @@ const StudentForm: React.FC<StudentFormProps> = ({ student, onSave, onClose }) =
             <Input label="Data da Última Promoção" name="lastPromotionDate" type="date" value={formData.lastPromotionDate} onChange={handleChange} />
             <Input label="Dia do Vencimento da Mensalidade" name="paymentDueDateDay" type="number" min="1" max="31" value={formData.paymentDueDateDay} onChange={handleChange} required />
             <Input label="Graus na Faixa" name="stripes" type="number" min="0" max="9" value={formData.stripes} onChange={handleChange} />
+            
+            <div className="flex items-center gap-2 pt-2">
+              <input 
+                id="isCompetitor" 
+                name="isCompetitor" 
+                type="checkbox" 
+                checked={!!formData.isCompetitor} 
+                onChange={handleChange} 
+                className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500" 
+              />
+              <label htmlFor="isCompetitor" className="text-sm font-medium text-slate-700">É competidor?</label>
+            </div>
+            
+            {formData.isCompetitor && (
+                <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200 animate-fade-in-down">
+                    <Input label="Última Competição" name="lastCompetition" value={formData.lastCompetition || ''} onChange={handleChange} />
+                    <fieldset className="border-t border-slate-200 pt-3">
+                        <legend className="text-sm font-medium text-slate-700 mb-2">Quadro de Medalhas</legend>
+                        <div className="grid grid-cols-3 gap-4">
+                             <Input label="Ouro" name="medals-gold" type="number" min="0" value={formData.medals?.gold || 0} onChange={handleChange} />
+                             <Input label="Prata" name="medals-silver" type="number" min="0" value={formData.medals?.silver || 0} onChange={handleChange} />
+                             <Input label="Bronze" name="medals-bronze" type="number" min="0" value={formData.medals?.bronze || 0} onChange={handleChange} />
+                        </div>
+                    </fieldset>
+                </div>
+            )}
+
 
             <div className="flex justify-end gap-4 pt-4">
                 <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
@@ -302,7 +350,7 @@ const StudentsPage: React.FC = () => {
                     data.set(student.id, { eligible: true, nextBelt, reason: `Cumpriu o tempo mínimo na faixa.` });
                     continue;
                 }
-                data.set(student.id, { eligible: false, nextBelt, reason: `Requer ${currentBelt.minTimeInMonths} meses na faixa (atualmente ${monthsSincePromotion}).` });
+                data.set(student.id, { eligible: false, nextBelt, reason: `Requer ${currentBelt.minTimeInMonths} meses na faixa (atualmente ${monthsSincePromotion} meses).` });
                 continue;
             }
         }
@@ -372,9 +420,9 @@ const StudentsPage: React.FC = () => {
     };
     
     const handleSavePhoto = async (studentToUpdate: Student, newImageUrl: string) => {
-        const { id, name, email, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay, stripes, lastPromotionDate } = studentToUpdate;
+        const { id, name, email, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay, stripes, lastPromotionDate, isCompetitor, lastCompetition, medals } = studentToUpdate;
         await saveStudent({
-            id, name, email, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay, stripes, lastPromotionDate,
+            id, name, email, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentDueDateDay, stripes, lastPromotionDate, isCompetitor, lastCompetition, medals,
             imageUrl: newImageUrl
         });
         handleClosePhotoModal();
@@ -488,6 +536,26 @@ const StudentsPage: React.FC = () => {
                                             </div>
                                         </div>
                                         
+                                        {student.isCompetitor && student.medals && (student.medals.gold > 0 || student.medals.silver > 0 || student.medals.bronze > 0) && (
+                                            <div className="mt-4 pt-4 border-t border-slate-200/60">
+                                                <div className="flex justify-center items-center gap-6">
+                                                    <div className="flex items-center" title={`${student.medals.gold} Ouro`}>
+                                                        <IconAward className="w-6 h-6 text-yellow-500" />
+                                                        <span className="ml-1.5 font-bold text-lg text-slate-700">{student.medals.gold}</span>
+                                                    </div>
+                                                    <div className="flex items-center" title={`${student.medals.silver} Prata`}>
+                                                        <IconAward className="w-6 h-6 text-slate-400" />
+                                                        <span className="ml-1.5 font-bold text-lg text-slate-700">{student.medals.silver}</span>
+                                                    </div>
+                                                    <div className="flex items-center" title={`${student.medals.bronze} Bronze`}>
+                                                        <IconAward className="w-6 h-6 text-orange-400" />
+                                                        <span className="ml-1.5 font-bold text-lg text-slate-700">{student.medals.bronze}</span>
+                                                    </div>
+                                                </div>
+                                                {student.lastCompetition && <p className="text-xs text-slate-500 mt-2 text-center">Última competição: {student.lastCompetition}</p>}
+                                            </div>
+                                        )}
+
                                         {eligibility && eligibility.eligible && eligibility.nextBelt && (
                                             <div className="mt-4 p-3 bg-green-100 rounded-lg text-center border border-green-200">
                                                 <p className="font-bold text-green-800">Elegível para {eligibility.nextBelt.name}!</p>

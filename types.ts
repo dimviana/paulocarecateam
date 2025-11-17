@@ -51,6 +51,13 @@ export interface Student {
   imageUrl?: string;
   stripes: number;
   lastPromotionDate?: string;
+  isCompetitor: boolean;
+  lastCompetition?: string;
+  medals?: {
+    gold: number;
+    silver: number;
+    bronze: number;
+  };
 }
 
 export interface Academy {
