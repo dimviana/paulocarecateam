@@ -26,7 +26,8 @@ ADMIN_EMAIL="androiddiviana@gmail.com" # Email para registro do Certbot
 APP_DIR="/home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildeveloper.com.br"
 REPO_URL="https://github.com/dimviana/paulocarecateam.git"
 BUILD_DIR="dist" # Diretório de build do React (geralmente 'build' ou 'dist' para Vite)
-APP_PORT=5000    # Porta interna em que a aplicação será servida pelo PM2
+APP_PORT=5000    # Porta interna do frontend (servido pelo PM2)
+BACKEND_PORT=3002 # Porta interna do backend (DEVE ser iniciada separadamente)
 NGINX_PORT=81    # Porta em que o Nginx irá escutar
 
 # --- Funções Auxiliares ---
@@ -123,12 +124,25 @@ build_application() {
 configure_nginx_and_ssl() {
     echo -e "\n[ ETAPA 4/5 ] Configurando Nginx para a porta $NGINX_PORT e tentando gerar SSL..."
     NGINX_CONF_PATH="/etc/nginx/sites-available/$APP_DOMAIN"
+    
+    echo "-> AVISO: Esta configuração assume que um servidor de backend está rodando na porta $BACKEND_PORT."
+    echo "-> As requisições para '/api/' serão redirecionadas para o backend."
 
     sudo tee $NGINX_CONF_PATH > /dev/null <<EOF
 server {
     listen $NGINX_PORT;
     server_name $APP_DOMAIN;
 
+    # Roteia requisições para a API de backend
+    location /api/ {
+        proxy_pass http://localhost:$BACKEND_PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    # Serve a aplicação frontend React para todas as outras requisições
     location / {
         proxy_pass http://localhost:$APP_PORT;
         proxy_http_version 1.1;
@@ -196,7 +210,7 @@ print_success_message() {
     echo "Para reiniciar a app, use: pm2 restart $APP_DOMAIN"
     echo "--------------------------------------------------------"
     echo "IMPORTANTE: Lembre-se de configurar o banco de dados manualmente"
-    echo "e de fornecer as credenciais para a aplicação (ex: via .env)."
+    echo "e de iniciar o servidor de backend na porta $BACKEND_PORT."
     echo "========================================================"
 }
 
