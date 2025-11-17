@@ -1,83 +1,115 @@
 #!/bin/bash
 # ==============================================================================
-# Script de Gerenciamento de Implantação para Jiu-Jitsu Hub SAAS
+#           Unified Deployment Manager for SAAS Applications
+# ==============================================================================
 #
-# Este script automatiza a instalação, atualização e remoção da aplicação,
-# utilizando Nginx para servir os arquivos estáticos do frontend e como
-# proxy reverso para o backend em domínios separados.
+# This script automates the installation, update, and removal of multiple
+# applications on the same server, each with its own domains and ports.
+# It uses Nginx to serve static frontend files and as a reverse proxy
+# for the backend.
 #
-# IMPORTANTE: A configuração do banco de dados MySQL é MANUAL.
-# O servidor de backend DEVE ser iniciado separadamente (ex: com PM2).
+# SYSTEMS MANAGED:
+#   1. Gerencia Boleto
+#   2. Jiu-Jitsu Hub
 #
-# USO:
-# 1. Coloque este script em qualquer diretório no seu servidor (ex: /tmp).
-# 2. Dê permissão de execução: chmod +x deployct.txt
-# 3. Execute o script: ./deployct.txt
-# 4. Escolha uma das opções no menu interativo.
+# PRE-REQUISITES:
+#   - A Linux VPS (tested on Debian/Ubuntu).
+#   - The backend for each application must be started separately (e.g., with PM2).
+#   - The database for each application must be configured manually.
 #
-# OPÇÕES:
-# 1. Instalar Sistema: Realiza a configuração completa do zero.
-# 2. Atualizar Sistema: Baixa a versão mais recente do código e o reconstrói.
-# 3. Remover Sistema: Apaga a aplicação e configurações (NÃO apaga o banco).
+# USAGE:
+#   1. Place this script in any directory (e.g., /tmp/deploy.sh).
+#   2. Grant execution permissions: chmod +x deploy.sh
+#   3. Run the script: ./deploy.sh
+#   4. Follow the interactive menu prompts.
+#
 # ==============================================================================
 
-# --- Configurações da Aplicação ---
-FRONTEND_DOMAIN="paulocarecateam.abildeveloper.com.br"
-BACKEND_DOMAIN="paulocarecabk.abildeveloper.com.br"
-ADMIN_EMAIL="androiddiviana@gmail.com" # Email para registro do Certbot
-APP_DIR="/home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildeveloper.com.br"
-REPO_URL="https://github.com/dimviana/paulocarecateam.git"
-BUILD_DIR="dist" # Diretório de build do React (geralmente 'build' ou 'dist' para Vite)
-BACKEND_PORT=3002 # Porta interna do backend (DEVE ser iniciada separadamente)
-NGINX_PORT=80    # Porta padrão para HTTP, necessária para Certbot
+# --- Global Settings ---
+# Color codes for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+ADMIN_EMAIL="androiddiviana@gmail.com" # Common email for Certbot registration
 
-# --- Funções Auxiliares ---
+# ==============================================================================
+#               <<< APPLICATION CONFIGURATIONS >>>
+#     EDIT THE VARIABLES IN THE SECTIONS BELOW FOR EACH APPLICATION
+# ==============================================================================
+
+# --- Configurações: Gerencia Boleto ---
+GB_APP_NAME="Gerencia Boleto"
+GB_FRONTEND_DOMAIN="boleto.abildeveloper.com.br"
+GB_BACKEND_DOMAIN="boletobk.abildeveloper.com.br"
+GB_REPO_URL="https://github.com/dimviana/gerencia-boleto.git" # <-- !!! ATUALIZE ESTE REPOSITÓRIO !!!
+GB_APP_DIR="/home/abildeveloper-gerenciaboleto/htdocs/boleto.abildeveloper.com.br"
+GB_BUILD_DIR="dist"
+GB_BACKEND_PORT=3004  # Porta interna do backend (NÃO PODE CONFLITAR)
+GB_NGINX_PORT=82      # Porta do Nginx para HTTP (NÃO PODE CONFLITAR)
+GB_PM2_PROCESS_NAME="gerencia-boleto-backend" # <-- !!! NOME DO PROCESSO PM2 DO BACKEND !!!
+
+# --- Configurações: Jiu-Jitsu Hub ---
+JJH_APP_NAME="Jiu-Jitsu Hub"
+JJH_FRONTEND_DOMAIN="paulocarecateam.abildeveloper.com.br"
+JJH_BACKEND_DOMAIN="paulocarecabk.abildeveloper.com.br"
+JJH_REPO_URL="https://github.com/dimviana/paulocarecateam.git"
+JJH_APP_DIR="/home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildeveloper.com.br"
+JJH_BUILD_DIR="dist"
+JJH_BACKEND_PORT=3003
+JJH_NGINX_PORT=81
+JJH_PM2_PROCESS_NAME="jiujitsu-hub-backend" # <-- !!! NOME DO PROCESSO PM2 DO BACKEND !!!
+
+# ==============================================================================
+#                     <<< CORE LOGIC FUNCTIONS >>>
+#         (Generally, no need to edit below this line)
+# ==============================================================================
+
+# --- Helper Functions ---
 check_command() {
     command -v $1 >/dev/null 2>&1
 }
 
-# --- Funções de Lógica ---
+# --- Generic Functions ---
 
 install_dependencies() {
-    echo -e "\n[ ETAPA 1/4 ] Atualizando o sistema e instalando dependências..."
+    echo -e "\n${YELLOW}[ STEP 1/5 ] Verificando e instalando dependências do sistema...${NC}"
+    
+    if check_command nginx && check_command node && check_command pm2 && check_command certbot; then
+        echo -e "${GREEN}-> Todas as dependências principais (Nginx, Node.js, PM2, Certbot) já estão instaladas.${NC}"
+        return
+    fi
+    
     sudo apt-get update -y
-    # Instala pré-requisitos para adicionar repositórios e para o script
     sudo apt-get install -y curl git software-properties-common
 
-    # Configura o repositório do Node.js v18 ANTES de tentar instalar
     if ! check_command node || [[ $(node -v | cut -d . -f 1) < "v18" ]]; then
         echo "-> Configurando o repositório do Node.js v18..."
         curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-    else
-        echo "-> Node.js já está instalado e na versão correta."
     fi
 
-    echo "-> Instalando dependências (Nginx, Node.js, Certbot)..."
+    echo "-> Instalando Nginx, Node.js, Certbot..."
     sudo apt-get install -y nginx nodejs certbot python3-certbot-nginx
-
     if [ $? -ne 0 ]; then
-        echo "-> A instalação inicial falhou. Tentando corrigir pacotes quebrados..."
-        sudo apt-get --fix-broken install -y
-        sudo apt-get install -y nginx nodejs certbot python3-certbot-nginx
-        if [ $? -ne 0 ]; then
-            echo "-> ERRO: Falha ao instalar dependências mesmo após tentar corrigir. Verifique os logs do apt."
-            exit 1
-        fi
-    fi
-
-    echo "-> Instalando PM2 globalmente via npm (para gerenciar o backend)..."
-    sudo npm install -g pm2
-    if [ $? -ne 0 ]; then
-        echo "-> ERRO: Falha ao instalar PM2."
+        echo -e "${RED}ERRO: Falha ao instalar dependências. Tente executar 'sudo apt-get -f install' e rode o script novamente.${NC}"
         exit 1
     fi
-    echo "-> Dependências instaladas com sucesso."
+
+    if ! check_command pm2; then
+        echo "-> Instalando PM2 globalmente via npm..."
+        sudo npm install -g pm2
+    fi
+
+    echo -e "${GREEN}-> Dependências instaladas com sucesso.${NC}"
 }
 
 setup_source_code() {
-    echo -e "\n[ ETAPA 2/4 ] Preparando o diretório e baixando o código fonte..."
+    local APP_DIR="$1"
+    local REPO_URL="$2"
+    echo -e "\n${YELLOW}[ STEP 2/5 ] Baixando o código fonte...${NC}"
+
     if [ -d "$APP_DIR/.git" ]; then
-        echo "-> AVISO: Repositório já existe. Se deseja uma instalação limpa, remova o sistema primeiro."
+        echo -e "${YELLOW}AVISO: O repositório já existe em '$APP_DIR'. Pulando o clone.${NC}"
         return
     fi
 
@@ -86,52 +118,54 @@ setup_source_code() {
 
     git clone "$REPO_URL" "$APP_DIR"
     if [ $? -ne 0 ]; then
-        echo "-> ERRO: Falha ao clonar o repositório."
+        echo -e "${RED}ERRO: Falha ao clonar o repositório '$REPO_URL'.${NC}"
         exit 1
     fi
     sudo chown -R $(whoami):$(whoami) "$APP_DIR"
-    echo "-> Código fonte clonado com sucesso."
+    echo -e "${GREEN}-> Código fonte clonado para '$APP_DIR'.${NC}"
 
-    # Renomeia env.txt para .env se o arquivo existir
     if [ -f "$APP_DIR/env.txt" ]; then
         echo "-> Renomeando env.txt para .env..."
         mv "$APP_DIR/env.txt" "$APP_DIR/.env"
-        echo "-> AVISO: O arquivo .env foi criado. Edite-o com suas credenciais de produção."
-    else
-        echo "-> AVISO: Arquivo env.txt não encontrado no repositório. Crie um arquivo .env manualmente se necessário."
+        echo -e "${YELLOW}AVISO: O arquivo .env foi criado. Edite-o com suas credenciais de produção.${NC}"
     fi
 }
 
 build_application() {
-    echo -e "\n[ ETAPA 3/4 ] Construindo a aplicação React..."
-    cd "$APP_DIR"
+    local APP_DIR="$1"
+    local BUILD_DIR="$2"
+    echo -e "\n${YELLOW}[ STEP 3/5 ] Construindo a aplicação frontend...${NC}"
+    cd "$APP_DIR" || { echo -e "${RED}ERRO: Diretório '$APP_DIR' não encontrado.${NC}"; exit 1; }
     
     echo "--> Instalando dependências npm..."
     npm install
     if [ $? -ne 0 ]; then
-        echo "-> ERRO: 'npm install' falhou."
+        echo -e "${RED}ERRO: 'npm install' falhou.${NC}"
         exit 1
     fi
 
-    echo "--> Executando o build da aplicação..."
+    echo "--> Executando o build..."
     npm run build
     if [ $? -ne 0 ]; then
-        echo "-> ERRO: 'npm run build' falhou. Verifique se o script existe no package.json."
+        echo -e "${RED}ERRO: 'npm run build' falhou.${NC}"
         exit 1
     fi
-    echo "-> Build concluído. Arquivos gerados em '$APP_DIR/$BUILD_DIR'."
+    echo -e "${GREEN}-> Build concluído. Arquivos gerados em '$APP_DIR/$BUILD_DIR'.${NC}"
 }
 
 configure_nginx_and_ssl() {
-    echo -e "\n[ ETAPA 4/4 ] Configurando Nginx para os domínios e gerando SSL..."
+    local FRONTEND_DOMAIN="$1"
+    local BACKEND_DOMAIN="$2"
+    local NGINX_PORT="$3"
+    local APP_DIR="$4"
+    local BUILD_DIR="$5"
+    local BACKEND_PORT="$6"
+    
+    echo -e "\n${YELLOW}[ STEP 4/5 ] Configurando Nginx e SSL...${NC}"
     NGINX_CONF_PATH="/etc/nginx/sites-available/$FRONTEND_DOMAIN"
     
-    echo "-> AVISO: Esta configuração assume que um servidor de backend está rodando na porta $BACKEND_PORT."
-    echo "-> Domínio do Backend ($BACKEND_DOMAIN) será redirecionado para o backend."
-
-    # Cria uma única configuração Nginx para ambos os domínios.
-    sudo tee $NGINX_CONF_PATH > /dev/null <<EOF
-# Configuração do Frontend (Aplicação React)
+    sudo tee "$NGINX_CONF_PATH" > /dev/null <<EOF
+# Configuração do Frontend: $FRONTEND_DOMAIN
 server {
     listen $NGINX_PORT;
     server_name $FRONTEND_DOMAIN;
@@ -139,32 +173,26 @@ server {
     root $APP_DIR/$BUILD_DIR;
     index index.html index.htm;
 
-    # Serve a aplicação frontend React para todas as outras requisições
     location / {
         try_files \$uri \$uri/ /index.html;
     }
 }
 
-# Configuração do Backend (Proxy Reverso com CORS)
+# Configuração do Backend: $BACKEND_DOMAIN
 server {
     listen $NGINX_PORT;
     server_name $BACKEND_DOMAIN;
 
     location / {
-        # Adiciona cabeçalhos CORS para permitir requisições do frontend
-        # O 'always' garante que o header seja adicionado mesmo em respostas de erro
         add_header 'Access-Control-Allow-Origin' 'https://$FRONTEND_DOMAIN' always;
         add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
         add_header 'Access-Control-Allow-Headers' 'Origin, X-Requested-With, Content-Type, Accept, Authorization' always;
         add_header 'Access-Control-Allow-Credentials' 'true' always;
 
-        # Lida com a requisição de preflight OPTIONS do navegador
         if (\$request_method = 'OPTIONS') {
-            # Responde com 204 No Content, que é o esperado para preflights
             return 204;
         }
 
-        # Passa a requisição para o servidor backend
         proxy_pass http://localhost:$BACKEND_PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -180,85 +208,104 @@ EOF
 
     sudo nginx -t && sudo systemctl restart nginx
     if [ $? -ne 0 ]; then
-        echo "-> ERRO: Falha ao iniciar o Nginx. A porta $NGINX_PORT pode estar em uso."
+        echo -e "${RED}ERRO: Falha ao reiniciar o Nginx. A porta $NGINX_PORT pode estar em uso por outra configuração.${NC}"
         exit 1
     fi
 
-    echo "-> Tentando gerar certificado SSL com Certbot para ambos os domínios..."
+    echo "-> Tentando gerar certificado SSL com Certbot..."
     sudo certbot --nginx -d "$FRONTEND_DOMAIN" -d "$BACKEND_DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL"
     if [ $? -ne 0 ]; then
-        echo "-> AVISO: Falha ao gerar o certificado SSL. A aplicação estará disponível apenas em HTTP."
+        echo -e "${YELLOW}AVISO: Falha ao gerar o certificado SSL. A aplicação estará disponível apenas em HTTP na porta $NGINX_PORT.${NC}"
     else
-        echo "-> Certificado SSL gerado e configurado com sucesso para ambos os domínios."
+        echo -e "${GREEN}-> Certificado SSL gerado com sucesso.${NC}"
     fi
     
     sudo systemctl restart nginx
-    echo "-> Nginx configurado."
+    echo -e "${GREEN}-> Nginx configurado.${NC}"
 }
 
 print_success_message() {
-    echo "========================================================"
-    echo "                OPERAÇÃO CONCLUÍDA!                     "
-    echo "========================================================"
-    echo "Acesse o frontend em: https://$FRONTEND_DOMAIN"
-    echo "O backend está disponível em: https://$BACKEND_DOMAIN"
-    echo "--------------------------------------------------------"
-    echo "O frontend está sendo servido diretamente pelo Nginx."
-    echo "Para atualizar, basta rodar a opção 'Atualizar Sistema'."
-    echo "--------------------------------------------------------"
-    echo "IMPORTANTE: Lembre-se de configurar o banco de dados manualmente"
-    echo "e de iniciar o servidor de backend na porta $BACKEND_PORT (ex: com 'pm2 start your-backend-script.js')."
+    local FRONTEND_DOMAIN="$1"
+    local BACKEND_DOMAIN="$2"
+    local BACKEND_PORT="$3"
+    local PM2_PROCESS_NAME="$4"
+    local APP_NAME="$5"
+
+    echo -e "\n${GREEN}========================================================"
+    echo "           INSTALAÇÃO DE '$APP_NAME' CONCLUÍDA!             "
+    echo "========================================================${NC}"
+    echo "Acesse o frontend em:   https://$FRONTEND_DOMAIN"
+    echo "O backend está em:      https://$BACKEND_DOMAIN"
+    echo ""
+    echo -e "${YELLOW}------------------- PRÓXIMOS PASSOS --------------------${NC}"
+    echo "1. Configure o banco de dados manualmente."
+    echo "2. Edite o arquivo .env em seu diretório com as credenciais."
+    echo "3. Inicie o servidor de backend na porta ${YELLOW}$BACKEND_PORT${NC}."
+    echo "   Exemplo com PM2: ${YELLOW}pm2 start your-backend.js --name $PM2_PROCESS_NAME${NC}"
     echo "========================================================"
 }
 
-# --- Funções do Menu ---
+# --- Generic Workflow Functions ---
 
 install_system() {
-    set -e # Encerra o script se algum comando falhar
-    echo "--- INICIANDO INSTALAÇÃO COMPLETA ---"
+    local APP_NAME="$1"
+    local FRONTEND_DOMAIN="$2"
+    local BACKEND_DOMAIN="$3"
+    local NGINX_PORT="$4"
+    local APP_DIR="$5"
+    local BUILD_DIR="$6"
+    local BACKEND_PORT="$7"
+    local REPO_URL="$8"
+    local PM2_PROCESS_NAME="$9"
+
+    set -e
+    echo -e "\n--- INICIANDO INSTALAÇÃO COMPLETA PARA: $APP_NAME ---"
     install_dependencies
-    setup_source_code
-    build_application
-    configure_nginx_and_ssl
-    print_success_message
+    setup_source_code "$APP_DIR" "$REPO_URL"
+    build_application "$APP_DIR" "$BUILD_DIR"
+    configure_nginx_and_ssl "$FRONTEND_DOMAIN" "$BACKEND_DOMAIN" "$NGINX_PORT" "$APP_DIR" "$BUILD_DIR" "$BACKEND_PORT"
+    print_success_message "$FRONTEND_DOMAIN" "$BACKEND_DOMAIN" "$BACKEND_PORT" "$PM2_PROCESS_NAME" "$APP_NAME"
+    set +e
 }
 
 update_system() {
+    local APP_DIR="$1"
+    local BUILD_DIR="$2"
+    local APP_NAME="$3"
+    local PM2_PROCESS_NAME="$4"
+
     set -e
-    echo "--- INICIANDO ATUALIZAÇÃO DO SISTEMA ---"
+    echo -e "\n--- INICIANDO ATUALIZAÇÃO PARA: $APP_NAME ---"
     if [ ! -d "$APP_DIR/.git" ]; then
-        echo "ERRO: Diretório de instalação não encontrado em '$APP_DIR'. Execute a instalação primeiro."
+        echo -e "${RED}ERRO: Diretório '$APP_DIR' não encontrado. Instale o sistema primeiro.${NC}"
         exit 1
     fi
 
     echo "-> Atualizando código fonte via git pull..."
-    cd "$APP_DIR"
-    git pull origin main
-    echo "-> Código fonte atualizado."
+    cd "$APP_DIR" || exit
+    git pull
     
-    build_application
+    build_application "$APP_DIR" "$BUILD_DIR"
     
-    echo "-> Frontend atualizado. Nginx servirá os novos arquivos automaticamente."
-    echo "-> AVISO: Se você atualizou o backend, lembre-se de reiniciá-lo (ex: 'pm2 restart backend-app-name')."
-    
-    echo "--- ATUALIZAÇÃO CONCLUÍDA ---"
+    echo -e "${GREEN}-> Frontend atualizado com sucesso!${NC}"
+    echo -e "${YELLOW}AVISO: Se o backend foi atualizado, reinicie-o (ex: 'pm2 restart $PM2_PROCESS_NAME').${NC}"
+    set +e
 }
 
 remove_system() {
-    echo "--- INICIANDO REMOÇÃO DO SISTEMA ---"
-    read -p "!!! ATENÇÃO !!! Isso removerá a aplicação e as configurações do servidor web. Deseja continuar? (s/N): " confirm
+    local FRONTEND_DOMAIN="$1"
+    local APP_DIR="$2"
+    local APP_NAME="$3"
+
+    echo -e "\n--- INICIANDO REMOÇÃO DE: $APP_NAME ---"
+    read -p "!!! ATENÇÃO !!! Isso removerá os arquivos e configs do Nginx para '$APP_NAME'. Deseja continuar? (s/N): " confirm
     if [[ "$confirm" != "s" && "$confirm" != "S" ]]; then
         echo "Remoção cancelada."
-        exit 0
+        return
     fi
 
-    echo "-> Removendo processo PM2 (se existir)..."
-    pm2 stop "$FRONTEND_DOMAIN" 2>/dev/null || true
-    pm2 delete "$FRONTEND_DOMAIN" 2>/dev/null || true
-    pm2 save --force
-    
     echo "-> Removendo certificado SSL (se existir)..."
-    sudo certbot delete --cert-name "$FRONTEND_DOMAIN" --non-interactive
+    sudo certbot delete --cert-name "$FRONTEND_DOMAIN" --non-interactive 2>/dev/null || echo "Certificado não encontrado, pulando."
     
     echo "-> Removendo configurações do Nginx..."
     sudo rm -f "/etc/nginx/sites-available/$FRONTEND_DOMAIN"
@@ -268,39 +315,83 @@ remove_system() {
     echo "-> Removendo arquivos da aplicação..."
     sudo rm -rf "$APP_DIR"
     
-    echo "--- REMOÇÃO COMPLETA ---"
-    echo "AVISO: O banco de dados NÃO foi removido. Você deve removê-lo manualmente se necessário."
-    echo "AVISO: O processo do backend (se gerenciado por PM2) NÃO foi removido."
-    echo "AVISO: Dependências como Nginx e Node.js não foram removidas."
+    echo -e "${GREEN}--- REMOÇÃO COMPLETA DE '$APP_NAME' ---${NC}"
+    echo -e "${YELLOW}AVISO: O banco de dados e o processo PM2 do backend NÃO foram removidos.${NC}"
 }
 
-# --- Menu Principal ---
+# --- Application Menus ---
 
-echo "================================================="
-echo "  Gerenciador de Implantação Jiu-Jitsu Hub SAAS"
-echo "================================================="
-echo "Escolha uma opção:"
-echo "  1) Instalar Sistema (Configuração completa)"
-echo "  2) Atualizar Sistema (Baixa a versão mais recente)"
-echo "  3) Remover Sistema (Apaga a aplicação)"
-echo
+show_gerencia_boleto_menu() {
+    while true; do
+        echo -e "\n--- Menu: ${GREEN}Gerencia Boleto${NC} ---"
+        echo "1) Instalar Sistema"
+        echo "2) Atualizar Sistema"
+        echo "3) Remover Sistema"
+        echo "4) Voltar ao Menu Principal"
+        read -p "Opção: " choice
 
-read -p "Opção [1, 2, 3]: " choice
+        case $choice in
+            1) install_system "$GB_APP_NAME" "$GB_FRONTEND_DOMAIN" "$GB_BACKEND_DOMAIN" "$GB_NGINX_PORT" "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_BACKEND_PORT" "$GB_REPO_URL" "$GB_PM2_PROCESS_NAME"; break ;;
+            2) update_system "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_APP_NAME" "$GB_PM2_PROCESS_NAME"; break ;;
+            3) remove_system "$GB_FRONTEND_DOMAIN" "$GB_APP_DIR" "$GB_APP_NAME"; break ;;
+            4) return ;;
+            *) echo -e "${RED}Opção inválida.${NC}";;
+        esac
+    done
+}
 
-case $choice in
-    1)
-        install_system
-        ;;
-    2)
-        update_system
-        ;;
-    3)
-        remove_system
-        ;;
-    *)
-        echo "Opção inválida. Saindo."
-        exit 1
-        ;;
-esac
+show_jjh_menu() {
+    while true; do
+        echo -e "\n--- Menu: ${GREEN}Jiu-Jitsu Hub${NC} ---"
+        echo "1) Instalar Sistema"
+        echo "2) Atualizar Sistema"
+        echo "3) Remover Sistema"
+        echo "4) Voltar ao Menu Principal"
+        read -p "Opção: " choice
 
+        case $choice in
+            1) install_system "$JJH_APP_NAME" "$JJH_FRONTEND_DOMAIN" "$JJH_BACKEND_DOMAIN" "$JJH_NGINX_PORT" "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_BACKEND_PORT" "$JJH_REPO_URL" "$JJH_PM2_PROCESS_NAME"; break ;;
+            2) update_system "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_APP_NAME" "$JJH_PM2_PROCESS_NAME"; break ;;
+            3) remove_system "$JJH_FRONTEND_DOMAIN" "$JJH_APP_DIR" "$JJH_APP_NAME"; break ;;
+            4) return ;;
+            *) echo -e "${RED}Opção inválida.${NC}";;
+        esac
+    done
+}
+
+# --- Main Menu ---
+
+show_main_menu() {
+    while true; do
+        echo -e "\n================================================="
+        echo -e "      ${GREEN}Gerenciador de Implantação Unificado${NC}"
+        echo "================================================="
+        echo "Escolha qual sistema você deseja gerenciar:"
+        echo "  1) Gerencia Boleto"
+        echo "  2) Jiu-Jitsu Hub"
+        echo "  3) Sair"
+        echo
+
+        read -p "Opção [1, 2, 3]: " choice
+
+        case $choice in
+            1)
+                show_gerencia_boleto_menu
+                ;;
+            2)
+                show_jjh_menu
+                ;;
+            3)
+                echo "Saindo."
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}Opção inválida. Tente novamente.${NC}"
+                ;;
+        esac
+    done
+}
+
+# --- Script Entry Point ---
+show_main_menu
 exit 0
