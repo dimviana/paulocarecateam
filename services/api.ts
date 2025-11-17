@@ -137,6 +137,49 @@ export const api = {
 
     return simulateDelay({ token: null });
   },
+
+  registerAcademy: (data: { 
+    name: string; 
+    address: string;
+    responsible: string;
+    responsibleRegistration: string;
+    email: string; 
+    password?: string; 
+  }): Promise<Academy> => {
+    if (users.some(u => u.email === data.email)) {
+        throw new Error("Este email já está em uso.");
+    }
+    if (academies.some(a => a.name.toLowerCase() === data.name.toLowerCase())) {
+        throw new Error("Já existe uma academia com este nome.");
+    }
+
+    const newAcademy: Academy = {
+        id: String(Date.now()),
+        name: data.name,
+        address: data.address,
+        responsible: data.responsible,
+        responsibleRegistration: data.responsibleRegistration,
+        email: data.email,
+        password: data.password || '123',
+        professorId: '',
+        assistantIds: [],
+    };
+    academies.push(newAcademy);
+
+    const newUserForAcademy: User = {
+        id: `user-academy-${newAcademy.id}`,
+        name: `Admin ${newAcademy.name}`,
+        email: newAcademy.email,
+        role: 'academy_admin',
+        academyId: newAcademy.id,
+    };
+    users.push(newUserForAcademy);
+
+    logActivity(newUserForAcademy.id, 'Cadastro de Academia', `A academia ${newAcademy.name} foi cadastrada por ${data.responsible}.`);
+    
+    return simulateDelay(newAcademy);
+  },
+
   getStudents: () => simulateDelay(students),
   getAcademies: () => simulateDelay(academies),
   getUsers: () => simulateDelay(users),

@@ -35,6 +35,17 @@ interface AppContextType {
   // FIX: Add showcasedComponents state for the Components demo page.
   showcasedComponents: string[];
   setShowcasedComponents: React.Dispatch<React.SetStateAction<string[]>>;
+  registerAcademy: (data: {
+    name: string;
+    address: string;
+    responsible: string;
+    responsibleRegistration: string;
+    email: string;
+    password?: string;
+  }) => Promise<{
+    success: boolean;
+    message?: string;
+  }>;
 }
 
 export const AppContext = createContext<AppContextType>(null!);
@@ -204,6 +215,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
+  const registerAcademy = async (data: {
+    name: string;
+    address: string;
+    responsible: string;
+    responsibleRegistration: string;
+    email: string;
+    password?: string;
+  }): Promise<{ success: boolean; message?: string; }> => {
+    try {
+        await api.registerAcademy(data);
+        setAcademies(await api.getAcademies());
+        setUsers(await api.getUsers());
+        await refetchActivityLogs();
+        return { success: true };
+    } catch (error: any) {
+        console.error("Registration failed in context", error);
+        return { success: false, message: error.message };
+    }
+  };
+
   const updateStudentPayment = async (studentId: string, status: 'paid' | 'unpaid') => {
       if (!user) return;
       await api.updateStudentPayment(studentId, status, themeSettings.monthlyFeeAmount, user.id);
@@ -316,7 +347,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         saveSchedule, deleteSchedule,
         saveAttendanceRecord, deleteAttendanceRecord,
         saveProfessor, deleteProfessor,
-        showcasedComponents, setShowcasedComponents
+        showcasedComponents, setShowcasedComponents,
+        registerAcademy
     }}>
       {children}
     </AppContext.Provider>

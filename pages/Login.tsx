@@ -4,6 +4,9 @@ import React, { useState, useContext, FormEvent } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
 import { IconEye, IconEyeOff } from '../constants';
+import Modal from '../components/ui/Modal';
+import Input from '../components/ui/Input';
+import Button from '../components/ui/Button';
 
 const IconGoogle = () => (
     <svg className="w-5 h-5 mr-3" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
@@ -17,14 +20,76 @@ const IconFacebook = () => (
     </svg>
 );
 
+
+interface RegisterFormProps {
+  onSave: (data: any) => Promise<{ success: boolean; message?: string }>;
+  onClose: () => void;
+}
+
+const RegisterForm: React.FC<RegisterFormProps> = ({ onSave, onClose }) => {
+  const [formData, setFormData] = useState({
+    name: '', // Academy Name
+    address: '', // Academy Address
+    responsible: '', // Responsible Name
+    responsibleRegistration: '', // Responsible CPF/CNPJ
+    email: '',
+    password: '',
+  });
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (formData.password !== confirmPassword) {
+      setError('As senhas não coincidem.');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    const result = await onSave(formData);
+    if (!result.success) {
+      setError(result.message || 'Ocorreu um erro no cadastro.');
+    }
+    setLoading(false);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+  
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && <p className="text-sm text-center text-red-600 bg-red-100 p-3 rounded-md">{error}</p>}
+      <Input label="Nome da Academia" name="name" value={formData.name} onChange={handleChange} required />
+      <Input label="Endereço (Cidade/Estado)" name="address" value={formData.address} onChange={handleChange} required />
+      <Input label="Seu Nome Completo (Responsável)" name="responsible" value={formData.responsible} onChange={handleChange} required />
+      <Input label="Seu CPF (Responsável)" name="responsibleRegistration" value={formData.responsibleRegistration} onChange={handleChange} required />
+      <hr className="my-2 border-slate-200" />
+      <p className="text-sm text-slate-500">Crie suas credenciais de administrador:</p>
+      <Input label="Email de Acesso" name="email" type="email" value={formData.email} onChange={handleChange} required />
+      <Input label="Senha" name="password" type="password" value={formData.password} onChange={handleChange} required />
+      <Input label="Confirmar Senha" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+      
+      <div className="flex justify-end gap-4 pt-4">
+        <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>Cancelar</Button>
+        <Button type="submit" disabled={loading}>{loading ? 'Cadastrando...' : 'Cadastrar'}</Button>
+      </div>
+    </form>
+  );
+};
+
+
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  const { themeSettings, login, user } = useContext(AppContext);
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [registerSuccessMessage, setRegisterSuccessMessage] = useState('');
+
+  const { themeSettings, login, user, registerAcademy } = useContext(AppContext);
   const location = useLocation();
 
   const handleLogin = async (e: FormEvent) => {
@@ -36,6 +101,15 @@ const Login: React.FC = () => {
       setError('Credenciais inválidas. Tente novamente.');
     }
     setLoading(false);
+  };
+
+  const handleRegisterSave = async (data: any) => {
+    const result = await registerAcademy(data);
+    if (result.success) {
+        setRegisterSuccessMessage('Cadastro realizado com sucesso! Faça login para continuar.');
+        setIsRegisterModalOpen(false);
+    }
+    return result;
   };
   
   if (user) {
@@ -52,6 +126,9 @@ const Login: React.FC = () => {
                     <h1 className="text-3xl font-bold text-[var(--theme-text-primary)] tracking-tight">{themeSettings.systemName}</h1>
                     <p className="mt-2 text-[var(--theme-text-primary)]/70">Acesse sua conta para continuar</p>
                 </div>
+
+                {registerSuccessMessage && <p className="text-sm text-center text-green-600 bg-green-100 p-3 rounded-md mt-6">{registerSuccessMessage}</p>}
+
                 <form className="mt-8 space-y-6" onSubmit={handleLogin}>
                     <div>
                         <label htmlFor="email" className="block text-sm font-medium text-[var(--theme-text-primary)]/80 mb-1">Email ou CPF</label>
@@ -94,6 +171,21 @@ const Login: React.FC = () => {
                         </button>
                     </div>
                 </form>
+
+                <div className="text-center mt-6 text-sm">
+                    <span className="text-[var(--theme-text-primary)]/70">Não tem uma conta? </span>
+                    <button
+                        type="button"
+                        onClick={() => {
+                        setRegisterSuccessMessage('');
+                        setIsRegisterModalOpen(true);
+                        }}
+                        className="font-semibold text-[var(--theme-accent)] hover:underline"
+                    >
+                        Cadastre-se
+                    </button>
+                </div>
+
                 {themeSettings.socialLoginEnabled && (
                     <>
                         <div className="relative my-6">
@@ -121,6 +213,10 @@ const Login: React.FC = () => {
         <footer className="py-4 text-center text-sm text-[var(--theme-text-primary)]/60">
             <p>© {new Date().getFullYear()} {themeSettings.copyrightText} - <a href="https://github.com/dimviana/paulocarecateam" target="_blank" rel="noopener noreferrer" className="hover:text-amber-600 transition-colors">Versão {themeSettings.systemVersion}</a></p>
         </footer>
+
+        <Modal isOpen={isRegisterModalOpen} onClose={() => setIsRegisterModalOpen(false)} title="Cadastrar Nova Academia">
+            <RegisterForm onSave={handleRegisterSave} onClose={() => setIsRegisterModalOpen(false)} />
+        </Modal>
     </div>
   );
 };
