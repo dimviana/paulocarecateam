@@ -4,7 +4,7 @@
 #
 # Este script automatiza a instalação, atualização e remoção da aplicação,
 # utilizando Nginx para servir os arquivos estáticos do frontend e como
-# proxy reverso para o backend.
+# proxy reverso para o backend em domínios separados.
 #
 # IMPORTANTE: A configuração do banco de dados MySQL é MANUAL.
 # O servidor de backend DEVE ser iniciado separadamente (ex: com PM2).
@@ -22,13 +22,14 @@
 # ==============================================================================
 
 # --- Configurações da Aplicação ---
-APP_DOMAIN="paulocarecateam.abildeveloper.com.br"
+FRONTEND_DOMAIN="paulocarecateam.abildeveloper.com.br"
+BACKEND_DOMAIN="paulocarecabk.abildeveloper.com.br"
 ADMIN_EMAIL="androiddiviana@gmail.com" # Email para registro do Certbot
 APP_DIR="/home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildeveloper.com.br"
 REPO_URL="https://github.com/dimviana/paulocarecateam.git"
 BUILD_DIR="dist" # Diretório de build do React (geralmente 'build' ou 'dist' para Vite)
 BACKEND_PORT=3002 # Porta interna do backend (DEVE ser iniciada separadamente)
-NGINX_PORT=8080    # Porta em que o Nginx irá escutar
+NGINX_PORT=80    # Porta padrão para HTTP, necessária para Certbot
 
 # --- Funções Auxiliares ---
 check_command() {
@@ -122,40 +123,45 @@ build_application() {
 }
 
 configure_nginx_and_ssl() {
-    echo -e "\n[ ETAPA 4/4 ] Configurando Nginx para a porta $NGINX_PORT e tentando gerar SSL..."
-    NGINX_CONF_PATH="/etc/nginx/sites-available/$APP_DOMAIN"
+    echo -e "\n[ ETAPA 4/4 ] Configurando Nginx para os domínios e gerando SSL..."
+    NGINX_CONF_PATH="/etc/nginx/sites-available/$FRONTEND_DOMAIN"
     
     echo "-> AVISO: Esta configuração assume que um servidor de backend está rodando na porta $BACKEND_PORT."
-    echo "-> As requisições para '/api/' serão redirecionadas para o backend."
+    echo "-> Domínio do Backend ($BACKEND_DOMAIN) será redirecionado para o backend."
 
-    # Usando root e try_files para servir o frontend, que é mais robusto e performático.
+    # Cria uma única configuração Nginx para ambos os domínios.
     sudo tee $NGINX_CONF_PATH > /dev/null <<EOF
+# Configuração do Frontend (Aplicação React)
 server {
     listen $NGINX_PORT;
-    server_name $APP_DOMAIN;
+    server_name $FRONTEND_DOMAIN;
 
     root $APP_DIR/$BUILD_DIR;
     index index.html index.htm;
 
-    # Roteia requisições para a API de backend
-    location /api/ {
+    # Serve a aplicação frontend React para todas as outras requisições
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+}
+
+# Configuração do Backend (Proxy Reverso)
+server {
+    listen $NGINX_PORT;
+    server_name $BACKEND_DOMAIN;
+
+    location / {
         proxy_pass http://localhost:$BACKEND_PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
-
-    # Serve a aplicação frontend React para todas as outras requisições
-    # try_files é o método padrão e correto para lidar com roteamento de SPAs.
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
 }
 EOF
 
-    if [ ! -L "/etc/nginx/sites-enabled/$APP_DOMAIN" ]; then
-        sudo ln -s $NGINX_CONF_PATH /etc/nginx/sites-enabled/
+    if [ ! -L "/etc/nginx/sites-enabled/$FRONTEND_DOMAIN" ]; then
+        sudo ln -s "$NGINX_CONF_PATH" "/etc/nginx/sites-enabled/$FRONTEND_DOMAIN"
     fi
 
     sudo nginx -t && sudo systemctl restart nginx
@@ -164,13 +170,12 @@ EOF
         exit 1
     fi
 
-    echo "-> AVISO: A geração de certificado SSL pode falhar, pois o Certbot precisa validar o domínio na porta 80."
-    echo "-> Tentando gerar certificado SSL com Certbot..."
-    sudo certbot --nginx -d $APP_DOMAIN --non-interactive --agree-tos -m $ADMIN_EMAIL
+    echo "-> Tentando gerar certificado SSL com Certbot para ambos os domínios..."
+    sudo certbot --nginx -d "$FRONTEND_DOMAIN" -d "$BACKEND_DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL"
     if [ $? -ne 0 ]; then
-        echo "-> AVISO: Falha ao gerar o certificado SSL como esperado. A aplicação estará disponível apenas em HTTP na porta $NGINX_PORT."
+        echo "-> AVISO: Falha ao gerar o certificado SSL. A aplicação estará disponível apenas em HTTP."
     else
-        echo "-> Certificado SSL gerado. No entanto, o Nginx está configurado para a porta $NGINX_PORT, então HTTPS pode não funcionar como esperado sem configuração manual adicional."
+        echo "-> Certificado SSL gerado e configurado com sucesso para ambos os domínios."
     fi
     
     sudo systemctl restart nginx
@@ -181,8 +186,8 @@ print_success_message() {
     echo "========================================================"
     echo "                OPERAÇÃO CONCLUÍDA!                     "
     echo "========================================================"
-    echo "Acesse a aplicação em: http://$APP_DOMAIN:$NGINX_PORT"
-    echo "AVISO: SSL provavelmente não foi ativado, pois o Nginx não está na porta 80."
+    echo "Acesse o frontend em: https://$FRONTEND_DOMAIN"
+    echo "O backend está disponível em: https://$BACKEND_DOMAIN"
     echo "--------------------------------------------------------"
     echo "O frontend está sendo servido diretamente pelo Nginx."
     echo "Para atualizar, basta rodar a opção 'Atualizar Sistema'."
@@ -233,17 +238,17 @@ remove_system() {
         exit 0
     fi
 
-    echo "-> Removendo processo PM2 do frontend (se existir de uma instalação antiga)..."
-    pm2 stop "$APP_DOMAIN" 2>/dev/null || true
-    pm2 delete "$APP_DOMAIN" 2>/dev/null || true
+    echo "-> Removendo processo PM2 (se existir)..."
+    pm2 stop "$FRONTEND_DOMAIN" 2>/dev/null || true
+    pm2 delete "$FRONTEND_DOMAIN" 2>/dev/null || true
     pm2 save --force
     
     echo "-> Removendo certificado SSL (se existir)..."
-    sudo certbot delete --cert-name "$APP_DOMAIN" --non-interactive
+    sudo certbot delete --cert-name "$FRONTEND_DOMAIN" --non-interactive
     
     echo "-> Removendo configurações do Nginx..."
-    sudo rm -f "/etc/nginx/sites-available/$APP_DOMAIN"
-    sudo rm -f "/etc/nginx/sites-enabled/$APP_DOMAIN"
+    sudo rm -f "/etc/nginx/sites-available/$FRONTEND_DOMAIN"
+    sudo rm -f "/etc/nginx/sites-enabled/$FRONTEND_DOMAIN"
     sudo nginx -t && sudo systemctl restart nginx
 
     echo "-> Removendo arquivos da aplicação..."

@@ -1,6 +1,6 @@
 import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog } from '../types';
 
-const API_URL = '/api'; // In production, this would be proxied by Nginx to the backend server.
+const API_URL = 'https://paulocarecabk.abildeveloper.com.br'; // In production, this would be proxied by Nginx to the backend server.
 
 /**
  * A generic wrapper around the Fetch API.
