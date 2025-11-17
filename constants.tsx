@@ -21,7 +21,7 @@ export const initialThemeSettings: ThemeSettings = {
   overdueDaysAfterDue: 5,
   theme: 'light',
   monthlyFeeAmount: 150,
-  publicPageEnabled: false,
+  publicPageEnabled: true,
   heroHtml: `
 <div class="relative bg-white text-slate-800 text-center py-20 px-4 overflow-hidden" style="background-image: url('https://images.unsplash.com/photo-1581009137052-c40971b51c69?q=80&w=2070&auto=format&fit=crop'); background-size: cover; background-position: center;">
     <div class="absolute inset-0 bg-white/50 backdrop-blur-sm"></div>
