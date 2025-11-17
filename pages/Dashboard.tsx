@@ -4,9 +4,10 @@ import Card from '../components/ui/Card';
 import StudentBreakdownChart from '../components/charts/PaymentsChart';
 import AttendanceChart from '../components/charts/AttendanceChart';
 import Button from '../components/ui/Button';
-import { IconUsers, IconBriefcase, IconBookOpen, IconChevronDown, IconGift } from '../constants';
-import { DayOfWeek } from '../types';
+import { IconUsers, IconBriefcase, IconBookOpen, IconChevronDown, IconGift, IconAward } from '../constants';
+import { Student, DayOfWeek } from '../types';
 import StudentDashboard from './StudentDashboard';
+import Modal from '../components/ui/Modal';
 
 // --- Helper Functions ---
 const toYYYYMMDD = (date: Date) => date.toISOString().split('T')[0];
@@ -225,12 +226,75 @@ const AulasDoDia: React.FC<AulasDoDiaProps> = ({ selectedDate }) => {
     );
 };
 
+interface CompetitionsCardProps {
+  onCompetitorClick: (student: Student) => void;
+}
+
+const CompetitionsCard: React.FC<CompetitionsCardProps> = ({ onCompetitorClick }) => {
+    const { students } = useContext(AppContext);
+
+    const competitors = students.filter(s => s.isCompetitor && s.medals && (s.medals.gold > 0 || s.medals.silver > 0 || s.medals.bronze > 0));
+
+    if (competitors.length === 0) {
+        return null;
+    }
+
+    return (
+        <Card>
+            <h3 className="font-semibold text-[var(--theme-text-primary)] mb-4 flex items-center">
+                <IconAward className="w-5 h-5 mr-2 text-[var(--theme-accent)]" />
+                Competições
+            </h3>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+                {competitors.map(competitor => (
+                    <button
+                        key={competitor.id}
+                        onClick={() => onCompetitorClick(competitor)}
+                        className="w-full text-left flex items-center p-2 bg-[var(--theme-bg)] hover:bg-[var(--theme-accent)]/10 rounded-md transition-colors"
+                        aria-label={`Ver perfil de ${competitor.name}`}
+                    >
+                        <img
+                            src={competitor.imageUrl || `https://i.pravatar.cc/150?u=${competitor.cpf}`}
+                            alt={competitor.name}
+                            className="w-10 h-10 rounded-full object-cover mr-3 flex-shrink-0"
+                        />
+                        <div className="flex-grow">
+                            <p className="font-semibold text-[var(--theme-text-primary)]/90 truncate">{competitor.name}</p>
+                            <div className="flex items-center gap-3 text-xs text-[var(--theme-text-primary)]/70 mt-1">
+                                {competitor.medals && competitor.medals.gold > 0 && (
+                                    <div className="flex items-center" title={`${competitor.medals.gold} Ouro`}>
+                                        <IconAward className="w-4 h-4 text-yellow-500" />
+                                        <span className="ml-1 font-bold">{competitor.medals.gold}</span>
+                                    </div>
+                                )}
+                                {competitor.medals && competitor.medals.silver > 0 && (
+                                    <div className="flex items-center" title={`${competitor.medals.silver} Prata`}>
+                                        <IconAward className="w-4 h-4 text-slate-400" />
+                                        <span className="ml-1 font-bold">{competitor.medals.silver}</span>
+                                    </div>
+                                )}
+                                {competitor.medals && competitor.medals.bronze > 0 && (
+                                    <div className="flex items-center" title={`${competitor.medals.bronze} Bronze`}>
+                                        <IconAward className="w-4 h-4 text-orange-400" />
+                                        <span className="ml-1 font-bold">{competitor.medals.bronze}</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </button>
+                ))}
+            </div>
+        </Card>
+    );
+};
+
 
 // --- Main Dashboard Component ---
 
 const Dashboard: React.FC = () => {
     const { user, students, users, loading } = useContext(AppContext);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const [dashboardStudent, setDashboardStudent] = useState<Student | null>(null);
     
     if (loading) {
         return <div className="text-center">Carregando dados...</div>;
@@ -287,8 +351,20 @@ const Dashboard: React.FC = () => {
                     <CommunityCard />
                     <CalendarWidget selectedDate={selectedDate} onDateChange={setSelectedDate} />
                     <AulasDoDia selectedDate={selectedDate} />
+                    <CompetitionsCard onCompetitorClick={setDashboardStudent} />
                 </div>
             </div>
+            
+            {dashboardStudent && (
+                <Modal 
+                    isOpen={!!dashboardStudent} 
+                    onClose={() => setDashboardStudent(null)} 
+                    title={`Dashboard de ${dashboardStudent.name}`}
+                    size="4xl"
+                >
+                    <StudentDashboard student={dashboardStudent} />
+                </Modal>
+            )}
         </div>
     );
 };
