@@ -91,7 +91,6 @@ html {
   customJs: `
 // console.log("Custom JS loaded!");
   `,
-  jwtSecret: '',
   socialLoginEnabled: false,
   googleClientId: '',
   facebookAppId: '',

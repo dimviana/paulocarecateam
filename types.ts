@@ -122,8 +122,6 @@ export interface ThemeSettings {
   footerHtml: string;
   customCss: string;
   customJs: string;
-  // Security
-  jwtSecret: string;
   // Social Login
   socialLoginEnabled: boolean;
   googleClientId: string;

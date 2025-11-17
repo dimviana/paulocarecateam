@@ -33,12 +33,6 @@ const SettingsPage: React.FC = () => {
         }));
     };
     
-    const handleGenerateSecret = () => {
-        if(window.confirm('Gerar uma nova chave irá invalidar todas as sessões ativas. Deseja continuar?')){
-            setSettings(prev => ({...prev, jwtSecret: crypto.randomUUID()}));
-        }
-    };
-
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
         setThemeSettings(settings);
@@ -146,7 +140,7 @@ const SettingsPage: React.FC = () => {
                                     <Input label="Dias para cobrança (após venc.)" name="overdueDaysAfterDue" type="number" min="0" value={settings.overdueDaysAfterDue} onChange={handleChange} />
                                 </div>
 
-                                <h2 className="text-xl font-bold text-[var(--theme-accent)] border-b border-[var(--theme-text-primary)]/10 pb-2 pt-4">Login Social & API</h2>
+                                <h2 className="text-xl font-bold text-[var(--theme-accent)] border-b border-[var(--theme-text-primary)]/10 pb-2 pt-4">Login Social</h2>
                                 <div className="flex justify-between items-center p-3 bg-[var(--theme-bg)] rounded-lg">
                                     <label htmlFor="socialLoginEnabled" className="font-medium text-[var(--theme-text-primary)]">Ativar Login com Google & Facebook</label>
                                     <label className="relative inline-flex items-center cursor-pointer">
@@ -160,16 +154,6 @@ const SettingsPage: React.FC = () => {
                                         <Input label="Facebook App ID" name="facebookAppId" value={settings.facebookAppId} onChange={handleChange} placeholder="Cole seu Facebook App ID aqui" />
                                     </div>
                                 )}
-
-                                <h2 className="text-xl font-bold text-[var(--theme-accent)] border-b border-[var(--theme-text-primary)]/10 pb-2 pt-4">API & Segurança</h2>
-                                <div>
-                                    <label className="block text-sm font-medium text-[var(--theme-text-primary)]/80 mb-1">Chave Secreta JWT</label>
-                                    <div className="flex items-center gap-2">
-                                        <Input name="jwtSecret" value={settings.jwtSecret} readOnly className="flex-grow font-mono" />
-                                        <Button type="button" variant="secondary" onClick={handleGenerateSecret}>Gerar Nova Chave</Button>
-                                    </div>
-                                    <p className="text-xs text-[var(--theme-text-primary)]/60 mt-1">Esta chave é usada para assinar os tokens de sessão. Gerar uma nova chave invalidará todas as sessões ativas.</p>
-                                </div>
                             </>
                         )}
                         

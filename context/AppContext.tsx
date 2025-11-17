@@ -54,10 +54,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [themeSettings, setThemeSettingsState] = useState<ThemeSettings>(() => {
     const saved = localStorage.getItem('themeSettings');
     const settings = saved ? JSON.parse(saved) : initialThemeSettings;
-    if (!settings.jwtSecret) {
-        settings.jwtSecret = crypto.randomUUID();
-        localStorage.setItem('themeSettings', JSON.stringify(settings));
-    }
     // Force light theme to match new design
     settings.theme = 'light';
     return settings;

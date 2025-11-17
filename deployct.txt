@@ -3,10 +3,11 @@
 # Script de Gerenciamento de Implantação para Jiu-Jitsu Hub SAAS
 #
 # Este script automatiza a instalação, atualização e remoção da aplicação,
-# utilizando Nginx como proxy reverso e PM2 para gerenciar o processo da app.
+# utilizando Nginx para servir os arquivos estáticos do frontend e como
+# proxy reverso para o backend.
 #
 # IMPORTANTE: A configuração do banco de dados MySQL é MANUAL.
-# Você deve criar o banco, o usuário e conceder as permissões antes da instalação.
+# O servidor de backend DEVE ser iniciado separadamente (ex: com PM2).
 #
 # USO:
 # 1. Coloque este script em qualquer diretório no seu servidor (ex: /tmp).
@@ -16,7 +17,7 @@
 #
 # OPÇÕES:
 # 1. Instalar Sistema: Realiza a configuração completa do zero.
-# 2. Atualizar Sistema: Baixa a versão mais recente do código e reinicia a app.
+# 2. Atualizar Sistema: Baixa a versão mais recente do código e o reconstrói.
 # 3. Remover Sistema: Apaga a aplicação e configurações (NÃO apaga o banco).
 # ==============================================================================
 
@@ -26,7 +27,6 @@ ADMIN_EMAIL="androiddiviana@gmail.com" # Email para registro do Certbot
 APP_DIR="/home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildeveloper.com.br"
 REPO_URL="https://github.com/dimviana/paulocarecateam.git"
 BUILD_DIR="dist" # Diretório de build do React (geralmente 'build' ou 'dist' para Vite)
-APP_PORT=5000    # Porta interna do frontend (servido pelo PM2)
 BACKEND_PORT=3002 # Porta interna do backend (DEVE ser iniciada separadamente)
 NGINX_PORT=81    # Porta em que o Nginx irá escutar
 
@@ -38,7 +38,7 @@ check_command() {
 # --- Funções de Lógica ---
 
 install_dependencies() {
-    echo -e "\n[ ETAPA 1/5 ] Atualizando o sistema e instalando dependências..."
+    echo -e "\n[ ETAPA 1/4 ] Atualizando o sistema e instalando dependências..."
     sudo apt-get update -y
     # Instala pré-requisitos para adicionar repositórios e para o script
     sudo apt-get install -y curl git software-properties-common
@@ -64,17 +64,17 @@ install_dependencies() {
         fi
     fi
 
-    echo "-> Instalando PM2 e serve globalmente via npm..."
-    sudo npm install -g pm2 serve
+    echo "-> Instalando PM2 globalmente via npm (para gerenciar o backend)..."
+    sudo npm install -g pm2
     if [ $? -ne 0 ]; then
-        echo "-> ERRO: Falha ao instalar PM2 e serve."
+        echo "-> ERRO: Falha ao instalar PM2."
         exit 1
     fi
     echo "-> Dependências instaladas com sucesso."
 }
 
 setup_source_code() {
-    echo -e "\n[ ETAPA 2/5 ] Preparando o diretório e baixando o código fonte..."
+    echo -e "\n[ ETAPA 2/4 ] Preparando o diretório e baixando o código fonte..."
     if [ -d "$APP_DIR/.git" ]; then
         echo "-> AVISO: Repositório já existe. Se deseja uma instalação limpa, remova o sistema primeiro."
         return
@@ -102,7 +102,7 @@ setup_source_code() {
 }
 
 build_application() {
-    echo -e "\n[ ETAPA 3/5 ] Construindo a aplicação React..."
+    echo -e "\n[ ETAPA 3/4 ] Construindo a aplicação React..."
     cd "$APP_DIR"
     
     echo "--> Instalando dependências npm..."
@@ -122,16 +122,20 @@ build_application() {
 }
 
 configure_nginx_and_ssl() {
-    echo -e "\n[ ETAPA 4/5 ] Configurando Nginx para a porta $NGINX_PORT e tentando gerar SSL..."
+    echo -e "\n[ ETAPA 4/4 ] Configurando Nginx para a porta $NGINX_PORT e tentando gerar SSL..."
     NGINX_CONF_PATH="/etc/nginx/sites-available/$APP_DOMAIN"
     
     echo "-> AVISO: Esta configuração assume que um servidor de backend está rodando na porta $BACKEND_PORT."
     echo "-> As requisições para '/api/' serão redirecionadas para o backend."
 
+    # Usando root e try_files para servir o frontend, que é mais robusto e performático.
     sudo tee $NGINX_CONF_PATH > /dev/null <<EOF
 server {
     listen $NGINX_PORT;
     server_name $APP_DOMAIN;
+
+    root $APP_DIR/$BUILD_DIR;
+    index index.html index.htm;
 
     # Roteia requisições para a API de backend
     location /api/ {
@@ -143,15 +147,9 @@ server {
     }
 
     # Serve a aplicação frontend React para todas as outras requisições
+    # try_files é o método padrão e correto para lidar com roteamento de SPAs.
     location / {
-        proxy_pass http://localhost:$APP_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_cache_bypass \$http_upgrade;
+        try_files \$uri \$uri/ /index.html;
     }
 }
 EOF
@@ -179,25 +177,6 @@ EOF
     echo "-> Nginx configurado."
 }
 
-start_application() {
-    echo -e "\n[ ETAPA 5/5 ] Iniciando a aplicação com PM2..."
-    cd "$APP_DIR"
-
-    # Garante que qualquer processo antigo seja removido
-    pm2 stop "$APP_DOMAIN" 2>/dev/null || true
-    pm2 delete "$APP_DOMAIN" 2>/dev/null || true
-
-    # Inicia o servidor estático 'serve' com PM2
-    # -s: single-page app
-    # -l: listen on port
-    pm2 start serve --name "$APP_DOMAIN" -- -s "$BUILD_DIR" -l "$APP_PORT"
-
-    # Configura PM2 para iniciar no boot do sistema
-    pm2 startup | sudo bash -
-    pm2 save --force
-    echo "-> Aplicação iniciada com PM2 e configurada para iniciar no boot."
-}
-
 print_success_message() {
     echo "========================================================"
     echo "                OPERAÇÃO CONCLUÍDA!                     "
@@ -205,12 +184,11 @@ print_success_message() {
     echo "Acesse a aplicação em: http://$APP_DOMAIN:$NGINX_PORT"
     echo "AVISO: SSL provavelmente não foi ativado, pois o Nginx não está na porta 80."
     echo "--------------------------------------------------------"
-    echo "A aplicação está sendo gerenciada pelo PM2."
-    echo "Para ver os logs, use: pm2 logs $APP_DOMAIN"
-    echo "Para reiniciar a app, use: pm2 restart $APP_DOMAIN"
+    echo "O frontend está sendo servido diretamente pelo Nginx."
+    echo "Para atualizar, basta rodar a opção 'Atualizar Sistema'."
     echo "--------------------------------------------------------"
     echo "IMPORTANTE: Lembre-se de configurar o banco de dados manualmente"
-    echo "e de iniciar o servidor de backend na porta $BACKEND_PORT."
+    echo "e de iniciar o servidor de backend na porta $BACKEND_PORT (ex: com 'pm2 start your-backend-script.js')."
     echo "========================================================"
 }
 
@@ -223,7 +201,6 @@ install_system() {
     setup_source_code
     build_application
     configure_nginx_and_ssl
-    start_application
     print_success_message
 }
 
@@ -242,13 +219,8 @@ update_system() {
     
     build_application
     
-    echo "-> Reiniciando a aplicação com PM2..."
-    cd "$APP_DIR"
-    # Garante que qualquer processo antigo seja removido antes de iniciar um novo para evitar o erro "process not found"
-    pm2 stop "$APP_DOMAIN" 2>/dev/null || true
-    pm2 delete "$APP_DOMAIN" 2>/dev/null || true
-    pm2 start serve --name "$APP_DOMAIN" -- -s "$BUILD_DIR" -l "$APP_PORT"
-    pm2 save --force
+    echo "-> Frontend atualizado. Nginx servirá os novos arquivos automaticamente."
+    echo "-> AVISO: Se você atualizou o backend, lembre-se de reiniciá-lo (ex: 'pm2 restart backend-app-name')."
     
     echo "--- ATUALIZAÇÃO CONCLUÍDA ---"
 }
@@ -261,13 +233,10 @@ remove_system() {
         exit 0
     fi
 
-    echo "-> Removendo aplicação do PM2..."
+    echo "-> Removendo processo PM2 do frontend (se existir de uma instalação antiga)..."
     pm2 stop "$APP_DOMAIN" 2>/dev/null || true
     pm2 delete "$APP_DOMAIN" 2>/dev/null || true
     pm2 save --force
-    
-    echo "-> Removendo script de inicialização do PM2..."
-    pm2 unstartup | sudo bash -
     
     echo "-> Removendo certificado SSL (se existir)..."
     sudo certbot delete --cert-name "$APP_DOMAIN" --non-interactive
@@ -282,6 +251,7 @@ remove_system() {
     
     echo "--- REMOÇÃO COMPLETA ---"
     echo "AVISO: O banco de dados NÃO foi removido. Você deve removê-lo manualmente se necessário."
+    echo "AVISO: O processo do backend (se gerenciado por PM2) NÃO foi removido."
     echo "AVISO: Dependências como Nginx e Node.js não foram removidas."
 }
 
