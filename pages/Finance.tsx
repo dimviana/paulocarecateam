@@ -176,13 +176,17 @@ const FinancePage: React.FC = () => {
     };
 
     const handleSendReminder = (phone: string, name: string) => {
-        const message = `Olá ${name},%20tudo%20bem?%20Passando%20para%20lembrar%20que%20sua%20mensalidade%20está%20próxima%20do%20vencimento.%20Qualquer%20dúvida,%20estamos%20à%20disposição!`;
-        window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+        const message = `Olá ${name}, tudo bem? Passando para lembrar que sua mensalidade está próxima do vencimento. Qualquer dúvida, estamos à disposição!`;
+        const encodedMessage = encodeURIComponent(message);
+        const sanitizedPhone = phone.replace(/\D/g, '');
+        window.open(`https://wa.me/${sanitizedPhone}?text=${encodedMessage}`, '_blank');
     };
 
     const handleSendOverdueNotice = (phone: string, name: string) => {
-        const message = `Olá ${name},%20tudo%20bem?%20Identificamos%20que%20sua%20mensalidade%20está%20em%20atraso.%20Por%20favor,%20regularize%20sua%20situação%20o%20mais%20breve%20possível.%20Obrigado!`;
-        window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+        const message = `Olá ${name}, tudo bem? Identificamos que sua mensalidade está em atraso. Por favor, regularize sua situação o mais breve possível. Obrigado!`;
+        const encodedMessage = encodeURIComponent(message);
+        const sanitizedPhone = phone.replace(/\D/g, '');
+        window.open(`https://wa.me/${sanitizedPhone}?text=${encodedMessage}`, '_blank');
     };
 
     const handleOpenHistoryModal = (student: Student) => {
