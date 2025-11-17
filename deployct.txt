@@ -28,7 +28,7 @@ APP_DIR="/home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildevelope
 REPO_URL="https://github.com/dimviana/paulocarecateam.git"
 BUILD_DIR="dist" # Diretório de build do React (geralmente 'build' ou 'dist' para Vite)
 BACKEND_PORT=3002 # Porta interna do backend (DEVE ser iniciada separadamente)
-NGINX_PORT=81    # Porta em que o Nginx irá escutar
+NGINX_PORT=8080    # Porta em que o Nginx irá escutar
 
 # --- Funções Auxiliares ---
 check_command() {
