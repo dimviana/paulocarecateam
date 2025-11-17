@@ -186,7 +186,6 @@ CREATE TABLE IF NOT EXISTS theme_settings (
     footerHtml TEXT,
     customCss TEXT,
     customJs TEXT,
-    jwtSecret TEXT,
     socialLoginEnabled BOOLEAN,
     googleClientId TEXT,
     facebookAppId TEXT,
