@@ -32,6 +32,9 @@ interface AppContextType {
   deleteAttendanceRecord: (id: string) => Promise<void>;
   saveProfessor: (prof: Omit<Professor, 'id'> & { id?: string }) => Promise<void>;
   deleteProfessor: (id: string) => Promise<void>;
+  // FIX: Add showcasedComponents state for the Components demo page.
+  showcasedComponents: string[];
+  setShowcasedComponents: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
 export const AppContext = createContext<AppContextType>(null!);
@@ -59,6 +62,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [professors, setProfessors] = useState<Professor[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // FIX: Add state management for showcasedComponents to resolve error on Components page.
+  const [showcasedComponents, setShowcasedComponents] = useState<string[]>(() => {
+    const saved = localStorage.getItem('showcasedComponents');
+    return saved ? JSON.parse(saved) : ['StatCard', 'PaymentsChart', 'AttendanceChart'];
+  });
 
   const logout = useCallback(() => {
     setUser(null);
@@ -154,6 +163,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     localStorage.setItem('themeSettings', JSON.stringify(themeSettings));
   }, [themeSettings]);
+
+  useEffect(() => {
+    localStorage.setItem('showcasedComponents', JSON.stringify(showcasedComponents));
+  }, [showcasedComponents]);
 
   useEffect(() => {
     // This effect is simplified as the new design is light-theme only.
@@ -302,7 +315,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         saveGraduation, updateGraduationRanks, deleteGraduation,
         saveSchedule, deleteSchedule,
         saveAttendanceRecord, deleteAttendanceRecord,
-        saveProfessor, deleteProfessor
+        saveProfessor, deleteProfessor,
+        showcasedComponents, setShowcasedComponents
     }}>
       {children}
     </AppContext.Provider>

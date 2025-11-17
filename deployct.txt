@@ -2,7 +2,11 @@
 # ==============================================================================
 # Script de Gerenciamento de Implantação para Jiu-Jitsu Hub SAAS
 #
-# Este script automatiza a instalação, atualização e remoção da aplicação.
+# Este script automatiza a instalação, atualização e remoção da aplicação,
+# utilizando Nginx como proxy reverso e PM2 para gerenciar o processo da app.
+#
+# IMPORTANTE: A configuração do banco de dados MySQL é MANUAL.
+# Você deve criar o banco, o usuário e conceder as permissões antes da instalação.
 #
 # USO:
 # 1. Coloque este script em qualquer diretório no seu servidor (ex: /tmp).
@@ -13,23 +17,17 @@
 # OPÇÕES:
 # 1. Instalar Sistema: Realiza a configuração completa do zero.
 # 2. Atualizar Sistema: Baixa a versão mais recente do código e reinicia a app.
-# 3. Remover Sistema: Apaga a aplicação, banco de dados e configurações.
+# 3. Remover Sistema: Apaga a aplicação e configurações (NÃO apaga o banco).
 # ==============================================================================
 
-# --- Configurações do Banco de Dados ---
-DBNAME="paulocarecateam"
-DBUSER="paulocarecateam"
-DBPASS="Fr35Aa4DkZ8KhEuq2asf"
-DBHOST="localhost"
-DB_SCHEMA_FILE="bancodedados.txt" # Nome do arquivo de schema dentro do repositório
-
 # --- Configurações da Aplicação ---
-APP_PORT="3001"
-NGINX_HTTP_PORT="3002"
 APP_DOMAIN="paulocarecateam.abildeveloper.com.br"
 ADMIN_EMAIL="androiddiviana@gmail.com" # Email para registro do Certbot
 APP_DIR="/home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildeveloper.com.br"
 REPO_URL="https://github.com/dimviana/paulocarecateam.git"
+BUILD_DIR="dist" # Diretório de build do React (geralmente 'build' ou 'dist' para Vite)
+APP_PORT=5000    # Porta interna em que a aplicação será servida pelo PM2
+NGINX_PORT=81    # Porta em que o Nginx irá escutar
 
 # --- Funções Auxiliares ---
 check_command() {
@@ -39,21 +37,43 @@ check_command() {
 # --- Funções de Lógica ---
 
 install_dependencies() {
-    echo -e "\n[ ETAPA 1/9 ] Atualizando o sistema e instalando dependências..."
+    echo -e "\n[ ETAPA 1/5 ] Atualizando o sistema e instalando dependências..."
     sudo apt-get update -y
-    sudo apt-get install -y mysql-server nginx nodejs npm certbot python3-certbot-nginx git
+    # Instala pré-requisitos para adicionar repositórios e para o script
+    sudo apt-get install -y curl git software-properties-common
 
+    # Configura o repositório do Node.js v18 ANTES de tentar instalar
     if ! check_command node || [[ $(node -v | cut -d . -f 1) < "v18" ]]; then
-        echo "-> Instalando Node.js v18..."
+        echo "-> Configurando o repositório do Node.js v18..."
         curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-        sudo apt-get install -y nodejs
     else
         echo "-> Node.js já está instalado e na versão correta."
     fi
+
+    echo "-> Instalando dependências (Nginx, Node.js, Certbot)..."
+    sudo apt-get install -y nginx nodejs certbot python3-certbot-nginx
+
+    if [ $? -ne 0 ]; then
+        echo "-> A instalação inicial falhou. Tentando corrigir pacotes quebrados..."
+        sudo apt-get --fix-broken install -y
+        sudo apt-get install -y nginx nodejs certbot python3-certbot-nginx
+        if [ $? -ne 0 ]; then
+            echo "-> ERRO: Falha ao instalar dependências mesmo após tentar corrigir. Verifique os logs do apt."
+            exit 1
+        fi
+    fi
+
+    echo "-> Instalando PM2 e serve globalmente via npm..."
+    sudo npm install -g pm2 serve
+    if [ $? -ne 0 ]; then
+        echo "-> ERRO: Falha ao instalar PM2 e serve."
+        exit 1
+    fi
+    echo "-> Dependências instaladas com sucesso."
 }
 
 setup_source_code() {
-    echo -e "\n[ ETAPA 2/9 ] Preparando o diretório e baixando o código fonte..."
+    echo -e "\n[ ETAPA 2/5 ] Preparando o diretório e baixando o código fonte..."
     if [ -d "$APP_DIR/.git" ]; then
         echo "-> AVISO: Repositório já existe. Se deseja uma instalação limpa, remova o sistema primeiro."
         return
@@ -69,41 +89,55 @@ setup_source_code() {
     fi
     sudo chown -R $(whoami):$(whoami) "$APP_DIR"
     echo "-> Código fonte clonado com sucesso."
-}
 
-setup_database() {
-    echo -e "\n[ ETAPA 3 & 4 ] Configurando e populando o Banco de Dados MySQL..."
-    sudo mysql -u root <<EOF
-CREATE DATABASE IF NOT EXISTS $DBNAME;
-CREATE USER IF NOT EXISTS '$DBUSER'@'$DBHOST' IDENTIFIED BY '$DBPASS';
-GRANT ALL PRIVILEGES ON $DBNAME.* TO '$DBUSER'@'$DBHOST';
-FLUSH PRIVILEGES;
-EOF
-    echo "-> Banco de dados e usuário configurados."
-
-    SCHEMA_PATH="$APP_DIR/$DB_SCHEMA_FILE"
-    if [ -f "$SCHEMA_PATH" ]; then
-        sudo mysql -u root $DBNAME < "$SCHEMA_PATH"
-        echo "-> Esquema do banco de dados importado com sucesso."
+    # Renomeia env.txt para .env se o arquivo existir
+    if [ -f "$APP_DIR/env.txt" ]; then
+        echo "-> Renomeando env.txt para .env..."
+        mv "$APP_DIR/env.txt" "$APP_DIR/.env"
+        echo "-> AVISO: O arquivo .env foi criado. Edite-o com suas credenciais de produção."
     else
-        echo "-> AVISO: Arquivo de schema '$SCHEMA_PATH' não encontrado."
+        echo "-> AVISO: Arquivo env.txt não encontrado no repositório. Crie um arquivo .env manualmente se necessário."
     fi
 }
 
+build_application() {
+    echo -e "\n[ ETAPA 3/5 ] Construindo a aplicação React..."
+    cd "$APP_DIR"
+    
+    echo "--> Instalando dependências npm..."
+    npm install
+    if [ $? -ne 0 ]; then
+        echo "-> ERRO: 'npm install' falhou."
+        exit 1
+    fi
+
+    echo "--> Executando o build da aplicação..."
+    npm run build
+    if [ $? -ne 0 ]; then
+        echo "-> ERRO: 'npm run build' falhou. Verifique se o script existe no package.json."
+        exit 1
+    fi
+    echo "-> Build concluído. Arquivos gerados em '$APP_DIR/$BUILD_DIR'."
+}
+
 configure_nginx_and_ssl() {
-    echo -e "\n[ ETAPA 5, 6 & 7 ] Configurando Nginx e SSL..."
+    echo -e "\n[ ETAPA 4/5 ] Configurando Nginx para a porta $NGINX_PORT e tentando gerar SSL..."
     NGINX_CONF_PATH="/etc/nginx/sites-available/$APP_DOMAIN"
 
     sudo tee $NGINX_CONF_PATH > /dev/null <<EOF
 server {
-    listen 80;
+    listen $NGINX_PORT;
     server_name $APP_DOMAIN;
 
     location / {
         proxy_pass http://localhost:$APP_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_cache_bypass \$http_upgrade;
     }
 }
 EOF
@@ -114,54 +148,56 @@ EOF
 
     sudo nginx -t && sudo systemctl restart nginx
     if [ $? -ne 0 ]; then
-        echo "-> ERRO: Falha ao iniciar o Nginx. A porta 80 pode estar em uso."
+        echo "-> ERRO: Falha ao iniciar o Nginx. A porta $NGINX_PORT pode estar em uso."
         exit 1
     fi
 
-    echo "-> Gerando certificado SSL..."
-    sudo certbot --nginx -d $APP_DOMAIN --non-interactive --agree-tos -m $ADMIN_EMAIL --redirect
+    echo "-> AVISO: A geração de certificado SSL pode falhar, pois o Certbot precisa validar o domínio na porta 80."
+    echo "-> Tentando gerar certificado SSL com Certbot..."
+    sudo certbot --nginx -d $APP_DOMAIN --non-interactive --agree-tos -m $ADMIN_EMAIL
     if [ $? -ne 0 ]; then
-        echo "-> ERRO: Falha ao gerar o certificado SSL."
-        exit 1
+        echo "-> AVISO: Falha ao gerar o certificado SSL como esperado. A aplicação estará disponível apenas em HTTP na porta $NGINX_PORT."
+    else
+        echo "-> Certificado SSL gerado. No entanto, o Nginx está configurado para a porta $NGINX_PORT, então HTTPS pode não funcionar como esperado sem configuração manual adicional."
     fi
-
-    echo "-> Configurando redirecionamento da porta $NGINX_HTTP_PORT..."
-    sudo tee -a $NGINX_CONF_PATH > /dev/null <<EOF
-
-server {
-    listen $NGINX_HTTP_PORT;
-    server_name $APP_DOMAIN;
-    return 301 https://\$host\$request_uri;
-}
-EOF
-    sudo nginx -t && sudo systemctl restart nginx
-    echo "-> Nginx e SSL configurados."
+    
+    sudo systemctl restart nginx
+    echo "-> Nginx configurado."
 }
 
 start_application() {
-    echo -e "\n[ ETAPA 8 & 9 ] Iniciando a aplicação com PM2..."
-    if ! check_command pm2; then sudo npm install -g pm2; fi
-    if ! check_command serve; then sudo npm install -g serve; fi
+    echo -e "\n[ ETAPA 5/5 ] Iniciando a aplicação com PM2..."
+    cd "$APP_DIR"
 
-    APP_COMMAND="serve -s . -l $APP_PORT"
-    pm2 stop "$DBNAME" 2>/dev/null || true
-    pm2 delete "$DBNAME" 2>/dev/null || true
-    cd $APP_DIR && pm2 start "$APP_COMMAND" --name "$DBNAME"
+    # Garante que qualquer processo antigo seja removido
+    pm2 stop "$APP_DOMAIN" 2>/dev/null || true
+    pm2 delete "$APP_DOMAIN" 2>/dev/null || true
+
+    # Inicia o servidor estático 'serve' com PM2
+    # -s: single-page app
+    # -l: listen on port
+    pm2 start serve --name "$APP_DOMAIN" -- -s "$BUILD_DIR" -l "$APP_PORT"
+
+    # Configura PM2 para iniciar no boot do sistema
     pm2 startup | sudo bash -
-    pm2 save
+    pm2 save --force
+    echo "-> Aplicação iniciada com PM2 e configurada para iniciar no boot."
 }
 
 print_success_message() {
-    echo "========================================="
-    echo "        OPERAÇÃO CONCLUÍDA!         "
-    echo "========================================="
-    echo "Acesse a aplicação em: https://$APP_DOMAIN"
-    echo "-----------------------------------------"
-    echo "Para gerenciar a aplicação, use os comandos PM2:"
-    echo "  - Ver logs:       pm2 logs $DBNAME"
-    echo "  - Parar:          pm2 stop $DBNAME"
-    echo "  - Reiniciar:      pm2 restart $DBNAME"
-    echo "========================================="
+    echo "========================================================"
+    echo "                OPERAÇÃO CONCLUÍDA!                     "
+    echo "========================================================"
+    echo "Acesse a aplicação em: http://$APP_DOMAIN:$NGINX_PORT"
+    echo "AVISO: SSL provavelmente não foi ativado, pois o Nginx não está na porta 80."
+    echo "--------------------------------------------------------"
+    echo "A aplicação está sendo gerenciada pelo PM2."
+    echo "Para ver os logs, use: pm2 logs $APP_DOMAIN"
+    echo "Para reiniciar a app, use: pm2 restart $APP_DOMAIN"
+    echo "--------------------------------------------------------"
+    echo "IMPORTANTE: Lembre-se de configurar o banco de dados manualmente"
+    echo "e de fornecer as credenciais para a aplicação (ex: via .env)."
+    echo "========================================================"
 }
 
 # --- Funções do Menu ---
@@ -171,7 +207,7 @@ install_system() {
     echo "--- INICIANDO INSTALAÇÃO COMPLETA ---"
     install_dependencies
     setup_source_code
-    setup_database
+    build_application
     configure_nginx_and_ssl
     start_application
     print_success_message
@@ -190,45 +226,49 @@ update_system() {
     git pull origin main
     echo "-> Código fonte atualizado."
     
+    build_application
+    
     echo "-> Reiniciando a aplicação com PM2..."
-    pm2 restart "$DBNAME"
+    cd "$APP_DIR"
+    # Garante que qualquer processo antigo seja removido antes de iniciar um novo para evitar o erro "process not found"
+    pm2 stop "$APP_DOMAIN" 2>/dev/null || true
+    pm2 delete "$APP_DOMAIN" 2>/dev/null || true
+    pm2 start serve --name "$APP_DOMAIN" -- -s "$BUILD_DIR" -l "$APP_PORT"
+    pm2 save --force
     
     echo "--- ATUALIZAÇÃO CONCLUÍDA ---"
 }
 
 remove_system() {
     echo "--- INICIANDO REMOÇÃO DO SISTEMA ---"
-    read -p "!!! ATENÇÃO !!! Isso removerá a aplicação, o banco de dados e as configurações. Deseja continuar? (s/N): " confirm
+    read -p "!!! ATENÇÃO !!! Isso removerá a aplicação e as configurações do servidor web. Deseja continuar? (s/N): " confirm
     if [[ "$confirm" != "s" && "$confirm" != "S" ]]; then
         echo "Remoção cancelada."
         exit 0
     fi
 
-    echo "-> Parando e removendo aplicação do PM2..."
-    pm2 stop "$DBNAME" 2>/dev/null
-    pm2 delete "$DBNAME" 2>/dev/null
+    echo "-> Removendo aplicação do PM2..."
+    pm2 stop "$APP_DOMAIN" 2>/dev/null || true
+    pm2 delete "$APP_DOMAIN" 2>/dev/null || true
     pm2 save --force
     
-    echo "-> Removendo certificado SSL..."
+    echo "-> Removendo script de inicialização do PM2..."
+    pm2 unstartup | sudo bash -
+    
+    echo "-> Removendo certificado SSL (se existir)..."
     sudo certbot delete --cert-name "$APP_DOMAIN" --non-interactive
     
     echo "-> Removendo configurações do Nginx..."
     sudo rm -f "/etc/nginx/sites-available/$APP_DOMAIN"
     sudo rm -f "/etc/nginx/sites-enabled/$APP_DOMAIN"
     sudo nginx -t && sudo systemctl restart nginx
-    
-    echo "-> Removendo banco de dados e usuário MySQL..."
-    sudo mysql -u root <<EOF
-DROP DATABASE IF EXISTS $DBNAME;
-DROP USER IF EXISTS '$DBUSER'@'$DBHOST';
-FLUSH PRIVILEGES;
-EOF
 
     echo "-> Removendo arquivos da aplicação..."
     sudo rm -rf "$APP_DIR"
     
     echo "--- REMOÇÃO COMPLETA ---"
-    echo "AVISO: Dependências como Nginx, MySQL, Node.js não foram removidas."
+    echo "AVISO: O banco de dados NÃO foi removido. Você deve removê-lo manualmente se necessário."
+    echo "AVISO: Dependências como Nginx e Node.js não foram removidas."
 }
 
 # --- Menu Principal ---
@@ -239,7 +279,7 @@ echo "================================================="
 echo "Escolha uma opção:"
 echo "  1) Instalar Sistema (Configuração completa)"
 echo "  2) Atualizar Sistema (Baixa a versão mais recente)"
-echo "  3) Remover Sistema (Apaga tudo!)"
+echo "  3) Remover Sistema (Apaga a aplicação)"
 echo
 
 read -p "Opção [1, 2, 3]: " choice
