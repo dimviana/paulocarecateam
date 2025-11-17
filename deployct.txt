@@ -319,44 +319,31 @@ remove_system() {
     echo -e "${YELLOW}AVISO: O banco de dados e o processo PM2 do backend NÃO foram removidos.${NC}"
 }
 
-# --- Application Menus ---
+# --- Combined Action Functions ---
 
-show_gerencia_boleto_menu() {
-    while true; do
-        echo -e "\n--- Menu: ${GREEN}Gerencia Boleto${NC} ---"
-        echo "1) Instalar Sistema"
-        echo "2) Atualizar Sistema"
-        echo "3) Remover Sistema"
-        echo "4) Voltar ao Menu Principal"
-        read -p "Opção: " choice
+install_both_systems() {
+    echo -e "\n--- INICIANDO INSTALAÇÃO DE AMBOS OS SISTEMAS ---"
+    echo -e "${YELLOW}A instalação será executada sequencialmente. Se ocorrer um erro, o script será interrompido.${NC}"
+    
+    install_system "$GB_APP_NAME" "$GB_FRONTEND_DOMAIN" "$GB_BACKEND_DOMAIN" "$GB_NGINX_PORT" "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_BACKEND_PORT" "$GB_REPO_URL" "$GB_PM2_PROCESS_NAME"
+    
+    install_system "$JJH_APP_NAME" "$JJH_FRONTEND_DOMAIN" "$JJH_BACKEND_DOMAIN" "$JJH_NGINX_PORT" "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_BACKEND_PORT" "$JJH_REPO_URL" "$JJH_PM2_PROCESS_NAME"
 
-        case $choice in
-            1) install_system "$GB_APP_NAME" "$GB_FRONTEND_DOMAIN" "$GB_BACKEND_DOMAIN" "$GB_NGINX_PORT" "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_BACKEND_PORT" "$GB_REPO_URL" "$GB_PM2_PROCESS_NAME"; break ;;
-            2) update_system "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_APP_NAME" "$GB_PM2_PROCESS_NAME"; break ;;
-            3) remove_system "$GB_FRONTEND_DOMAIN" "$GB_APP_DIR" "$GB_APP_NAME"; break ;;
-            4) return ;;
-            *) echo -e "${RED}Opção inválida.${NC}";;
-        esac
-    done
+    echo -e "\n${GREEN}--- INSTALAÇÃO DE AMBOS OS SISTEMAS CONCLUÍDA COM SUCESSO ---${NC}"
 }
 
-show_jjh_menu() {
-    while true; do
-        echo -e "\n--- Menu: ${GREEN}Jiu-Jitsu Hub${NC} ---"
-        echo "1) Instalar Sistema"
-        echo "2) Atualizar Sistema"
-        echo "3) Remover Sistema"
-        echo "4) Voltar ao Menu Principal"
-        read -p "Opção: " choice
+remove_both_systems() {
+    echo -e "\n--- INICIANDO REMOÇÃO DE AMBOS OS SISTEMAS ---"
+    read -p "!!! ATENÇÃO !!! Você está prestes a remover AMBOS os sistemas. Será pedida uma confirmação para cada um. Deseja continuar? (s/N): " confirm
+    if [[ "$confirm" != "s" && "$confirm" != "S" ]]; then
+        echo "Remoção cancelada."
+        return
+    fi
+    
+    remove_system "$GB_FRONTEND_DOMAIN" "$GB_APP_DIR" "$GB_APP_NAME"
+    remove_system "$JJH_FRONTEND_DOMAIN" "$JJH_APP_DIR" "$JJH_APP_NAME"
 
-        case $choice in
-            1) install_system "$JJH_APP_NAME" "$JJH_FRONTEND_DOMAIN" "$JJH_BACKEND_DOMAIN" "$JJH_NGINX_PORT" "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_BACKEND_PORT" "$JJH_REPO_URL" "$JJH_PM2_PROCESS_NAME"; break ;;
-            2) update_system "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_APP_NAME" "$JJH_PM2_PROCESS_NAME"; break ;;
-            3) remove_system "$JJH_FRONTEND_DOMAIN" "$JJH_APP_DIR" "$JJH_APP_NAME"; break ;;
-            4) return ;;
-            *) echo -e "${RED}Opção inválida.${NC}";;
-        esac
-    done
+    echo -e "\n${GREEN}--- REMOÇÃO DE AMBOS OS SISTEMAS CONCLUÍDA ---${NC}"
 }
 
 # --- Main Menu ---
@@ -366,28 +353,32 @@ show_main_menu() {
         echo -e "\n================================================="
         echo -e "      ${GREEN}Gerenciador de Implantação Unificado${NC}"
         echo "================================================="
-        echo "Escolha qual sistema você deseja gerenciar:"
-        echo "  1) Gerencia Boleto"
-        echo "  2) Jiu-Jitsu Hub"
-        echo "  3) Sair"
+        echo "  1) Instalar Gerencia Boleto"
+        echo "  2) Instalar Jiu-Jitsu Hub"
+        echo "  3) Instalar AMBOS os sistemas"
+        echo "  4) Remover AMBOS os sistemas"
+        echo "  5) Atualizar Gerencia Boleto"
+        echo "  6) Atualizar Jiu-Jitsu Hub"
+        echo
+        echo -e "${YELLOW}-- Outras Opções --${NC}"
+        echo "  7) Remover Gerencia Boleto (Individual)"
+        echo "  8) Remover Jiu-Jitsu Hub (Individual)"
+        echo "  9) Sair"
         echo
 
-        read -p "Opção [1, 2, 3]: " choice
+        read -p "Opção [1-9]: " choice
 
         case $choice in
-            1)
-                show_gerencia_boleto_menu
-                ;;
-            2)
-                show_jjh_menu
-                ;;
-            3)
-                echo "Saindo."
-                exit 0
-                ;;
-            *)
-                echo -e "${RED}Opção inválida. Tente novamente.${NC}"
-                ;;
+            1) install_system "$GB_APP_NAME" "$GB_FRONTEND_DOMAIN" "$GB_BACKEND_DOMAIN" "$GB_NGINX_PORT" "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_BACKEND_PORT" "$GB_REPO_URL" "$GB_PM2_PROCESS_NAME" ;;
+            2) install_system "$JJH_APP_NAME" "$JJH_FRONTEND_DOMAIN" "$JJH_BACKEND_DOMAIN" "$JJH_NGINX_PORT" "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_BACKEND_PORT" "$JJH_REPO_URL" "$JJH_PM2_PROCESS_NAME" ;;
+            3) install_both_systems ;;
+            4) remove_both_systems ;;
+            5) update_system "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_APP_NAME" "$GB_PM2_PROCESS_NAME" ;;
+            6) update_system "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_APP_NAME" "$JJH_PM2_PROCESS_NAME" ;;
+            7) remove_system "$GB_FRONTEND_DOMAIN" "$GB_APP_DIR" "$GB_APP_NAME" ;;
+            8) remove_system "$JJH_FRONTEND_DOMAIN" "$JJH_APP_DIR" "$JJH_APP_NAME" ;;
+            9) echo "Saindo."; exit 0 ;;
+            *) echo -e "${RED}Opção inválida. Tente novamente.${NC}" ;;
         esac
     done
 }
