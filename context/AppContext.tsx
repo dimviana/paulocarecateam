@@ -85,9 +85,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.removeItem('authToken');
   }, []);
 
-  const refetchActivityLogs = useCallback(async () => {
-    setActivityLogs(await api.getActivityLogs());
-  }, []);
+  const refetchData = useCallback(async () => {
+      try {
+        const [studentsData, academiesData, graduationsData, schedulesData, usersData, attendanceData, professorsData, activityLogsData] = await Promise.all([
+            api.getStudents(),
+            api.getAcademies(),
+            api.getGraduations(),
+            api.getSchedules(),
+            api.getUsers(),
+            api.getAttendanceRecords(),
+            api.getProfessors(),
+            api.getActivityLogs(),
+        ]);
+        setStudents(studentsData);
+        setAcademies(academiesData);
+        setGraduations(graduationsData);
+        setSchedules(schedulesData);
+        setUsers(usersData);
+        setAttendanceRecords(attendanceData);
+        setProfessors(professorsData);
+        setActivityLogs(activityLogsData);
+      } catch (error) {
+          console.error("Failed to refetch data:", error);
+          // Handle token expiration or network errors
+          if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+              logout();
+          }
+      }
+  }, [logout]);
+
 
   useEffect(() => {
     const styleId = 'dynamic-theme-styles';
@@ -120,55 +146,41 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   useEffect(() => {
-    const verifyTokenAndSetUser = (token: string, allUsers: User[]) => {
-      try {
-        const payload = JSON.parse(atob(token));
-        if (payload.exp > Date.now()) {
-          const loggedInUser = allUsers.find(u => u.id === payload.userId);
-          if (loggedInUser) {
-            setUser(loggedInUser);
-          } else {
-            logout();
-          }
-        } else {
-          logout();
-        }
-      } catch (error) {
-        console.error("Token verification failed", error);
-        logout();
-      }
-    };
-    
-    const fetchData = async () => {
+    const verifyTokenAndFetchData = async () => {
         setLoading(true);
-        const [studentsData, academiesData, graduationsData, schedulesData, usersData, attendanceData, professorsData, activityLogsData] = await Promise.all([
-            api.getStudents(),
-            api.getAcademies(),
-            api.getGraduations(),
-            api.getSchedules(),
-            api.getUsers(),
-            api.getAttendanceRecords(),
-            api.getProfessors(),
-            api.getActivityLogs(),
-        ]);
-        setStudents(studentsData);
-        setAcademies(academiesData);
-        setGraduations(graduationsData);
-        setSchedules(schedulesData);
-        setUsers(usersData);
-        setAttendanceRecords(attendanceData);
-        setProfessors(professorsData);
-        setActivityLogs(activityLogsData);
-        
         const token = localStorage.getItem('authToken');
-        if (token) {
-            verifyTokenAndSetUser(token, usersData);
+        if (!token) {
+            setLoading(false);
+            return;
         }
 
-        setLoading(false);
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1])); // Basic JWT payload parsing
+             if (payload.exp * 1000 < Date.now()) {
+                logout();
+                setLoading(false);
+                return;
+            }
+            // Fetch users first to identify the logged-in user
+            const allUsers = await api.getUsers();
+            setUsers(allUsers);
+            const loggedInUser = allUsers.find(u => u.id === payload.userId);
+
+            if (loggedInUser) {
+                setUser(loggedInUser);
+                await refetchData(); // Fetch all other data
+            } else {
+                logout();
+            }
+        } catch (error) {
+            console.error("Token verification or data fetch failed", error);
+            logout();
+        } finally {
+            setLoading(false);
+        }
     };
-    fetchData();
-  }, [logout]);
+    verifyTokenAndFetchData();
+  }, [logout, refetchData]);
 
 
   useEffect(() => {
@@ -196,13 +208,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (token) {
         localStorage.setItem('authToken', token);
         try {
-            const payload = JSON.parse(atob(token));
+            const payload = JSON.parse(atob(token.split('.')[1]));
             const allUsers = await api.getUsers(); // Fetch fresh user list
+            setUsers(allUsers);
             const loggedInUser = allUsers.find(u => u.id === payload.userId);
             if (loggedInUser) {
                 setUser(loggedInUser);
-                setUsers(allUsers);
-                refetchActivityLogs();
+                await refetchData();
                 return true;
             }
         } catch (e) {
@@ -227,7 +239,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         await api.registerAcademy(data);
         setAcademies(await api.getAcademies());
         setUsers(await api.getUsers());
-        await refetchActivityLogs();
+        setActivityLogs(await api.getActivityLogs());
         return { success: true };
     } catch (error: any) {
         console.error("Registration failed in context", error);
@@ -236,102 +248,73 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateStudentPayment = async (studentId: string, status: 'paid' | 'unpaid') => {
-      if (!user) return;
-      await api.updateStudentPayment(studentId, status, themeSettings.monthlyFeeAmount, user.id);
-      setStudents(await api.getStudents());
-      refetchActivityLogs();
+      await api.updateStudentPayment(studentId, status, themeSettings.monthlyFeeAmount);
+      await refetchData();
   }
 
   const saveStudent = async (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => {
-      if (!user) return;
-      await api.saveStudent(student, user.id);
-      setStudents(await api.getStudents());
-      setProfessors(await api.getProfessors());
-      refetchActivityLogs();
+      await api.saveStudent(student);
+      await refetchData();
   }
 
   const deleteStudent = async (studentId: string) => {
-    if (!user) return;
-    await api.deleteStudent(studentId, user.id);
-    setStudents(await api.getStudents());
-    refetchActivityLogs();
+    await api.deleteStudent(studentId);
+    await refetchData();
   }
 
   const saveAcademy = async (academy: Omit<Academy, 'id'> & { id?: string }) => {
-      if (!user) return;
-      await api.saveAcademy(academy, user.id);
-      setAcademies(await api.getAcademies());
-      refetchActivityLogs();
+      await api.saveAcademy(academy);
+      await refetchData();
   }
 
   const deleteAcademy = async (id: string) => {
-    if (!user) return;
-    await api.deleteAcademy(id, user.id);
-    setAcademies(await api.getAcademies());
-    refetchActivityLogs();
+    await api.deleteAcademy(id);
+    await refetchData();
   }
 
   const saveGraduation = async (grad: Omit<Graduation, 'id'> & { id?: string }) => {
-      if (!user) return;
-      await api.saveGraduation(grad, user.id);
-      setGraduations(await api.getGraduations());
-      refetchActivityLogs();
+      await api.saveGraduation(grad);
+      await refetchData();
   }
   
   const updateGraduationRanks = async (gradsWithNewRanks: { id: string, rank: number }[]) => {
-    if (!user) return;
-    await api.updateGraduationRanks(gradsWithNewRanks, user.id);
-    setGraduations(await api.getGraduations());
-    refetchActivityLogs();
+    await api.updateGraduationRanks(gradsWithNewRanks);
+    await refetchData();
   }
 
   const deleteGraduation = async (id: string) => {
-    if (!user) return;
-    await api.deleteGraduation(id, user.id);
-    setGraduations(await api.getGraduations());
-    refetchActivityLogs();
+    await api.deleteGraduation(id);
+    await refetchData();
   }
 
   const saveSchedule = async (schedule: Omit<ClassSchedule, 'id'> & { id?: string }) => {
-      if (!user) return;
-      await api.saveSchedule(schedule, user.id);
-      setSchedules(await api.getSchedules());
-      refetchActivityLogs();
+      await api.saveSchedule(schedule);
+      await refetchData();
   }
 
   const deleteSchedule = async (id: string) => {
-    if (!user) return;
-    await api.deleteSchedule(id, user.id);
-    setSchedules(await api.getSchedules());
-    refetchActivityLogs();
+    await api.deleteSchedule(id);
+    await refetchData();
   }
   
   const saveAttendanceRecord = async (record: Omit<AttendanceRecord, 'id'> & { id?: string }) => {
-    if (!user) return;
-    await api.saveAttendanceRecord(record, user.id);
-    setAttendanceRecords(await api.getAttendanceRecords());
-    refetchActivityLogs();
+    await api.saveAttendanceRecord(record);
+    await refetchData();
   };
 
   const deleteAttendanceRecord = async (id: string) => {
-    if (!user) return;
-    await api.deleteAttendanceRecord(id, user.id);
-    setAttendanceRecords(await api.getAttendanceRecords());
-    refetchActivityLogs();
+    await api.deleteAttendanceRecord(id);
+    await refetchData();
   };
   
   const saveProfessor = async (prof: Omit<Professor, 'id'> & { id?: string }) => {
-      if (!user) return;
-      await api.saveProfessor(prof, user.id);
-      setProfessors(await api.getProfessors());
-      refetchActivityLogs();
+      await api.saveProfessor(prof);
+      await refetchData();
   }
 
   const deleteProfessor = async (id: string) => {
-    if (!user) return;
-    await api.deleteProfessor(id, user.id);
-    setProfessors(await api.getProfessors());
-    refetchActivityLogs();
+    await api.deleteProfessor(id);
+    await refetchData();
   }
 
 
