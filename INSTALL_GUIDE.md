@@ -1,154 +1,134 @@
-# Guia de Instalação e Deploy - Jiu-Jitsu Hub SAAS
+# Guia de Instalação e Deploy (Unificado) - Jiu-Jitsu Hub SAAS
 
-Este documento fornece um guia passo a passo para instalar e configurar a aplicação Jiu-Jitsu Hub SAAS em um servidor VPS Linux (Debian/Ubuntu recomendado).
+Este documento fornece um guia passo a passo para instalar e configurar a aplicação Jiu-Jitsu Hub SAAS em um servidor VPS Linux (Debian/Ubuntu recomendado), utilizando uma arquitetura unificada de domínio único.
 
 ## Arquitetura do Sistema
 
-O sistema é composto por:
-1.  **Frontend**: Uma aplicação React (Vite) servida como arquivos estáticos.
-2.  **Backend**: Uma API Node.js (não inclusa neste repositório, mas o guia assume sua existência).
-3.  **Servidor Web**: Nginx, atuando como servidor para o frontend e proxy reverso para o backend.
-4.  **Gerenciador de Processos**: PM2, para manter a aplicação backend rodando continuamente.
-5.  **Banco de Dados**: MySQL.
+O sistema agora funciona de forma unificada e mais simples:
+1.  **Domínio Único**: Tanto o frontend quanto o backend operam sob o mesmo domínio (ex: `paulocarecateam.abildeveloper.com.br`).
+2.  **Frontend**: Uma aplicação React (Vite) servida como arquivos estáticos na raiz do domínio (`/`).
+3.  **Backend**: Uma API Node.js (em um repositório separado) que responde em um caminho específico, como `/api`.
+4.  **Servidor Web (Nginx)**: Atua como servidor para o frontend e como **proxy reverso**. Ele direciona as chamadas `/api/...` para a aplicação backend, que roda internamente em uma porta específica.
+5.  **Gerenciador de Processos (PM2)**: Mantém a aplicação backend rodando continuamente.
+6.  **Banco de Dados**: MySQL.
 
 ---
 
 ## Pré-requisitos
 
 1.  **Acesso à VPS**: Acesso root ou sudo a um servidor Linux.
-2.  **Domínios Configurados**:
-    *   Um domínio para o frontend (ex: `paulocarecateam.abildeveloper.com.br`).
-    *   Um domínio para o backend (ex: `paulocarecabk.abildeveloper.com.br`).
-    *   Ambos os domínios devem ter registros DNS do tipo 'A' apontando para o IP da sua VPS.
-3.  **Acesso ao Banco de Dados**: Credenciais de acesso a um servidor MySQL (pode ser na mesma VPS ou um serviço externo).
+2.  **Repositório do Backend**: A URL do repositório Git para sua aplicação backend Node.js.
+3.  **Domínio Configurado**: Apenas **um** domínio para a aplicação (ex: `paulocarecateam.abildeveloper.com.br`), com um registro DNS do tipo 'A' apontando para o IP da sua VPS.
+4.  **Acesso ao Banco de Dados**: Credenciais de acesso a um servidor MySQL.
 
 ---
 
-## Passo 1: Preparação do Ambiente e Deploy do Frontend
+## Passo 1: Preparação do Ambiente e Dependências
 
-O script `deployct.txt` automatiza a maior parte da configuração do ambiente e o deploy do frontend.
+O script `deployct.txt` pode automatizar parte desta configuração. Primeiro, vamos garantir que todas as dependências estejam instaladas.
 
 1.  **Acesse sua VPS via SSH.**
 
-2.  **Copie e execute o script de deploy**:
-    *   Copie o conteúdo do arquivo `deployct.txt` para um novo arquivo na sua VPS.
-        ```bash
-        nano deploy.sh 
-        # Cole o conteúdo do script, salve e feche (Ctrl+X, Y, Enter)
-        ```
-    *   Dê permissão de execução ao script:
-        ```bash
-        chmod +x deploy.sh
-        ```
-    *   Execute o script:
-        ```bash
-        ./deploy.sh
-        ```
+2.  **Instale as dependências (Nginx, Node.js, PM2, Certbot, Git)**:
+    ```bash
+    # Atualizar pacotes
+    sudo apt-get update -y
+    sudo apt-get install -y curl git software-properties-common nginx certbot python3-certbot-nginx
 
-3.  **Instale o Jiu-Jitsu Hub**:
-    *   No menu interativo do script, selecione a opção **"2) Instalar Jiu-Jitsu Hub"**.
-    *   O script irá executar as seguintes ações automaticamente:
-        *   **Instalar Dependências**: Instala Nginx, Node.js, PM2, Git e Certbot.
-        *   **Clonar Repositório**: Baixa o código-fonte do GitHub.
-        *   **Construir Frontend**: Executa `npm install` e `npm run build` para gerar os arquivos estáticos.
-        *   **Configurar Nginx e SSL**: Cria os arquivos de configuração do Nginx para os domínios do frontend e backend e tenta gerar os certificados SSL com o Certbot.
+    # Instalar Node.js v18+
+    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+    sudo apt-get install -y nodejs
 
-Ao final deste passo, o frontend já estará configurado e acessível pelos domínios definidos.
+    # Instalar PM2 globalmente
+    sudo npm install -g pm2
+    ```
 
 ---
 
 ## Passo 2: Configuração do Banco de Dados
 
-Esta etapa é manual e crucial.
-
-1.  **Acesse seu servidor MySQL**:
+1.  **Acesse seu servidor MySQL**, crie um banco de dados e um usuário para a aplicação.
+2.  **Importe a estrutura das tabelas**: Use o arquivo `bancodedados.txt` do repositório do frontend para criar as tabelas.
     ```bash
-    mysql -u root -p
-    ```
-
-2.  **Crie o banco de dados e um usuário dedicado**:
-    *   Substitua `seu_usuario` e `sua_senha_forte` por credenciais seguras.
-    ```sql
-    CREATE DATABASE paulocarecateam;
-    CREATE USER 'seu_usuario'@'localhost' IDENTIFIED BY 'sua_senha_forte';
-    GRANT ALL PRIVILEGES ON paulocarecateam.* TO 'seu_usuario'@'localhost';
-    FLUSH PRIVILEGES;
-    EXIT;
-    ```
-
-3.  **Importe a estrutura das tabelas**:
-    *   O script `deployct.txt` já clonou o repositório. O arquivo `bancodedados.txt` estará dentro do diretório da aplicação.
-    *   Execute o comando abaixo para criar todas as tabelas, substituindo `seu_usuario` e `paulocarecateam` conforme necessário:
-    ```bash
-    mysql -u seu_usuario -p paulocarecateam < /home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildeveloper.com.br/bancodedados.txt
+    # Exemplo
+    mysql -u seu_usuario -p seu_banco < /caminho/para/o/repo/bancodedados.txt
     ```
 
 ---
 
-## Passo 3: Configuração e Inicialização do Backend
+## Passo 3: Deploy e Configuração do Backend
 
-1.  **Navegue até o diretório da aplicação**:
+O backend deve ser clonado e configurado em seu próprio diretório.
+
+1.  **Clone o repositório do seu backend**:
     ```bash
-    cd /home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildeveloper.com.br
+    # Substitua a URL pelo repositório do SEU backend
+    git clone https://github.com/seu-usuario/seu-backend.git /home/abildeveloper-paulocarecateam/backend
     ```
 
-2.  **Configure as variáveis de ambiente**:
-    *   O script de deploy já deve ter renomeado `env.txt` para `.env`. Se não, faça-o manualmente: `cp env.txt .env`.
-    *   Abra o arquivo `.env` para edição:
-        ```bash
-        nano .env
-        ```
-    *   **É fundamental atualizar as seguintes variáveis**:
-        *   `DATABASE_URL`: Insira a string de conexão com o banco de dados que você configurou no Passo 2. Exemplo: `mysql://seu_usuario:sua_senha_forte@localhost:3306/paulocarecateam`.
-        *   `JWT_SECRET`: Gere uma chave secreta forte e única. Você pode usar o comando `openssl rand -base64 32` no terminal para criar uma.
-        *   `API_KEY`: Se for usar a API do Gemini, insira sua chave aqui.
+2.  **Instale as dependências e configure o ambiente**:
+    ```bash
+    cd /home/abildeveloper-paulocarecateam/backend
+    npm install
+    nano .env
+    ```
+    *   No arquivo `.env`, configure `DATABASE_URL`, `JWT_SECRET`, e `PORT` (ex: `3003`).
 
 3.  **Inicie o servidor backend com PM2**:
-    *   Assumindo que o arquivo de entrada do seu backend se chame `server.js` (substitua se for outro nome, como `index.js` ou `app.js`).
-    *   Use o nome de processo definido no script de deploy (`jiujitsu-hub-backend`).
+    *   **Certifique-se de estar no diretório do backend.**
+    *   Assumindo que seu arquivo de entrada seja `server.js`.
     ```bash
     pm2 start server.js --name jiujitsu-hub-backend
     ```
 
-4.  **Configure o PM2 para iniciar com o sistema**:
+4.  **Verifique se o backend está rodando (`pm2 list`) e configure para iniciar com o sistema**:
     ```bash
     pm2 startup
-    # Siga as instruções que o comando exibir
+    # Siga as instruções na tela
     pm2 save
     ```
 
 ---
 
-## Passo 4: Verificação Final
+## Passo 4: Deploy do Frontend e Configuração do Nginx (Unificado)
 
-1.  **Verifique o status do backend**:
-    ```bash
-    pm2 list
-    ```
-    *   O processo `jiujitsu-hub-backend` deve estar com o status `online`.
+Agora, use o script `deployct.txt` (que foi atualizado para a nova arquitetura) para automatizar a configuração.
 
-2.  **Verifique o status do Nginx**:
+1.  **Crie e execute o script de deploy**:
+    *   Crie o arquivo `deploy.sh` na sua VPS com o conteúdo de `deployct.txt`.
+        ```bash
+        nano deploy.sh
+        chmod +x deploy.sh
+        ./deploy.sh
+        ```
+
+2.  **Instale o Jiu-Jitsu Hub**:
+    *   No menu interativo, selecione a opção **"2) Instalar Jiu-Jitsu Hub"**.
+    *   O script irá:
+        1.  Clonar o repositório do frontend.
+        2.  Construir os arquivos estáticos (`npm run build`).
+        3.  Configurar o Nginx para:
+            *   Servir os arquivos estáticos na raiz do seu domínio.
+            *   Criar um **proxy reverso**: qualquer requisição para `https://seu-dominio.com/api/...` será encaminhada para o backend rodando na porta interna (ex: 3003).
+        4.  Tentar gerar um único certificado SSL para o seu domínio.
+
+---
+
+## Passo 5: Verificação Final
+
+1.  **Verifique o status do Nginx e do PM2**:
     ```bash
     sudo systemctl status nginx
+    pm2 list
     ```
-    *   O serviço deve estar `active (running)`.
-
-3.  **Acesse as URLs no navegador**:
-    *   **Frontend**: `https://paulocarecateam.abildeveloper.com.br` - Você deve ver a página pública ou a tela de login.
-    *   **Backend**: `https://paulocarecabk.abildeveloper.com.br` - Você deve receber uma resposta da API (pode ser uma mensagem de "Cannot GET /" ou similar, o que indica que o servidor está respondendo).
+2.  **Acesse a URL no navegador**:
+    *   `https://paulocarecateam.abildeveloper.com.br` - Você deve ver a página pública ou a tela de login. O sistema deve estar totalmente funcional, pois as chamadas de API (`/api/students`, etc.) serão corretamente redirecionadas pelo Nginx.
 
 ---
 
 ## Gerenciamento Pós-Instalação
 
-*   **Para ver os logs do backend**:
-    ```bash
-    pm2 logs jiujitsu-hub-backend
-    ```
-*   **Para reiniciar o backend após uma alteração**:
-    ```bash
-    pm2 restart jiujitsu-hub-backend
-    ```
-*   **Para atualizar a aplicação (frontend e código-fonte)**:
-    *   Execute novamente o script `./deploy.sh` e escolha a opção **"6) Atualizar Jiu-Jitsu Hub"**.
-    *   Após a atualização, se houver mudanças no backend, reinicie o processo com PM2.
+*   **Logs do backend**: `pm2 logs jiujitsu-hub-backend`
+*   **Reiniciar o backend**: `pm2 restart jiujitsu-hub-backend`
+*   **Atualizar o frontend**: Use a opção "6) Atualizar Jiu-Jitsu Hub" no script de deploy.
+*   **Atualizar o backend**: Navegue até o diretório do backend, execute `git pull` e `pm2 restart jiujitsu-hub-backend`.

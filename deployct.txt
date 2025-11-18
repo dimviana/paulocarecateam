@@ -9,8 +9,8 @@
 # for the backend.
 #
 # SYSTEMS MANAGED:
-#   1. Gerencia Boleto
-#   2. Jiu-Jitsu Hub
+#   1. Gerencia Boleto (Dois Domínios)
+#   2. Jiu-Jitsu Hub (Domínio Único com Proxy Reverso)
 #
 # PRE-REQUISITES:
 #   - A Linux VPS (tested on Debian/Ubuntu).
@@ -41,29 +41,27 @@ ADMIN_EMAIL="androiddiviana@gmail.com" # Common email for Certbot registration
 #     EDIT THE VARIABLES IN THE SECTIONS BELOW FOR EACH APPLICATION
 # ==============================================================================
 
-# --- Configurações: Gerencia Boleto ---
+# --- Configurações: Gerencia Boleto (Arquitetura de Dois Domínios) ---
 GB_APP_NAME="Gerencia Boleto"
 GB_FRONTEND_DOMAIN="boleto.abildeveloper.com.br"
-GB_BACKEND_DOMAIN="boletobk.abildeveloper.com.br"
+GB_BACKEND_DOMAIN="boletobk.abildeveloper.com.br" # Domínio separado para o backend
 GB_REPO_URL="https://github.com/dimviana/gerencia-boleto.git"
 GB_APP_DIR="/home/abildeveloper-gerenciaboleto/htdocs/boleto.abildeveloper.com.br"
 GB_BUILD_DIR="dist"
-GB_BACKEND_PORT=3004  # Porta interna do backend (NÃO PODE CONFLITAR)
-GB_FRONTEND_NGINX_PORT=80 # Porta do Nginx para o Frontend
-GB_BACKEND_NGINX_PORT=82  # Porta do Nginx para o Backend
-GB_PM2_PROCESS_NAME="gerencia-boleto-backend" # <-- !!! NOME DO PROCESSO PM2 DO BACKEND !!!
+GB_BACKEND_PORT=3004
+GB_FRONTEND_NGINX_PORT=80
+GB_BACKEND_NGINX_PORT=82 # Porta separada para o Nginx do backend
+GB_PM2_PROCESS_NAME="gerencia-boleto-backend"
 
-# --- Configurações: Jiu-Jitsu Hub ---
+# --- Configurações: Jiu-Jitsu Hub (Arquitetura de Domínio Único) ---
 JJH_APP_NAME="Jiu-Jitsu Hub"
-JJH_FRONTEND_DOMAIN="paulocarecateam.abildeveloper.com.br"
-JJH_BACKEND_DOMAIN="paulocarecabk.abildeveloper.com.br"
+JJH_DOMAIN="paulocarecateam.abildeveloper.com.br" # Domínio único para frontend e backend
 JJH_REPO_URL="https://github.com/dimviana/paulocarecateam.git"
 JJH_APP_DIR="/home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildeveloper.com.br"
 JJH_BUILD_DIR="dist"
 JJH_BACKEND_PORT=3003
-JJH_FRONTEND_NGINX_PORT=81 # Porta do Nginx para o Frontend
-JJH_BACKEND_NGINX_PORT=83  # Porta do Nginx para o Backend
-JJH_PM2_PROCESS_NAME="jiujitsu-hub-backend" # <-- !!! NOME DO PROCESSO PM2 DO BACKEND !!!
+JJH_NGINX_PORT=81 # Porta única para o Nginx
+JJH_PM2_PROCESS_NAME="jiujitsu-hub-backend"
 
 # ==============================================================================
 #                     <<< CORE LOGIC FUNCTIONS >>>
@@ -121,10 +119,9 @@ setup_source_code() {
     sudo mkdir -p "$(dirname "$APP_DIR")"
     sudo chown -R $(whoami):$(whoami) "$(dirname "$APP_DIR")"
 
-    # Set GIT_TERMINAL_PROMPT=0 to prevent interactive prompts for credentials.
     GIT_TERMINAL_PROMPT=0 git clone "$REPO_URL" "$APP_DIR"
     if [ $? -ne 0 ]; then
-        echo -e "${RED}ERRO: Falha ao clonar o repositório. Verifique se a URL está correta, se o repositório é público e se há conexão com a internet.${NC}"
+        echo -e "${RED}ERRO: Falha ao clonar o repositório. Verifique a URL e se o repositório é público.${NC}"
         exit 1
     fi
     sudo chown -R $(whoami):$(whoami) "$APP_DIR"
@@ -159,7 +156,9 @@ build_application() {
     echo -e "${GREEN}-> Build concluído. Arquivos gerados em '$APP_DIR/$BUILD_DIR'.${NC}"
 }
 
-configure_nginx_and_ssl() {
+# --- NGINX CONFIGURATION FUNCTIONS (Specific for each architecture) ---
+
+configure_nginx_two_domains() {
     local FRONTEND_DOMAIN="$1"
     local BACKEND_DOMAIN="$2"
     local FRONTEND_NGINX_PORT="$3"
@@ -168,7 +167,7 @@ configure_nginx_and_ssl() {
     local BUILD_DIR="$6"
     local BACKEND_PORT="$7"
     
-    echo -e "\n${YELLOW}[ STEP 4/5 ] Configurando Nginx e SSL...${NC}"
+    echo -e "\n${YELLOW}[ STEP 4/5 ] Configurando Nginx e SSL (Dois Domínios)...${NC}"
     NGINX_CONF_PATH="/etc/nginx/sites-available/$FRONTEND_DOMAIN"
     
     sudo tee "$NGINX_CONF_PATH" > /dev/null <<EOF
@@ -176,35 +175,18 @@ configure_nginx_and_ssl() {
 server {
     listen $FRONTEND_NGINX_PORT;
     server_name $FRONTEND_DOMAIN;
-
     root $APP_DIR/$BUILD_DIR;
     index index.html index.htm;
-
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
+    location / { try_files \$uri \$uri/ /index.html; }
 }
-
 # Configuração do Backend: $BACKEND_DOMAIN
 server {
     listen $BACKEND_NGINX_PORT;
     server_name $BACKEND_DOMAIN;
-
     location / {
-        add_header 'Access-Control-Allow-Origin' 'https://$FRONTEND_DOMAIN' always;
-        add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
-        add_header 'Access-Control-Allow-Headers' 'Origin, X-Requested-With, Content-Type, Accept, Authorization' always;
-        add_header 'Access-Control-Allow-Credentials' 'true' always;
-
-        if (\$request_method = 'OPTIONS') {
-            return 204;
-        }
-
         proxy_pass http://localhost:$BACKEND_PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
 EOF
@@ -214,65 +196,119 @@ EOF
     fi
 
     sudo nginx -t && sudo systemctl restart nginx
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}ERRO: Falha ao reiniciar o Nginx. As portas $FRONTEND_NGINX_PORT ou $BACKEND_NGINX_PORT podem estar em uso.${NC}"
-        exit 1
-    fi
+    if [ $? -ne 0 ]; then echo -e "${RED}ERRO: Falha ao reiniciar o Nginx.${NC}"; exit 1; fi
 
     echo "-> Tentando gerar certificado SSL com Certbot..."
-    sudo certbot --nginx -d "$FRONTEND_DOMAIN" -d "$BACKEND_DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL"
-    if [ $? -ne 0 ]; then
-        echo -e "${YELLOW}AVISO: Falha ao gerar o certificado SSL. A aplicação estará disponível apenas em HTTP nas portas $FRONTEND_NGINX_PORT e $BACKEND_NGINX_PORT.${NC}"
-    else
-        echo -e "${GREEN}-> Certificado SSL gerado com sucesso.${NC}"
-    fi
+    sudo certbot --nginx -d "$FRONTEND_DOMAIN" -d "$BACKEND_DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL" || echo -e "${YELLOW}AVISO: Falha ao gerar SSL. Acesso via HTTP.${NC}"
     
     sudo systemctl restart nginx
     echo -e "${GREEN}-> Nginx configurado.${NC}"
 }
 
-print_success_message() {
+configure_nginx_single_domain() {
+    local DOMAIN="$1"
+    local NGINX_PORT="$2"
+    local APP_DIR="$3"
+    local BUILD_DIR="$4"
+    local BACKEND_PORT="$5"
+    
+    echo -e "\n${YELLOW}[ STEP 4/5 ] Configurando Nginx e SSL (Domínio Único com Proxy Reverso)...${NC}"
+    NGINX_CONF_PATH="/etc/nginx/sites-available/$DOMAIN"
+    
+    sudo tee "$NGINX_CONF_PATH" > /dev/null <<EOF
+server {
+    listen $NGINX_PORT;
+    server_name $DOMAIN;
+
+    # Bloco para a API (Proxy Reverso)
+    location /api/ {
+        proxy_pass http://localhost:$BACKEND_PORT/; # A barra no final é importante!
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    }
+
+    # Bloco para o Frontend (Arquivos Estáticos)
+    location / {
+        root $APP_DIR/$BUILD_DIR;
+        try_files \$uri \$uri/ /index.html;
+    }
+}
+EOF
+
+    if [ ! -L "/etc/nginx/sites-enabled/$DOMAIN" ]; then
+        sudo ln -s "$NGINX_CONF_PATH" "/etc/nginx/sites-enabled/$DOMAIN"
+    fi
+
+    sudo nginx -t && sudo systemctl restart nginx
+    if [ $? -ne 0 ]; then echo -e "${RED}ERRO: Falha ao reiniciar o Nginx.${NC}"; exit 1; fi
+    
+    echo "-> Tentando gerar certificado SSL com Certbot..."
+    sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL" || echo -e "${YELLOW}AVISO: Falha ao gerar SSL. Acesso via HTTP.${NC}"
+
+    sudo systemctl restart nginx
+    echo -e "${GREEN}-> Nginx configurado.${NC}"
+}
+
+# --- FINAL MESSAGE FUNCTIONS ---
+
+print_success_message_two_domains() {
     local FRONTEND_DOMAIN="$1"
     local BACKEND_DOMAIN="$2"
-    local BACKEND_PORT="$3"
-    local PM2_PROCESS_NAME="$4"
-    local APP_NAME="$5"
+    local PM2_PROCESS_NAME="$3"
+    local APP_NAME="$4"
 
     echo -e "\n${GREEN}========================================================"
-    echo "           INSTALAÇÃO DE '$APP_NAME' CONCLUÍDA!             "
+    echo "      INSTALAÇÃO DE '$APP_NAME' CONCLUÍDA! (Dois Domínios)      "
     echo "========================================================${NC}"
     echo "Acesse o frontend em:   https://$FRONTEND_DOMAIN"
     echo "O backend está em:      https://$BACKEND_DOMAIN"
     echo ""
-    echo -e "${YELLOW}------------------- PRÓXIMOS PASSOS --------------------${NC}"
-    echo "1. Configure o banco de dados manualmente."
-    echo "2. Edite o arquivo .env em seu diretório com as credenciais."
-    echo "3. Inicie o servidor de backend na porta ${YELLOW}$BACKEND_PORT${NC}."
-    echo "   Exemplo com PM2: ${YELLOW}pm2 start your-backend.js --name $PM2_PROCESS_NAME${NC}"
+    echo -e "${YELLOW}AÇÃO NECESSÁRIA: Inicie o backend com: 'pm2 start your-script.js --name $PM2_PROCESS_NAME'${NC}"
     echo "========================================================"
 }
 
+print_success_message_single_domain() {
+    local DOMAIN="$1"
+    local PM2_PROCESS_NAME="$2"
+    local APP_NAME="$3"
+
+    echo -e "\n${GREEN}========================================================"
+    echo "      INSTALAÇÃO DE '$APP_NAME' CONCLUÍDA! (Domínio Único)      "
+    echo "========================================================${NC}"
+    echo "Acesse a aplicação em:  https://$DOMAIN"
+    echo "A API está em:          https://$DOMAIN/api"
+    echo ""
+    echo -e "${YELLOW}AÇÃO NECESSÁRIA: Inicie o backend com: 'pm2 start your-script.js --name $PM2_PROCESS_NAME'${NC}"
+    echo "========================================================"
+}
+
+
 # --- Generic Workflow Functions ---
 
-install_system() {
-    local APP_NAME="$1"
-    local FRONTEND_DOMAIN="$2"
-    local BACKEND_DOMAIN="$3"
-    local FRONTEND_NGINX_PORT="$4"
-    local BACKEND_NGINX_PORT="$5"
-    local APP_DIR="$6"
-    local BUILD_DIR="$7"
-    local BACKEND_PORT="$8"
-    local REPO_URL="$9"
-    local PM2_PROCESS_NAME="${10}"
-
+install_gb() {
     set -e
-    echo -e "\n--- INICIANDO INSTALAÇÃO COMPLETA PARA: $APP_NAME ---"
+    echo -e "\n--- INICIANDO INSTALAÇÃO: $GB_APP_NAME ---"
     install_dependencies
-    setup_source_code "$APP_DIR" "$REPO_URL"
-    build_application "$APP_DIR" "$BUILD_DIR"
-    configure_nginx_and_ssl "$FRONTEND_DOMAIN" "$BACKEND_DOMAIN" "$FRONTEND_NGINX_PORT" "$BACKEND_NGINX_PORT" "$APP_DIR" "$BUILD_DIR" "$BACKEND_PORT"
-    print_success_message "$FRONTEND_DOMAIN" "$BACKEND_DOMAIN" "$BACKEND_PORT" "$PM2_PROCESS_NAME" "$APP_NAME"
+    setup_source_code "$GB_APP_DIR" "$GB_REPO_URL"
+    build_application "$GB_APP_DIR" "$GB_BUILD_DIR"
+    configure_nginx_two_domains "$GB_FRONTEND_DOMAIN" "$GB_BACKEND_DOMAIN" "$GB_FRONTEND_NGINX_PORT" "$GB_BACKEND_NGINX_PORT" "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_BACKEND_PORT"
+    print_success_message_two_domains "$GB_FRONTEND_DOMAIN" "$GB_BACKEND_DOMAIN" "$GB_PM2_PROCESS_NAME" "$GB_APP_NAME"
+    set +e
+}
+
+install_jjh() {
+    set -e
+    echo -e "\n--- INICIANDO INSTALAÇÃO: $JJH_APP_NAME ---"
+    install_dependencies
+    setup_source_code "$JJH_APP_DIR" "$JJH_REPO_URL"
+    build_application "$JJH_APP_DIR" "$JJH_BUILD_DIR"
+    configure_nginx_single_domain "$JJH_DOMAIN" "$JJH_NGINX_PORT" "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_BACKEND_PORT"
+    print_success_message_single_domain "$JJH_DOMAIN" "$JJH_PM2_PROCESS_NAME" "$JJH_APP_NAME"
     set +e
 }
 
@@ -285,54 +321,43 @@ update_system() {
 
     set -e
     echo -e "\n--- INICIANDO ATUALIZAÇÃO PARA: $APP_NAME ---"
-    if [ ! -d "$APP_DIR/.git" ]; then
-        echo -e "${RED}ERRO: Diretório '$APP_DIR' não encontrado. Instale o sistema primeiro.${NC}"
-        exit 1
-    fi
-
-    echo "-> Atualizando código fonte..."
-    cd "$APP_DIR" || { echo -e "${RED}ERRO: Não foi possível acessar o diretório '$APP_DIR'.${NC}"; exit 1; }
+    if [ ! -d "$APP_DIR/.git" ]; then echo -e "${RED}ERRO: Diretório '$APP_DIR' não encontrado.${NC}"; exit 1; fi
+    cd "$APP_DIR" || exit 1
     
-    # Ensure remote URL matches the one in the config.
     CURRENT_URL=$(git config --get remote.origin.url)
     if [[ "$CURRENT_URL" != "$REPO_URL" ]]; then
-        echo -e "${YELLOW}-> URL remota não corresponde à configuração. Atualizando para a URL pública.${NC}"
         git remote set-url origin "$REPO_URL"
     fi
 
-    echo "--> Executando git pull..."
-    # Set GIT_TERMINAL_PROMPT=0 to prevent interactive prompts for credentials.
     GIT_TERMINAL_PROMPT=0 git pull
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}ERRO: Falha ao executar 'git pull'. Verifique se o repositório é público e se há conexão com a internet.${NC}"
-        exit 1
-    fi
+    if [ $? -ne 0 ]; then echo -e "${RED}ERRO: Falha ao executar 'git pull'.${NC}"; exit 1; fi
     
     build_application "$APP_DIR" "$BUILD_DIR"
-    
     echo -e "${GREEN}-> Frontend atualizado com sucesso!${NC}"
     echo -e "${YELLOW}AVISO: Se o backend foi atualizado, reinicie-o (ex: 'pm2 restart $PM2_PROCESS_NAME').${NC}"
     set +e
 }
 
 remove_system() {
-    local FRONTEND_DOMAIN="$1"
+    local DOMAIN="$1"
     local APP_DIR="$2"
     local APP_NAME="$3"
+    # Adicional para o caso de dois domínios
+    local SECOND_DOMAIN="${4:-}"
 
     echo -e "\n--- INICIANDO REMOÇÃO DE: $APP_NAME ---"
     read -p "!!! ATENÇÃO !!! Isso removerá os arquivos e configs do Nginx para '$APP_NAME'. Deseja continuar? (s/N): " confirm
-    if [[ "$confirm" != "s" && "$confirm" != "S" ]]; then
-        echo "Remoção cancelada."
-        return
-    fi
+    if [[ "$confirm" != "s" && "$confirm" != "S" ]]; then echo "Remoção cancelada."; return; fi
 
-    echo "-> Removendo certificado SSL (se existir)..."
-    sudo certbot delete --cert-name "$FRONTEND_DOMAIN" --non-interactive 2>/dev/null || echo "Certificado não encontrado, pulando."
+    echo "-> Removendo certificado(s) SSL..."
+    sudo certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null || echo "Certificado para $DOMAIN não encontrado."
+    if [ -n "$SECOND_DOMAIN" ]; then
+        sudo certbot delete --cert-name "$SECOND_DOMAIN" --non-interactive 2>/dev/null || echo "Certificado para $SECOND_DOMAIN não encontrado."
+    fi
     
     echo "-> Removendo configurações do Nginx..."
-    sudo rm -f "/etc/nginx/sites-available/$FRONTEND_DOMAIN"
-    sudo rm -f "/etc/nginx/sites-enabled/$FRONTEND_DOMAIN"
+    sudo rm -f "/etc/nginx/sites-available/$DOMAIN"
+    sudo rm -f "/etc/nginx/sites-enabled/$DOMAIN"
     sudo nginx -t && sudo systemctl restart nginx
 
     echo "-> Removendo arquivos da aplicação..."
@@ -342,35 +367,7 @@ remove_system() {
     echo -e "${YELLOW}AVISO: O banco de dados e o processo PM2 do backend NÃO foram removidos.${NC}"
 }
 
-# --- Combined Action Functions ---
-
-install_both_systems() {
-    echo -e "\n--- INICIANDO INSTALAÇÃO DE AMBOS OS SISTEMAS ---"
-    echo -e "${YELLOW}A instalação será executada sequencialmente. Se ocorrer um erro, o script será interrompido.${NC}"
-    
-    install_system "$GB_APP_NAME" "$GB_FRONTEND_DOMAIN" "$GB_BACKEND_DOMAIN" "$GB_FRONTEND_NGINX_PORT" "$GB_BACKEND_NGINX_PORT" "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_BACKEND_PORT" "$GB_REPO_URL" "$GB_PM2_PROCESS_NAME"
-    
-    install_system "$JJH_APP_NAME" "$JJH_FRONTEND_DOMAIN" "$JJH_BACKEND_DOMAIN" "$JJH_FRONTEND_NGINX_PORT" "$JJH_BACKEND_NGINX_PORT" "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_BACKEND_PORT" "$JJH_REPO_URL" "$JJH_PM2_PROCESS_NAME"
-
-    echo -e "\n${GREEN}--- INSTALAÇÃO DE AMBOS OS SISTEMAS CONCLUÍDA COM SUCESSO ---${NC}"
-}
-
-remove_both_systems() {
-    echo -e "\n--- INICIANDO REMOÇÃO DE AMBOS OS SISTEMAS ---"
-    read -p "!!! ATENÇÃO !!! Você está prestes a remover AMBOS os sistemas. Será pedida uma confirmação para cada um. Deseja continuar? (s/N): " confirm
-    if [[ "$confirm" != "s" && "$confirm" != "S" ]]; then
-        echo "Remoção cancelada."
-        return
-    fi
-    
-    remove_system "$GB_FRONTEND_DOMAIN" "$GB_APP_DIR" "$GB_APP_NAME"
-    remove_system "$JJH_FRONTEND_DOMAIN" "$JJH_APP_DIR" "$JJH_APP_NAME"
-
-    echo -e "\n${GREEN}--- REMOÇÃO DE AMBOS OS SISTEMAS CONCLUÍDA ---${NC}"
-}
-
 # --- Main Menu ---
-
 show_main_menu() {
     while true; do
         echo -e "\n================================================="
@@ -379,27 +376,28 @@ show_main_menu() {
         echo "  1) Instalar Gerencia Boleto"
         echo "  2) Instalar Jiu-Jitsu Hub"
         echo "  3) Instalar AMBOS os sistemas"
-        echo "  4) Remover AMBOS os sistemas"
-        echo "  5) Atualizar Gerencia Boleto"
-        echo "  6) Atualizar Jiu-Jitsu Hub"
         echo
-        echo -e "${YELLOW}-- Outras Opções --${NC}"
-        echo "  7) Remover Gerencia Boleto (Individual)"
-        echo "  8) Remover Jiu-Jitsu Hub (Individual)"
+        echo "  4) Atualizar Gerencia Boleto"
+        echo "  5) Atualizar Jiu-Jitsu Hub"
+        echo
+        echo "  6) Remover Gerencia Boleto"
+        echo "  7) Remover Jiu-Jitsu Hub"
+        echo "  8) Remover AMBOS os sistemas"
+        echo
         echo "  9) Sair"
         echo
 
         read -p "Opção [1-9]: " choice
 
         case $choice in
-            1) install_system "$GB_APP_NAME" "$GB_FRONTEND_DOMAIN" "$GB_BACKEND_DOMAIN" "$GB_FRONTEND_NGINX_PORT" "$GB_BACKEND_NGINX_PORT" "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_BACKEND_PORT" "$GB_REPO_URL" "$GB_PM2_PROCESS_NAME" ;;
-            2) install_system "$JJH_APP_NAME" "$JJH_FRONTEND_DOMAIN" "$JJH_BACKEND_DOMAIN" "$JJH_FRONTEND_NGINX_PORT" "$JJH_BACKEND_NGINX_PORT" "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_BACKEND_PORT" "$JJH_REPO_URL" "$JJH_PM2_PROCESS_NAME" ;;
-            3) install_both_systems ;;
-            4) remove_both_systems ;;
-            5) update_system "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_APP_NAME" "$GB_PM2_PROCESS_NAME" "$GB_REPO_URL" ;;
-            6) update_system "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_APP_NAME" "$JJH_PM2_PROCESS_NAME" "$JJH_REPO_URL" ;;
-            7) remove_system "$GB_FRONTEND_DOMAIN" "$GB_APP_DIR" "$GB_APP_NAME" ;;
-            8) remove_system "$JJH_FRONTEND_DOMAIN" "$JJH_APP_DIR" "$JJH_APP_NAME" ;;
+            1) install_gb ;;
+            2) install_jjh ;;
+            3) install_gb && install_jjh ;;
+            4) update_system "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_APP_NAME" "$GB_PM2_PROCESS_NAME" "$GB_REPO_URL" ;;
+            5) update_system "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_APP_NAME" "$JJH_PM2_PROCESS_NAME" "$JJH_REPO_URL" ;;
+            6) remove_system "$GB_FRONTEND_DOMAIN" "$GB_APP_DIR" "$GB_APP_NAME" "$GB_BACKEND_DOMAIN" ;;
+            7) remove_system "$JJH_DOMAIN" "$JJH_APP_DIR" "$JJH_APP_NAME" ;;
+            8) remove_system "$GB_FRONTEND_DOMAIN" "$GB_APP_DIR" "$GB_APP_NAME" "$GB_BACKEND_DOMAIN" ; remove_system "$JJH_DOMAIN" "$JJH_APP_DIR" "$JJH_APP_NAME" ;;
             9) echo "Saindo."; exit 0 ;;
             *) echo -e "${RED}Opção inválida. Tente novamente.${NC}" ;;
         esac
