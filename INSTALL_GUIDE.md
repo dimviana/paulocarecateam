@@ -75,15 +75,12 @@ O backend deve ser clonado e configurado em seu próprio diretório.
     ```
 
 3.  **Prepare o arquivo de configuração do PM2 (`ecosystem.config.js`)**:
-    *   Este repositório (o do frontend) contém um arquivo de exemplo chamado `ecosystem.config.js.example`.
-    *   Copie este arquivo para a raiz do seu diretório do **backend**.
-        ```bash
-        # Exemplo: cp /caminho/para/o/repo/frontend/ecosystem.config.js.example /caminho/para/o/repo/backend/
-        ```
-    *   Dentro do diretório do backend, renomeie o arquivo para `ecosystem.config.js`.
-    *   **Abra e edite o arquivo `ecosystem.config.js`**:
-        *   Descomente o bloco referente ao "Jiu-Jitsu Hub".
-        *   **Muito importante:** Verifique se o `script` aponta para o arquivo de entrada correto do seu backend (ex: `./server.js`, `./index.js`, etc.).
+    *   Este repositório (o do frontend) contém um arquivo-guia chamado `ecosystem.config.txt`.
+    *   **Abra o arquivo `ecosystem.config.txt`** e siga as instruções contidas nele. O processo é:
+        1.  Copiar o bloco de código JavaScript fornecido no arquivo.
+        2.  Criar um novo arquivo chamado `ecosystem.config.js` na raiz do seu diretório do **backend**.
+        3.  Colar o código no novo arquivo.
+        4.  Descomentar o bloco da sua aplicação e ajustar o caminho do `script` de inicialização.
 
 4.  **Inicie o servidor backend com PM2**:
     *   Ainda no diretório do backend, execute o comando:

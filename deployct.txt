@@ -269,7 +269,7 @@ print_success_message_two_domains() {
     echo ""
     echo -e "${YELLOW}AÇÃO NECESSÁRIA: O backend deve ser iniciado manualmente.${NC}"
     echo "1. Siga as instruções no INSTALL_GUIDE.md para o backend."
-    echo "2. Use o arquivo 'ecosystem.config.js.example' para criar sua config."
+    echo "2. Use o guia no arquivo 'ecosystem.config.txt' para criar seu 'ecosystem.config.js'."
     echo "3. No diretório do backend, execute: 'pm2 start ecosystem.config.js'"
     echo "========================================================"
 }
@@ -286,7 +286,7 @@ print_success_message_single_domain() {
     echo ""
     echo -e "${YELLOW}AÇÃO NECESSÁRIA: O backend deve ser iniciado manualmente.${NC}"
     echo "1. Siga as instruções no INSTALL_GUIDE.md para o backend."
-    echo "2. Use o arquivo 'ecosystem.config.js.example' para criar sua config."
+    echo "2. Use o guia no arquivo 'ecosystem.config.txt' para criar seu 'ecosystem.config.js'."
     echo "3. No diretório do backend, execute: 'pm2 start ecosystem.config.js'"
     echo "========================================================"
 }
