@@ -1,68 +1,56 @@
-# ==============================================================================
-#           Guia de Configuração do PM2 (ecosystem.config.js)
-# ==============================================================================
-#
-# Para iniciar seu backend com PM2 de forma robusta, siga os passos abaixo.
-# Este método evita o erro "File not found" e é a prática recomendada.
-#
-# 1. COPIE TODO O CONTEÚDO do bloco de código JavaScript abaixo (entre as linhas pontilhadas).
-#
-# 2. No diretório raiz do seu PROJETO BACKEND, crie um novo arquivo chamado:
-#    ecosystem.config.js
-#
-# 3. COLE o conteúdo copiado nesse novo arquivo.
-#
-# 4. DESCOMENTE o bloco de configuração correspondente à sua aplicação
-#    (Gerencia Boleto ou Jiu-Jitsu Hub).
-#
-# 5. IMPORTANTE: Altere a linha 'script' para apontar para o arquivo de
-#    entrada do seu servidor (ex: './server.js', './index.js', './app.js').
-#
-# 6. Salve o arquivo `ecosystem.config.js`.
-#
-# 7. No terminal, dentro do diretório do backend, inicie a aplicação com:
-#    pm2 start ecosystem.config.js
-#
-# ==============================================================================
-
-# ----------------- INÍCIO DO CÓDIGO PARA COPIAR -----------------
+/**
+ * ==============================================================================
+ *           Arquivo de Configuração do PM2 para Jiu-Jitsu Hub
+ * ==============================================================================
+ *
+ * Este arquivo é usado pelo PM2 para gerenciar o processo do servidor backend.
+ * Ele garante que a aplicação rode de forma contínua em ambiente de produção.
+ *
+ * Como usar:
+ * 1. Copie este arquivo para a pasta raiz do seu projeto BACKEND.
+ * 2. Se o arquivo de entrada do seu servidor não for 'server.js',
+ *    altere a linha 'script' abaixo.
+ * 3. No terminal, dentro da pasta do backend, execute:
+ *    pm2 start ecosystem.config.js
+ *
+ * ==============================================================================
+ */
 
 module.exports = {
   apps: [
     /**
-     * --- Bloco de Configuração para: Gerencia Boleto ---
-     * Descomente as linhas abaixo se estiver configurando este sistema.
+     * --- Configuração para: Jiu-Jitsu Hub ---
+     * Esta é a configuração padrão. Altere a linha 'script' se o seu
+     * arquivo de entrada do servidor for diferente de 'server.js'.
+     */
+    {
+      name: 'jiujitsu-hub-backend',
+      script: './server.js', // <-- MUITO IMPORTANTE: Altere para o seu arquivo de entrada!
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3001 // Porta interna do backend (Nginx irá redirecionar para ela)
+      }
+    },
+
+    /**
+     * --- Bloco de Configuração Opcional para: Gerencia Boleto ---
+     * Mantenha comentado a menos que esteja configurando este sistema.
      */
     // {
     //   name: 'gerencia-boleto-backend',
-    //   script: './server.js', // <-- MUITO IMPORTANTE: Altere para o seu arquivo de entrada!
+    //   script: './server.js',
     //   instances: 1,
     //   autorestart: true,
     //   watch: false,
     //   max_memory_restart: '1G',
     //   env: {
     //     NODE_ENV: 'production',
-    //     PORT: 3000 // Porta interna do backend (Nginx irá redirecionar para ela)
+    //     PORT: 3000
     //   }
     // },
-
-    /**
-     * --- Bloco de Configuração para: Jiu-Jitsu Hub ---
-     * Descomente as linhas abaixo se estiver configurando este sistema.
-     */
-    // {
-    //   name: 'jiujitsu-hub-backend',
-    //   script: './server.js', // <-- MUITO IMPORTANTE: Altere para o seu arquivo de entrada!
-    //   instances: 1,
-    //   autorestart: true,
-    //   watch: false,
-    //   max_memory_restart: '1G',
-    //   env: {
-    //     NODE_ENV: 'production',
-    //     PORT: 3001 // Porta interna do backend (Nginx irá redirecionar para ela)
-    //   }
-    // }
   ]
 };
-
-# ------------------ FIM DO CÓDIGO PARA COPIAR ------------------
