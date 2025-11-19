@@ -70,18 +70,29 @@ O backend deve ser clonado e configurado em seu próprio diretório.
     ```bash
     cd /home/abildeveloper-paulocarecateam/backend
     npm install
+    # Crie e configure seu arquivo .env com DATABASE_URL, JWT_SECRET, e PORT=3001
     nano .env
     ```
-    *   No arquivo `.env`, configure `DATABASE_URL`, `JWT_SECRET`, e `PORT` (ex: `3003`).
 
-3.  **Inicie o servidor backend com PM2**:
-    *   **Certifique-se de estar no diretório do backend.**
-    *   Assumindo que seu arquivo de entrada seja `server.js`.
+3.  **Prepare o arquivo de configuração do PM2 (`ecosystem.config.js`)**:
+    *   Este repositório (o do frontend) contém um arquivo de exemplo chamado `ecosystem.config.js.example`.
+    *   Copie este arquivo para a raiz do seu diretório do **backend**.
+        ```bash
+        # Exemplo: cp /caminho/para/o/repo/frontend/ecosystem.config.js.example /caminho/para/o/repo/backend/
+        ```
+    *   Dentro do diretório do backend, renomeie o arquivo para `ecosystem.config.js`.
+    *   **Abra e edite o arquivo `ecosystem.config.js`**:
+        *   Descomente o bloco referente ao "Jiu-Jitsu Hub".
+        *   **Muito importante:** Verifique se o `script` aponta para o arquivo de entrada correto do seu backend (ex: `./server.js`, `./index.js`, etc.).
+
+4.  **Inicie o servidor backend com PM2**:
+    *   Ainda no diretório do backend, execute o comando:
     ```bash
-    pm2 start server.js --name jiujitsu-hub-backend
+    pm2 start ecosystem.config.js
     ```
+    *   PM2 irá ler o arquivo de configuração e iniciar sua aplicação com as configurações definidas, resolvendo o erro "File not found".
 
-4.  **Verifique se o backend está rodando (`pm2 list`) e configure para iniciar com o sistema**:
+5.  **Verifique se o backend está rodando (`pm2 list`) e configure para iniciar com o sistema**:
     ```bash
     pm2 startup
     # Siga as instruções na tela
@@ -106,10 +117,10 @@ Agora, use o script `deployct.txt` (que foi atualizado para a nova arquitetura) 
     *   No menu interativo, selecione a opção **"2) Instalar Jiu-Jitsu Hub"**.
     *   O script irá:
         1.  Clonar o repositório do frontend.
-        2.  Construir os arquivos estáticos (`npm run build`).
+        2.  Construir a aplicação (`npm run build`).
         3.  Configurar o Nginx para:
             *   Servir os arquivos estáticos na raiz do seu domínio.
-            *   Criar um **proxy reverso**: qualquer requisição para `https://seu-dominio.com/api/...` será encaminhada para o backend rodando na porta interna (ex: 3003).
+            *   Criar um **proxy reverso**: qualquer requisição para `https://seu-dominio.com/api/...` será encaminhada para o backend rodando na porta interna (ex: 3001).
         4.  Tentar gerar um único certificado SSL para o seu domínio.
 
 ---
@@ -130,5 +141,5 @@ Agora, use o script `deployct.txt` (que foi atualizado para a nova arquitetura) 
 
 *   **Logs do backend**: `pm2 logs jiujitsu-hub-backend`
 *   **Reiniciar o backend**: `pm2 restart jiujitsu-hub-backend`
-*   **Atualizar o frontend**: Use a opção "6) Atualizar Jiu-Jitsu Hub" no script de deploy.
-*   **Atualizar o backend**: Navegue até o diretório do backend, execute `git pull` e `pm2 restart jiujitsu-hub-backend`.
+*   **Atualizar o frontend**: Use a opção "5) Atualizar Jiu-Jitsu Hub" no script de deploy.
+*   **Atualizar o backend**: Navegue até o diretório do backend, execute `git pull`, `npm install` (se necessário) e `pm2 restart jiujitsu-hub-backend`.

@@ -48,9 +48,9 @@ GB_BACKEND_DOMAIN="boletobk.abildeveloper.com.br" # Domínio separado para o bac
 GB_REPO_URL="https://github.com/dimviana/gerencia-boleto.git"
 GB_APP_DIR="/home/abildeveloper-gerenciaboleto/htdocs/boleto.abildeveloper.com.br"
 GB_BUILD_DIR="dist"
-GB_BACKEND_PORT=3004
+GB_BACKEND_PORT=3000
 GB_FRONTEND_NGINX_PORT=80
-GB_BACKEND_NGINX_PORT=82 # Porta separada para o Nginx do backend
+GB_BACKEND_NGINX_PORT=80 # Porta de escuta do Nginx para o backend
 GB_PM2_PROCESS_NAME="gerencia-boleto-backend"
 
 # --- Configurações: Jiu-Jitsu Hub (Arquitetura de Domínio Único) ---
@@ -59,8 +59,8 @@ JJH_DOMAIN="paulocarecateam.abildeveloper.com.br" # Domínio único para fronten
 JJH_REPO_URL="https://github.com/dimviana/paulocarecateam.git"
 JJH_APP_DIR="/home/abildeveloper-paulocarecateam/htdocs/paulocarecateam.abildeveloper.com.br"
 JJH_BUILD_DIR="dist"
-JJH_BACKEND_PORT=3003
-JJH_NGINX_PORT=81 # Porta única para o Nginx
+JJH_BACKEND_PORT=3001
+JJH_NGINX_PORT=80 # Porta única para o Nginx
 JJH_PM2_PROCESS_NAME="jiujitsu-hub-backend"
 
 # ==============================================================================
@@ -259,8 +259,7 @@ EOF
 print_success_message_two_domains() {
     local FRONTEND_DOMAIN="$1"
     local BACKEND_DOMAIN="$2"
-    local PM2_PROCESS_NAME="$3"
-    local APP_NAME="$4"
+    local APP_NAME="$3"
 
     echo -e "\n${GREEN}========================================================"
     echo "      INSTALAÇÃO DE '$APP_NAME' CONCLUÍDA! (Dois Domínios)      "
@@ -268,14 +267,16 @@ print_success_message_two_domains() {
     echo "Acesse o frontend em:   https://$FRONTEND_DOMAIN"
     echo "O backend está em:      https://$BACKEND_DOMAIN"
     echo ""
-    echo -e "${YELLOW}AÇÃO NECESSÁRIA: Inicie o backend com: 'pm2 start your-script.js --name $PM2_PROCESS_NAME'${NC}"
+    echo -e "${YELLOW}AÇÃO NECESSÁRIA: O backend deve ser iniciado manualmente.${NC}"
+    echo "1. Siga as instruções no INSTALL_GUIDE.md para o backend."
+    echo "2. Use o arquivo 'ecosystem.config.js.example' para criar sua config."
+    echo "3. No diretório do backend, execute: 'pm2 start ecosystem.config.js'"
     echo "========================================================"
 }
 
 print_success_message_single_domain() {
     local DOMAIN="$1"
-    local PM2_PROCESS_NAME="$2"
-    local APP_NAME="$3"
+    local APP_NAME="$2"
 
     echo -e "\n${GREEN}========================================================"
     echo "      INSTALAÇÃO DE '$APP_NAME' CONCLUÍDA! (Domínio Único)      "
@@ -283,7 +284,10 @@ print_success_message_single_domain() {
     echo "Acesse a aplicação em:  https://$DOMAIN"
     echo "A API está em:          https://$DOMAIN/api"
     echo ""
-    echo -e "${YELLOW}AÇÃO NECESSÁRIA: Inicie o backend com: 'pm2 start your-script.js --name $PM2_PROCESS_NAME'${NC}"
+    echo -e "${YELLOW}AÇÃO NECESSÁRIA: O backend deve ser iniciado manualmente.${NC}"
+    echo "1. Siga as instruções no INSTALL_GUIDE.md para o backend."
+    echo "2. Use o arquivo 'ecosystem.config.js.example' para criar sua config."
+    echo "3. No diretório do backend, execute: 'pm2 start ecosystem.config.js'"
     echo "========================================================"
 }
 
@@ -297,7 +301,7 @@ install_gb() {
     setup_source_code "$GB_APP_DIR" "$GB_REPO_URL"
     build_application "$GB_APP_DIR" "$GB_BUILD_DIR"
     configure_nginx_two_domains "$GB_FRONTEND_DOMAIN" "$GB_BACKEND_DOMAIN" "$GB_FRONTEND_NGINX_PORT" "$GB_BACKEND_NGINX_PORT" "$GB_APP_DIR" "$GB_BUILD_DIR" "$GB_BACKEND_PORT"
-    print_success_message_two_domains "$GB_FRONTEND_DOMAIN" "$GB_BACKEND_DOMAIN" "$GB_PM2_PROCESS_NAME" "$GB_APP_NAME"
+    print_success_message_two_domains "$GB_FRONTEND_DOMAIN" "$GB_BACKEND_DOMAIN" "$GB_APP_NAME"
     set +e
 }
 
@@ -308,7 +312,7 @@ install_jjh() {
     setup_source_code "$JJH_APP_DIR" "$JJH_REPO_URL"
     build_application "$JJH_APP_DIR" "$JJH_BUILD_DIR"
     configure_nginx_single_domain "$JJH_DOMAIN" "$JJH_NGINX_PORT" "$JJH_APP_DIR" "$JJH_BUILD_DIR" "$JJH_BACKEND_PORT"
-    print_success_message_single_domain "$JJH_DOMAIN" "$JJH_PM2_PROCESS_NAME" "$JJH_APP_NAME"
+    print_success_message_single_domain "$JJH_DOMAIN" "$JJH_APP_NAME"
     set +e
 }
 
