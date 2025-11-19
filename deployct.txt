@@ -87,8 +87,8 @@ install_dependencies() {
     sudo apt-get install -y curl git software-properties-common
 
     if ! check_command node || [[ $(node -v | cut -d . -f 1) < "v18" ]]; then
-        echo "-> Configurando o repositório do Node.js v18..."
-        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+        echo "-> Configurando o repositório do Node.js (LTS)..."
+        curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
     fi
 
     echo "-> Instalando Nginx, Node.js, Certbot..."
@@ -215,15 +215,17 @@ configure_nginx_single_domain() {
     echo -e "\n${YELLOW}[ STEP 4/5 ] Configurando Nginx e SSL (Domínio Único com Proxy Reverso)...${NC}"
     NGINX_CONF_PATH="/etc/nginx/sites-available/$DOMAIN"
     
+    # CORRECTED NGINX CONFIGURATION
     sudo tee "$NGINX_CONF_PATH" > /dev/null <<EOF
+# Main server block to handle requests to the domain.
 server {
     listen $NGINX_PORT;
     server_name $DOMAIN;
 
-    # Bloco para a API (Proxy Reverso)
+    # Location block for the API Backend (Reverse Proxy)
+    # Any request starting with /api/ will be forwarded to the Node.js backend.
     location /api/ {
-        # FIX: Removida a barra final para preservar o /api/ no proxy.
-        proxy_pass http://localhost:$BACKEND_PORT;
+        proxy_pass http://127.0.0.1:$BACKEND_PORT;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -231,13 +233,22 @@ server {
         proxy_cache_bypass \$http_upgrade;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
-    # Bloco para o Frontend (Arquivos Estáticos)
+    # Location block for the Frontend (Static Files)
+    # This is the catch-all for any other request. It serves the React app.
     location / {
         root $APP_DIR/$BUILD_DIR;
+        index index.html;
+        # This line is crucial for Single Page Applications (SPAs) like React
+        # to handle client-side routing correctly.
         try_files \$uri \$uri/ /index.html;
     }
+
+    # Paths for logs
+    access_log /var/log/nginx/$DOMAIN.access.log;
+    error_log /var/log/nginx/$DOMAIN.error.log;
 }
 EOF
 

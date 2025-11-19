@@ -35,8 +35,8 @@ O script `deployct.txt` pode automatizar parte desta configuração. Primeiro, v
     sudo apt-get update -y
     sudo apt-get install -y curl git software-properties-common nginx certbot python3-certbot-nginx
 
-    # Instalar Node.js v18+
-    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+    # Instalar Node.js (versão LTS)
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
     sudo apt-get install -y nodejs
 
     # Instalar PM2 globalmente
