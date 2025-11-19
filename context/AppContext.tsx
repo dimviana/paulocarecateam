@@ -3,6 +3,12 @@ import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, Atten
 import { initialThemeSettings } from '../constants';
 import { api } from '../services/api';
 
+interface NotificationType {
+  message: string;
+  details: string;
+  type: 'error' | 'success';
+}
+
 interface AppContextType {
   themeSettings: ThemeSettings;
   setThemeSettings: (settings: ThemeSettings) => void;
@@ -32,7 +38,6 @@ interface AppContextType {
   deleteAttendanceRecord: (id: string) => Promise<void>;
   saveProfessor: (prof: Omit<Professor, 'id'> & { id?: string }) => Promise<void>;
   deleteProfessor: (id: string) => Promise<void>;
-  // FIX: Add showcasedComponents state for the Components demo page.
   showcasedComponents: string[];
   setShowcasedComponents: React.Dispatch<React.SetStateAction<string[]>>;
   registerAcademy: (data: {
@@ -46,6 +51,8 @@ interface AppContextType {
     success: boolean;
     message?: string;
   }>;
+  notification: NotificationType | null;
+  hideNotification: () => void;
 }
 
 export const AppContext = createContext<AppContextType>(null!);
@@ -54,7 +61,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [themeSettings, setThemeSettingsState] = useState<ThemeSettings>(() => {
     const saved = localStorage.getItem('themeSettings');
     const settings = saved ? JSON.parse(saved) : initialThemeSettings;
-    // Force light theme to match new design
     settings.theme = 'light';
     return settings;
   });
@@ -69,12 +75,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [professors, setProfessors] = useState<Professor[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // FIX: Add state management for showcasedComponents to resolve error on Components page.
   const [showcasedComponents, setShowcasedComponents] = useState<string[]>(() => {
     const saved = localStorage.getItem('showcasedComponents');
     return saved ? JSON.parse(saved) : ['StatCard', 'PaymentsChart', 'AttendanceChart'];
   });
+  const [notification, setNotification] = useState<NotificationType | null>(null);
+
+  const hideNotification = useCallback(() => setNotification(null), []);
+
+  const handleApiError = useCallback((error: any, context: string) => {
+    console.error(`API Error in ${context}:`, error);
+
+    let message = 'Falha de Conexão';
+    let details = 'Não foi possível se comunicar com o servidor. Verifique se o processo (PM2) está online, sua conexão com a internet e as configurações do Nginx.';
+
+    if (error && typeof error.message === 'string') {
+        const lowerCaseMessage = error.message.toLowerCase();
+        if (lowerCaseMessage.includes('database') || lowerCaseMessage.includes('connect econnrefused')) {
+            message = 'Erro de Banco de Dados';
+            details = 'O servidor não pôde se conectar ao banco de dados. Verifique as credenciais no arquivo .env do backend e o status do serviço MySQL.';
+        } else if (!lowerCaseMessage.includes('http error')) {
+             message = 'Erro no Servidor';
+             details = `Ocorreu um erro inesperado. Detalhes: ${error.message}`;
+        }
+    } else if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        // This is a classic network error, the default message is appropriate.
+    }
+    
+    setNotification({ type: 'error', message, details });
+  }, []);
 
   const logout = useCallback(() => {
     setUser(null);
@@ -102,14 +131,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setProfessors(professorsData);
         setActivityLogs(activityLogsData);
       } catch (error) {
-          console.error("Failed to refetch data:", error);
-          // Handle token expiration or network errors
+          handleApiError(error, 'refetchData');
           if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
               logout();
           }
       }
-  }, [logout]);
-
+  }, [logout, handleApiError]);
 
   useEffect(() => {
     const styleId = 'dynamic-theme-styles';
@@ -119,12 +146,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         styleElement.id = styleId;
         document.head.appendChild(styleElement);
     }
-
-    const {
-        primaryColor, secondaryColor, backgroundColor, cardBackgroundColor,
-        buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2
-    } = themeSettings;
-
+    const { primaryColor, secondaryColor, backgroundColor, cardBackgroundColor, buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2 } = themeSettings;
     styleElement.innerHTML = `
       :root {
         --theme-bg: ${backgroundColor};
@@ -138,181 +160,129 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         --theme-accent: ${primaryColor};
       }
     `;
-}, [themeSettings]);
-
+  }, [themeSettings]);
 
   useEffect(() => {
     const verifyTokenAndFetchData = async () => {
         setLoading(true);
         const token = localStorage.getItem('authToken');
-        if (!token) {
-            setLoading(false);
-            return;
-        }
-
+        if (!token) { setLoading(false); return; }
         try {
-            const payload = JSON.parse(atob(token.split('.')[1])); // Basic JWT payload parsing
-             if (payload.exp * 1000 < Date.now()) {
-                logout();
-                setLoading(false);
-                return;
-            }
-            // Fetch users first to identify the logged-in user
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            if (payload.exp * 1000 < Date.now()) { logout(); setLoading(false); return; }
             const allUsers = await api.getUsers();
             setUsers(allUsers);
             const loggedInUser = allUsers.find(u => u.id === payload.userId);
-
-            if (loggedInUser) {
-                setUser(loggedInUser);
-                await refetchData(); // Fetch all other data
-            } else {
-                logout();
-            }
+            if (loggedInUser) { setUser(loggedInUser); await refetchData(); } else { logout(); }
         } catch (error) {
-            console.error("Token verification or data fetch failed", error);
+            handleApiError(error, 'verifyToken');
             logout();
         } finally {
             setLoading(false);
         }
     };
     verifyTokenAndFetchData();
-  }, [logout, refetchData]);
+  }, [logout, refetchData, handleApiError]);
 
-
-  useEffect(() => {
-    localStorage.setItem('themeSettings', JSON.stringify(themeSettings));
-  }, [themeSettings]);
-
-  useEffect(() => {
-    localStorage.setItem('showcasedComponents', JSON.stringify(showcasedComponents));
-  }, [showcasedComponents]);
-
-  useEffect(() => {
-    // This effect is simplified as the new design is light-theme only.
-    // If theme switching is re-enabled, this logic would need to be expanded.
-    document.documentElement.classList.remove('dark');
-  }, []);
+  useEffect(() => { localStorage.setItem('themeSettings', JSON.stringify(themeSettings)); }, [themeSettings]);
+  useEffect(() => { localStorage.setItem('showcasedComponents', JSON.stringify(showcasedComponents)); }, [showcasedComponents]);
+  useEffect(() => { document.documentElement.classList.remove('dark'); }, []);
 
   const setThemeSettings = (settings: ThemeSettings) => {
-    // Force light theme to match new design
     settings.theme = 'light';
     setThemeSettingsState(settings);
   };
   
   const login = async (email: string, pass: string) => {
-    const { token } = await api.login(email, pass);
-    if (token) {
+    try {
+      const { token } = await api.login(email, pass);
+      if (token) {
         localStorage.setItem('authToken', token);
-        try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            const allUsers = await api.getUsers(); // Fetch fresh user list
-            setUsers(allUsers);
-            const loggedInUser = allUsers.find(u => u.id === payload.userId);
-            if (loggedInUser) {
-                setUser(loggedInUser);
-                await refetchData();
-                return true;
-            }
-        } catch (e) {
-            console.error("Failed to parse token", e);
-            logout();
-            return false;
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const allUsers = await api.getUsers();
+        setUsers(allUsers);
+        const loggedInUser = allUsers.find(u => u.id === payload.userId);
+        if (loggedInUser) {
+          setUser(loggedInUser);
+          await refetchData();
+          return true;
         }
+      }
+      return false;
+    } catch (error) {
+      if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('Invalid credentials'))) {
+        // It's an auth error, don't show global notification. Let the page handle it.
+        console.error("Authentication failed:", error.message);
+      } else {
+        handleApiError(error, 'login');
+      }
+      logout();
+      return false;
     }
-    logout();
-    return false;
   };
 
-  const registerAcademy = async (data: {
-    name: string;
-    address: string;
-    responsible: string;
-    responsibleRegistration: string;
-    email: string;
-    password?: string;
-  }): Promise<{ success: boolean; message?: string; }> => {
+  const registerAcademy = async (data: { name: string; address: string; responsible: string; responsibleRegistration: string; email: string; password?: string; }): Promise<{ success: boolean; message?: string; }> => {
     try {
         await api.registerAcademy(data);
-        setAcademies(await api.getAcademies());
-        setUsers(await api.getUsers());
-        setActivityLogs(await api.getActivityLogs());
+        await refetchData();
         return { success: true };
     } catch (error: any) {
-        console.error("Registration failed in context", error);
+        handleApiError(error, 'registerAcademy');
         return { success: false, message: error.message };
     }
   };
 
+  const wrapApiCall = async (apiCall: Promise<any>, context: string) => {
+      try {
+          await apiCall;
+          await refetchData();
+      } catch (error) {
+          handleApiError(error, context);
+      }
+  };
+
   const updateStudentPayment = async (studentId: string, status: 'paid' | 'unpaid') => {
-      await api.updateStudentPayment(studentId, status, themeSettings.monthlyFeeAmount);
-      await refetchData();
+      await wrapApiCall(api.updateStudentPayment(studentId, status, themeSettings.monthlyFeeAmount), 'updateStudentPayment');
   }
-
   const saveStudent = async (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => {
-      await api.saveStudent(student);
-      await refetchData();
+      await wrapApiCall(api.saveStudent(student), 'saveStudent');
   }
-
   const deleteStudent = async (studentId: string) => {
-    await api.deleteStudent(studentId);
-    await refetchData();
+    await wrapApiCall(api.deleteStudent(studentId), 'deleteStudent');
   }
-
   const saveAcademy = async (academy: Omit<Academy, 'id'> & { id?: string }) => {
-      await api.saveAcademy(academy);
-      await refetchData();
+      await wrapApiCall(api.saveAcademy(academy), 'saveAcademy');
   }
-
   const deleteAcademy = async (id: string) => {
-    await api.deleteAcademy(id);
-    await refetchData();
+    await wrapApiCall(api.deleteAcademy(id), 'deleteAcademy');
   }
-
   const saveGraduation = async (grad: Omit<Graduation, 'id'> & { id?: string }) => {
-      await api.saveGraduation(grad);
-      await refetchData();
+      await wrapApiCall(api.saveGraduation(grad), 'saveGraduation');
   }
-  
   const updateGraduationRanks = async (gradsWithNewRanks: { id: string, rank: number }[]) => {
-    await api.updateGraduationRanks(gradsWithNewRanks);
-    await refetchData();
+    await wrapApiCall(api.updateGraduationRanks(gradsWithNewRanks), 'updateGraduationRanks');
   }
-
   const deleteGraduation = async (id: string) => {
-    await api.deleteGraduation(id);
-    await refetchData();
+    await wrapApiCall(api.deleteGraduation(id), 'deleteGraduation');
   }
-
   const saveSchedule = async (schedule: Omit<ClassSchedule, 'id'> & { id?: string }) => {
-      await api.saveSchedule(schedule);
-      await refetchData();
+      await wrapApiCall(api.saveSchedule(schedule), 'saveSchedule');
   }
-
   const deleteSchedule = async (id: string) => {
-    await api.deleteSchedule(id);
-    await refetchData();
+    await wrapApiCall(api.deleteSchedule(id), 'deleteSchedule');
   }
-  
   const saveAttendanceRecord = async (record: Omit<AttendanceRecord, 'id'> & { id?: string }) => {
-    await api.saveAttendanceRecord(record);
-    await refetchData();
+    await wrapApiCall(api.saveAttendanceRecord(record), 'saveAttendanceRecord');
   };
-
   const deleteAttendanceRecord = async (id: string) => {
-    await api.deleteAttendanceRecord(id);
-    await refetchData();
+    await wrapApiCall(api.deleteAttendanceRecord(id), 'deleteAttendanceRecord');
   };
-  
   const saveProfessor = async (prof: Omit<Professor, 'id'> & { id?: string }) => {
-      await api.saveProfessor(prof);
-      await refetchData();
+      await wrapApiCall(api.saveProfessor(prof), 'saveProfessor');
   }
-
   const deleteProfessor = async (id: string) => {
-    await api.deleteProfessor(id);
-    await refetchData();
+    await wrapApiCall(api.deleteProfessor(id), 'deleteProfessor');
   }
-
 
   return (
     <AppContext.Provider value={{ 
@@ -327,7 +297,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         saveAttendanceRecord, deleteAttendanceRecord,
         saveProfessor, deleteProfessor,
         showcasedComponents, setShowcasedComponents,
-        registerAcademy
+        registerAcademy,
+        notification, hideNotification
     }}>
       {children}
     </AppContext.Provider>

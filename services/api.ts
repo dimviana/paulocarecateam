@@ -46,11 +46,11 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
 }
 
 export const api = {
-  login: (emailOrCpf: string, pass: string): Promise<{ token: string | null }> => {
+  login: (emailOrCpf: string, pass: string): Promise<{ token: string }> => {
     return fetchWrapper<{ token: string }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ emailOrCpf, pass }),
-    }).catch(() => ({ token: null })); // Don't throw on login failure, return null token
+    });
   },
 
   registerAcademy: (data: { 

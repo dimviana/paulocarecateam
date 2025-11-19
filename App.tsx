@@ -18,6 +18,7 @@ import Button from './components/ui/Button';
 import Modal from './components/ui/Modal';
 import Input from './components/ui/Input';
 import ProfessorsPage from './pages/Professors';
+import Notification from './components/ui/Notification';
 
 
 interface AcademyFormProps {
@@ -341,11 +342,22 @@ const AppRoutes: React.FC = () => {
   );
 };
 
+const AppContent: React.FC = () => {
+  const { notification, hideNotification } = useContext(AppContext);
+
+  return (
+    <>
+      {notification && <Notification notification={notification} onClose={hideNotification} />}
+      <AppRoutes />
+    </>
+  );
+};
+
 const App: React.FC = () => {
   return (
     <AppProvider>
       <HashRouter>
-        <AppRoutes />
+        <AppContent />
       </HashRouter>
     </AppProvider>
   );
