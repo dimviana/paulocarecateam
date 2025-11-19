@@ -1,10 +1,11 @@
 /**
  * ==============================================================================
- *           Backend Server for Jiu-Jitsu Hub SAAS (server.cjs)
+ *           Backend Server for Jiu-Jitsu Hub SAAS (server.js)
  * ==============================================================================
  *
  * This single file acts as the complete backend for the application. It uses
  * Express.js to create an API that connects to a MySQL database.
+ * This version uses ES Modules (`import`/`export`) for compatibility.
  *
  * Features:
  * - RESTful API for all resources (Students, Academies, etc.).
@@ -19,22 +20,21 @@
  * How to Run (in your backend project directory):
  * 1. Ensure you have an .env file configured (based on env.txt).
  * 2. Run 'npm install' to get the dependencies above.
- * 3. Use PM2 to start the server: `pm2 start ecosystem.config.cjs`
+ * 3. Use PM2 to start the server: `pm2 start ecosystem.config.js`
  *
  * ==============================================================================
  */
 
-// --- Dependencies ---
-const express = require('express');
-const mysql = require('mysql2/promise');
-const cors = require('cors');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const { v4: uuidv4 } = require('uuid');
+// --- Dependencies (ESM Syntax) ---
+import express from 'express';
+import mysql from 'mysql2/promise';
+import cors from 'cors';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
+import 'dotenv/config'; // Automatically loads .env file
 
 // --- Environment Variables ---
-require('dotenv').config();
-
 const {
   DATABASE_URL,
   JWT_SECRET,
@@ -63,12 +63,10 @@ async function connectToDatabase() {
   } catch (error) {
     console.error('Failed to connect to the database:', error);
     isDbConnected = false;
-    // We don't exit the process anymore. The server will run but report DB errors.
   }
 }
 
 // --- Database Status Middleware ---
-// This middleware will check the DB connection status for every API request.
 app.use('/api', (req, res, next) => {
     if (!isDbConnected) {
         return res.status(503).json({ 

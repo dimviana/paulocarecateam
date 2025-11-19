@@ -74,18 +74,18 @@ O backend deve ser clonado e configurado em seu próprio diretório.
     nano .env
     ```
 
-3.  **Prepare o arquivo de configuração do PM2 (`ecosystem.config.cjs`)**:
+3.  **Prepare o arquivo de configuração do PM2 (`ecosystem.config.js`)**:
     *   Este repositório (o do frontend) contém um arquivo-guia chamado `ecosystem.config.txt`.
     *   **Abra o arquivo `ecosystem.config.txt`** e siga as instruções contidas nele. O processo é:
         1.  Copiar o bloco de código JavaScript fornecido no arquivo.
-        2.  Criar um novo arquivo chamado `ecosystem.config.cjs` na raiz do seu diretório do **backend**.
+        2.  Criar um novo arquivo chamado `ecosystem.config.js` na raiz do seu diretório do **backend**.
         3.  Colar o código no novo arquivo.
-        4.  Verificar se o caminho do `script` de inicialização (ex: `./server.cjs`) está correto.
+        4.  Verificar se o caminho do `script` de inicialização (ex: `./server.js`) está correto.
 
 4.  **Inicie o servidor backend com PM2**:
     *   Ainda no diretório do backend, execute o comando:
     ```bash
-    pm2 start ecosystem.config.cjs
+    pm2 start ecosystem.config.js
     ```
     *   PM2 irá ler o arquivo de configuração e iniciar sua aplicação com as configurações definidas.
 
@@ -100,7 +100,7 @@ O backend deve ser clonado e configurado em seu próprio diretório.
 
 ## Passo 4: Deploy do Frontend e Configuração do Nginx (Unificado)
 
-Agora, use o script `deployct.txt` (que foi atualizado para a nova arquitetura) para automatizar a configuração.
+Agora, use o script `deployct.txt` para automatizar a configuração.
 
 1.  **Crie e execute o script de deploy**:
     *   Crie o arquivo `deploy.sh` na sua VPS com o conteúdo de `deployct.txt`.
@@ -156,7 +156,7 @@ Este é o erro mais comum e significa que o Nginx não conseguiu se comunicar co
 3.  **Verifique a Configuração do Nginx**:
     *   Execute `sudo nginx -t`.
     *   Se este comando mostrar algum erro, há um problema de sintaxe no arquivo de configuração do seu site em `/etc/nginx/sites-available/`.
-    *   Verifique se a porta no `proxy_pass` corresponde à porta no seu arquivo `ecosystem.config.cjs`.
+    *   Verifique se a porta no `proxy_pass` corresponde à porta no seu arquivo `ecosystem.config.js`.
 
 ---
 

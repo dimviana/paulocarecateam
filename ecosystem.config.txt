@@ -1,47 +1,39 @@
 # ==============================================================================
-#           Guia de Configuração do PM2 (ecosystem.config.cjs)
+#           Guia de Configuração do PM2 (ecosystem.config.js)
 # ==============================================================================
 #
-# Para iniciar seu backend com PM2 de forma robusta, siga os passos abaixo.
-# Este método evita o erro "File not found" e é a prática recomendada.
-#
-# MOTIVO DA EXTENSÃO .cjs:
-# Projetos de frontend modernos (como este, que usa Vite) geralmente definem
-# "type": "module" em seu package.json. Isso força todos os arquivos .js
-# a serem tratados como Módulos ES (import/export).
-# O PM2 e nosso servidor backend usam o formato CommonJS (require/module.exports).
-# Usar a extensão .cjs informa explicitamente ao Node.js para tratar este
-# arquivo como CommonJS, resolvendo o conflito.
+# Para iniciar seu backend com PM2 de forma robusta e compatível com projetos
+# modernos (que usam ES Modules), siga os passos abaixo.
 #
 # 1. COPIE TODO O CONTEÚDO do bloco de código JavaScript abaixo.
 #
 # 2. No diretório raiz do seu PROJETO BACKEND, crie um novo arquivo chamado:
-#    ecosystem.config.cjs
+#    ecosystem.config.js
 #
 # 3. COLE o conteúdo copiado nesse novo arquivo.
 #
 # 4. A configuração já está pronta. Apenas verifique se o arquivo de entrada do
-#    seu servidor se chama 'server.cjs'. Se tiver outro nome, altere a linha 'script'.
+#    seu servidor se chama 'server.js'. Se tiver outro nome, altere a linha 'script'.
 #
-# 5. Salve o arquivo `ecosystem.config.cjs`.
+# 5. Salve o arquivo `ecosystem.config.js`.
 #
 # 6. No terminal, dentro do diretório do backend, inicie a aplicação com:
-#    pm2 start ecosystem.config.cjs
+#    pm2 start ecosystem.config.js
 #
 # ==============================================================================
 
 # ----------------- INÍCIO DO CÓDIGO PARA COPIAR -----------------
 
-module.exports = {
+export default {
   apps: [
     /**
      * --- Configuração para: Jiu-Jitsu Hub ---
      * Esta é a configuração padrão. Altere a linha 'script' se o seu
-     * arquivo de entrada do servidor for diferente de 'server.cjs'.
+     * arquivo de entrada do servidor for diferente de 'server.js'.
      */
     {
       name: 'jiujitsu-hub-backend',
-      script: './server.cjs', // <-- MUITO IMPORTANTE: Verifique se este é seu arquivo de entrada!
+      script: './server.js', // <-- MUITO IMPORTANTE: Verifique se este é seu arquivo de entrada!
       instances: 1,
       autorestart: true,
       watch: false,
@@ -58,7 +50,7 @@ module.exports = {
      */
     // {
     //   name: 'gerencia-boleto-backend',
-    //   script: './server.cjs',
+    //   script: './server.js',
     //   instances: 1,
     //   autorestart: true,
     //   watch: false,
@@ -71,4 +63,4 @@ module.exports = {
   ]
 };
 
-# ------------------ FIM DO CÓDIGO PARA COPIAR -----------------
+# ------------------ FIM DO CÓDIGO PARA COPIAR ------------------
