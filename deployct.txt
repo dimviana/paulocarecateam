@@ -222,7 +222,8 @@ server {
 
     # Bloco para a API (Proxy Reverso)
     location /api/ {
-        proxy_pass http://localhost:$BACKEND_PORT/; # A barra no final é importante!
+        # FIX: Removida a barra final para preservar o /api/ no proxy.
+        proxy_pass http://localhost:$BACKEND_PORT;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -284,7 +285,7 @@ print_success_message_single_domain() {
     echo "Acesse a aplicação em:  https://$DOMAIN"
     echo "A API está em:          https://$DOMAIN/api"
     echo ""
-    echo -e "${YELLOW}AÇÃO NECESSÁRIA: O backend deve ser iniciado manualmente.${NC}"
+    echo -e "${YELLOW}AÇÃO NECESSÁRIA: O backend deve ser iniciado manually.${NC}"
     echo "1. Siga as instruções no INSTALL_GUIDE.md para o backend."
     echo "2. Use o guia no arquivo 'ecosystem.config.txt' para criar seu 'ecosystem.config.cjs'."
     echo "3. No diretório do backend, execute: 'pm2 start ecosystem.config.cjs'"

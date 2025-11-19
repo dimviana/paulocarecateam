@@ -50,22 +50,40 @@ app.use(express.json({ limit: '10mb' }));
 
 // --- Database Connection ---
 let db;
+let isDbConnected = false; // Flag to track DB connection status
+
 async function connectToDatabase() {
   try {
     if (!DATABASE_URL) {
       throw new Error("DATABASE_URL environment variable is not defined.");
     }
-    db = await mysql.createPool({ uri: DATABASE_URL, connectionLimit: 10 });
+    db = await mysql.createPool({ uri: DATABASE_URL, connectionLimit: 10, enableKeepAlive: true, keepAliveInitialDelay: 10000 });
     console.log('Successfully connected to the MySQL database.');
+    isDbConnected = true;
   } catch (error) {
     console.error('Failed to connect to the database:', error);
-    process.exit(1);
+    isDbConnected = false;
+    // We don't exit the process anymore. The server will run but report DB errors.
   }
 }
+
+// --- Database Status Middleware ---
+// This middleware will check the DB connection status for every API request.
+app.use('/api', (req, res, next) => {
+    if (!isDbConnected) {
+        return res.status(503).json({ 
+            message: 'Database connection failed.',
+            details: 'The server cannot connect to the database. Please check backend logs and .env configuration.'
+        });
+    }
+    next();
+});
+
 
 // --- Helper Functions ---
 const logActivity = async (actorId, action, details) => {
   try {
+    if (!isDbConnected) return; // Don't try to log if DB is down
     const id = uuidv4();
     const timestamp = new Date();
     await db.query(

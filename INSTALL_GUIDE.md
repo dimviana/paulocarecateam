@@ -134,6 +134,32 @@ Agora, use o script `deployct.txt` (que foi atualizado para a nova arquitetura) 
 
 ---
 
+## Troubleshooting (Solução de Problemas)
+
+### Erro: 502 Bad Gateway
+
+Este é o erro mais comum e significa que o Nginx não conseguiu se comunicar com sua aplicação backend (o processo PM2). Siga estes passos para diagnosticar:
+
+1.  **Verifique o Status do PM2**:
+    *   Execute o comando `pm2 list`.
+    *   Procure pelo processo `jiujitsu-hub-backend`.
+    *   **Se o status for `errored` ou `stopped`**, o problema está no backend. Prossiga para o próximo passo.
+    *   **Se o status for `online`**, o problema pode ser na configuração do Nginx ou firewall.
+
+2.  **Verifique os Logs do Backend (Passo Mais Importante)**:
+    *   Execute `pm2 logs jiujitsu-hub-backend`.
+    *   Os logs mostrarão o erro exato que impediu sua aplicação de iniciar. Erros comuns incluem:
+        *   **Erro de conexão com o banco de dados**: Verifique se o `DATABASE_URL` no arquivo `.env` do backend está correto (usuário, senha, host, porta, nome do banco).
+        *   **`SyntaxError`**: Um erro no código do `server.js`.
+        *   **`Cannot find module`**: Uma dependência está faltando. Execute `npm install` no diretório do backend.
+
+3.  **Verifique a Configuração do Nginx**:
+    *   Execute `sudo nginx -t`.
+    *   Se este comando mostrar algum erro, há um problema de sintaxe no arquivo de configuração do seu site em `/etc/nginx/sites-available/`.
+    *   Verifique se a porta no `proxy_pass` corresponde à porta no seu arquivo `ecosystem.config.cjs`.
+
+---
+
 ## Gerenciamento Pós-Instalação
 
 *   **Logs do backend**: `pm2 logs jiujitsu-hub-backend`
