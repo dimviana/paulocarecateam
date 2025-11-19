@@ -1,7 +1,6 @@
-
 /**
  * ==============================================================================
- *           Backend Server for Jiu-Jitsu Hub SAAS (server.js)
+ *           Backend Server for Jiu-Jitsu Hub SAAS (server.cjs)
  * ==============================================================================
  *
  * This single file acts as the complete backend for the application. It uses
@@ -20,7 +19,7 @@
  * How to Run (in your backend project directory):
  * 1. Ensure you have an .env file configured (based on env.txt).
  * 2. Run 'npm install' to get the dependencies above.
- * 3. Use PM2 to start the server: `pm2 start ecosystem.config.js`
+ * 3. Use PM2 to start the server: `pm2 start ecosystem.config.cjs`
  *
  * ==============================================================================
  */

@@ -8,10 +8,10 @@
  *
  * Como usar:
  * 1. Copie este arquivo para a pasta raiz do seu projeto BACKEND.
- * 2. Se o arquivo de entrada do seu servidor não for 'server.js',
+ * 2. Se o arquivo de entrada do seu servidor não for 'server.cjs',
  *    altere a linha 'script' abaixo.
  * 3. No terminal, dentro da pasta do backend, execute:
- *    pm2 start ecosystem.config.js
+ *    pm2 start ecosystem.config.cjs
  *
  * ==============================================================================
  */
@@ -21,11 +21,11 @@ module.exports = {
     /**
      * --- Configuração para: Jiu-Jitsu Hub ---
      * Esta é a configuração padrão. Altere a linha 'script' se o seu
-     * arquivo de entrada do servidor for diferente de 'server.js'.
+     * arquivo de entrada do servidor for diferente de 'server.cjs'.
      */
     {
       name: 'jiujitsu-hub-backend',
-      script: './server.js', // <-- MUITO IMPORTANTE: Altere para o seu arquivo de entrada!
+      script: './server.cjs', // <-- MUITO IMPORTANTE: Aponta para o arquivo .cjs!
       instances: 1,
       autorestart: true,
       watch: false,
@@ -42,7 +42,7 @@ module.exports = {
      */
     // {
     //   name: 'gerencia-boleto-backend',
-    //   script: './server.js',
+    //   script: './server.cjs',
     //   instances: 1,
     //   autorestart: true,
     //   watch: false,

@@ -74,20 +74,20 @@ O backend deve ser clonado e configurado em seu próprio diretório.
     nano .env
     ```
 
-3.  **Prepare o arquivo de configuração do PM2 (`ecosystem.config.js`)**:
+3.  **Prepare o arquivo de configuração do PM2 (`ecosystem.config.cjs`)**:
     *   Este repositório (o do frontend) contém um arquivo-guia chamado `ecosystem.config.txt`.
     *   **Abra o arquivo `ecosystem.config.txt`** e siga as instruções contidas nele. O processo é:
         1.  Copiar o bloco de código JavaScript fornecido no arquivo.
-        2.  Criar um novo arquivo chamado `ecosystem.config.js` na raiz do seu diretório do **backend**.
+        2.  Criar um novo arquivo chamado `ecosystem.config.cjs` na raiz do seu diretório do **backend**.
         3.  Colar o código no novo arquivo.
-        4.  Descomentar o bloco da sua aplicação e ajustar o caminho do `script` de inicialização.
+        4.  Verificar se o caminho do `script` de inicialização (ex: `./server.cjs`) está correto.
 
 4.  **Inicie o servidor backend com PM2**:
     *   Ainda no diretório do backend, execute o comando:
     ```bash
-    pm2 start ecosystem.config.js
+    pm2 start ecosystem.config.cjs
     ```
-    *   PM2 irá ler o arquivo de configuração e iniciar sua aplicação com as configurações definidas, resolvendo o erro "File not found".
+    *   PM2 irá ler o arquivo de configuração e iniciar sua aplicação com as configurações definidas.
 
 5.  **Verifique se o backend está rodando (`pm2 list`) e configure para iniciar com o sistema**:
     ```bash
