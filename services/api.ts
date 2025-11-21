@@ -49,7 +49,7 @@ export const api = {
   login: (email: string, password: string): Promise<{ token: string }> => {
     return fetchWrapper<{ token: string }>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ emailOrCpf: email, pass: password }),
     });
   },
 
