@@ -57,16 +57,27 @@ async function connectToDatabase() {
     if (!DATABASE_URL) {
       throw new Error("DATABASE_URL environment variable is not defined.");
     }
-    db = await mysql.createPool({ uri: DATABASE_URL, connectionLimit: 10, enableKeepAlive: true, keepAliveInitialDelay: 10000 });
+    // Create the pool. This doesn't connect immediately.
+    const pool = mysql.createPool({ uri: DATABASE_URL, connectionLimit: 10, enableKeepAlive: true, keepAliveInitialDelay: 10000 });
+    
+    // Actively test the connection by getting a client from the pool.
+    const connection = await pool.getConnection();
+    // If we get here, the connection is successful. Release it back to the pool.
+    connection.release();
+    
+    // Assign the successfully tested pool to our global db variable.
+    db = pool;
     console.log('Successfully connected to the MySQL database.');
     isDbConnected = true;
   } catch (error) {
-    console.error('Failed to connect to the database:', error);
+    console.error('Failed to connect to the database:', error.message);
+    // On failure, ensure the flag is false so the middleware can block requests.
     isDbConnected = false;
   }
 }
 
 // --- Database Status Middleware ---
+// This middleware runs for all /api routes and checks the connection flag.
 app.use('/api', (req, res, next) => {
     if (!isDbConnected) {
         return res.status(503).json({ 
@@ -394,8 +405,14 @@ app.post('/api/attendance', async (req, res) => {
 
 // --- Server Start ---
 (async () => {
+  // Try to connect to DB on startup
   await connectToDatabase();
+  
+  // Start the server regardless, but the middleware will block API calls if DB is down.
   app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
+    if (!isDbConnected) {
+      console.warn('Warning: Server started, but is NOT connected to the database. API requests will fail.');
+    }
   });
 })();
