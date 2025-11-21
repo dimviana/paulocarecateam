@@ -202,8 +202,16 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
+    // 1. More robust validation of the request body.
+    if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({ message: 'Invalid request body.' });
+    }
     const { emailOrCpf, pass } = req.body;
-    if (!emailOrCpf || !pass) return res.status(400).json({ message: 'Email/CPF and password are required.' });
+
+    if (!emailOrCpf || !pass || typeof emailOrCpf !== 'string' || typeof pass !== 'string' || emailOrCpf.trim() === '' || pass.trim() === '') {
+        return res.status(400).json({ message: 'Email/CPF and password must be non-empty strings.' });
+    }
+
     try {
         const query = `
             SELECT u.id, u.role, a.password AS academyPass, s.password AS studentPass 
@@ -213,15 +221,23 @@ app.post('/api/auth/login', async (req, res) => {
             WHERE u.email = ? 
             OR s.cpf = ?
         `;
-        const [[user]] = await db.query(query, [emailOrCpf, emailOrCpf]);
+        const [rows] = await db.query(query, [emailOrCpf, emailOrCpf]);
         
-        if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+        // 2. Correctly handle the case where no user is found.
+        if (rows.length === 0) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+        const user = rows[0];
         
         const passwordHash = user.role === 'student' ? user.studentPass : user.academyPass;
-        if (!passwordHash) return res.status(401).json({ message: 'Invalid credentials' });
+        if (!passwordHash) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
         
         const isMatch = await bcrypt.compare(pass, passwordHash);
-        if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
         
         const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
         await logActivity(user.id, 'Login', 'User logged in successfully.');
@@ -231,6 +247,7 @@ app.post('/api/auth/login', async (req, res) => {
         res.status(500).json({ message: 'Server error during login.' });
     }
 });
+
 
 // --- Simple GET routes (no auth needed for this one as per frontend logic)
 app.get('/api/users', handleGet('users'));
