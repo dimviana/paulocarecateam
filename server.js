@@ -202,7 +202,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-    // 1. More robust validation of the request body.
+    // 1. Keep robust validation.
     if (!req.body || typeof req.body !== 'object') {
         return res.status(400).json({ message: 'Invalid request body.' });
     }
@@ -213,35 +213,62 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     try {
-        const query = `
-            SELECT u.id, u.role, a.password AS academyPass, s.password AS studentPass 
-            FROM users u 
-            LEFT JOIN academies a ON u.academyId = a.id
-            LEFT JOIN students s ON u.studentId = s.id
-            WHERE u.email = ? 
-            OR s.cpf = ?
-        `;
-        const [rows] = await db.query(query, [emailOrCpf, emailOrCpf]);
-        
-        // 2. Correctly handle the case where no user is found.
-        if (rows.length === 0) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+        const isEmail = emailOrCpf.includes('@');
+        let userRecord = null;
+        let passwordHash = null;
+
+        if (isEmail) {
+            // --- Login via Email ---
+            const [users] = await db.query('SELECT id, role, academyId, studentId FROM users WHERE email = ?', [emailOrCpf]);
+            if (users.length === 0) {
+                return res.status(401).json({ message: 'Invalid credentials' });
+            }
+            const user = users[0];
+            userRecord = user;
+
+            if (user.role === 'student') {
+                const [students] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
+                if (students.length > 0) {
+                    passwordHash = students[0].password;
+                }
+            } else { // 'academy_admin' or 'general_admin'
+                const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
+                if (academies.length > 0) {
+                    passwordHash = academies[0].password;
+                }
+            }
+        } else {
+            // --- Login via CPF (only for students) ---
+            const [students] = await db.query('SELECT id, password FROM students WHERE cpf = ?', [emailOrCpf]);
+            if (students.length === 0) {
+                return res.status(401).json({ message: 'Invalid credentials' });
+            }
+            const student = students[0];
+            passwordHash = student.password;
+            
+            // Find the corresponding user to get the full user record
+            const [users] = await db.query('SELECT id, role FROM users WHERE studentId = ?', [student.id]);
+            if (users.length === 0) {
+                // This would indicate data inconsistency, but we should handle it.
+                return res.status(401).json({ message: 'Invalid credentials' });
+            }
+            userRecord = users[0];
         }
-        const user = rows[0];
-        
-        const passwordHash = user.role === 'student' ? user.studentPass : user.academyPass;
+
+        // --- Password validation and Token generation ---
         if (!passwordHash) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
-        
+
         const isMatch = await bcrypt.compare(pass, passwordHash);
         if (!isMatch) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
-        
-        const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
-        await logActivity(user.id, 'Login', 'User logged in successfully.');
+
+        const token = jwt.sign({ userId: userRecord.id, role: userRecord.role }, JWT_SECRET, { expiresIn: '1d' });
+        await logActivity(userRecord.id, 'Login', 'User logged in successfully.');
         res.json({ token });
+
     } catch (error) {
         console.error('Login Error:', error);
         res.status(500).json({ message: 'Server error during login.' });
