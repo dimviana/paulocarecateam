@@ -204,62 +204,57 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     const { emailOrCpf, pass } = req.body;
 
-    // Validação de entrada simplificada e robusta
     if (!emailOrCpf || !pass) {
         return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
     }
 
     try {
+        let userRecord;
+        let passwordHash;
         const isEmail = String(emailOrCpf).includes('@');
-        
-        let userForToken = null;
-        let passwordHash = null;
 
         if (isEmail) {
-            // Login por Email: Pode ser aluno ou admin
-            // Passo 1: Encontrar o usuário e seu papel na tabela 'users'
+            // --- Login com Email ---
             const [users] = await db.query('SELECT * FROM users WHERE email = ?', [emailOrCpf]);
-            if (users.length === 0) {
+            if (!users.length) {
                 return res.status(401).json({ message: 'Credenciais inválidas' });
             }
-            const user = users[0];
             
-            // Passo 2: Buscar a senha na tabela correta com base no papel do usuário
-            if (user.role === 'student') {
-                const [students] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
-                if (students.length > 0) {
-                    passwordHash = students[0].password;
-                }
-            } else { // 'academy_admin' ou 'general_admin'
-                const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
-                if (academies.length > 0) {
-                    passwordHash = academies[0].password;
-                }
-            }
-            // O registro do usuário já foi encontrado, então podemos usá-lo para o token
-            userForToken = { id: user.id, role: user.role };
+            userRecord = users[0];
 
+            if (userRecord.role === 'student') {
+                const [students] = await db.query('SELECT password FROM students WHERE id = ?', [userRecord.studentId]);
+                passwordHash = students.length ? students[0].password : null;
+            } else { // 'academy_admin' or 'general_admin'
+                const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [userRecord.academyId]);
+                passwordHash = academies.length ? academies[0].password : null;
+            }
         } else {
-            // Login por CPF: Apenas para alunos
-            // Passo 1: Encontrar o aluno e a senha diretamente na tabela 'students'
-            const [students] = await db.query('SELECT id, password FROM students WHERE cpf = ?', [emailOrCpf]);
-            if (students.length === 0) {
+            // --- Login com CPF (apenas para alunos) ---
+            const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
+            const [students] = await db.query(
+                'SELECT id, password FROM students WHERE REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?', 
+                [sanitizedCpf]
+            );
+
+            if (!students.length) {
                 return res.status(401).json({ message: 'Credenciais inválidas' });
             }
+
             const student = students[0];
             passwordHash = student.password;
 
-            // Passo 2: Encontrar o registro de usuário correspondente para gerar o token
-            const [users] = await db.query('SELECT id, role FROM users WHERE studentId = ?', [student.id]);
-            if (users.length === 0) {
-                // Isso indica uma inconsistência de dados, mas é tratado como falha de login
+            // Encontrar o usuário correspondente para obter o ID e o papel para o token
+            const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
+            if (!users.length) {
+                // Inconsistência de dados, mas para o usuário é uma falha de login
                 return res.status(401).json({ message: 'Credenciais inválidas' });
             }
-            userForToken = users[0];
+            userRecord = users[0];
         }
-
-        // Passo 3: Validar a senha e gerar o token
-        if (!passwordHash) {
+        
+        // --- Validação da Senha e Geração do Token ---
+        if (!userRecord || !passwordHash) {
             return res.status(401).json({ message: 'Credenciais inválidas' });
         }
 
@@ -268,8 +263,11 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(401).json({ message: 'Credenciais inválidas' });
         }
 
-        const token = jwt.sign({ userId: userForToken.id, role: userForToken.role }, JWT_SECRET, { expiresIn: '1d' });
-        await logActivity(userForToken.id, 'Login', 'Usuário logado com sucesso.');
+        const payload = { userId: userRecord.id, role: userRecord.role };
+        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
+
+        await logActivity(userRecord.id, 'Login', 'Usuário logado com sucesso.');
+
         res.json({ token });
 
     } catch (error) {
