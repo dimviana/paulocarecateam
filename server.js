@@ -191,7 +191,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-    const { emailOrCpf, pass } = req.body;
+    const { email: emailOrCpf, password: pass } = req.body;
     if (!emailOrCpf || !pass) return res.status(400).json({ message: 'Email/CPF and password are required.' });
     try {
         const query = `

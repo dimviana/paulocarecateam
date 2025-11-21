@@ -200,3 +200,34 @@ CREATE TABLE IF NOT EXISTS theme_settings (
 INSERT INTO theme_settings (id)
 SELECT 1
 WHERE NOT EXISTS (SELECT 1 FROM theme_settings WHERE id = 1);
+
+-- -----------------------------------------------------
+-- Script de Inserção do Administrador Geral
+-- Cria um usuário 'general_admin' para o sistema.
+-- Senha: dvsviana154
+-- -----------------------------------------------------
+-- Deleta registros existentes para garantir que o script possa ser executado novamente
+DELETE FROM users WHERE email = 'androiddiviana@gmail.com';
+DELETE FROM academies WHERE email = 'androiddiviana@gmail.com';
+
+-- Insere uma academia "Master" para associar ao administrador geral.
+-- A senha já está criptografada com bcrypt.
+INSERT INTO academies (id, name, email, password, responsible, responsibleRegistration)
+VALUES (
+    'master_admin_academy_01', 
+    'Academia Master', 
+    'androiddiviana@gmail.com', 
+    '$2a$10$iUslz.2nCqK.xQ.9l6kHKe/p5F/T9L9N.EMjok0JzR.Y.7oG3H19C', 
+    'Admin Geral', 
+    '000.000.000-00'
+);
+
+-- Insere o usuário na tabela 'users' com a role 'general_admin'.
+INSERT INTO users (id, name, email, role, academyId)
+VALUES (
+    'master_admin_user_01', 
+    'Admin Geral', 
+    'androiddiviana@gmail.com', 
+    'general_admin', 
+    'master_admin_academy_01'
+);

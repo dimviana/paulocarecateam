@@ -13,7 +13,7 @@ interface AppContextType {
   themeSettings: ThemeSettings;
   setThemeSettings: (settings: ThemeSettings) => void;
   user: User | null;
-  login: (email: string, pass: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   students: Student[];
   academies: Academy[];
@@ -193,9 +193,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setThemeSettingsState(settings);
   };
   
-  const login = async (email: string, pass: string) => {
+  const login = async (email: string, password: string) => {
     try {
-      const { token } = await api.login(email, pass);
+      const { token } = await api.login(email, password);
       if (token) {
         localStorage.setItem('authToken', token);
         const payload = JSON.parse(atob(token.split('.')[1]));
@@ -210,7 +210,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       return false;
     } catch (error) {
-      if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('Invalid credentials'))) {
+      if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('Invalid credentials') || error.message.includes('Please provide username and password'))) {
         // It's an auth error, don't show global notification. Let the page handle it.
         console.error("Authentication failed:", error.message);
       } else {

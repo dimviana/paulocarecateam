@@ -46,10 +46,10 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
 }
 
 export const api = {
-  login: (emailOrCpf: string, pass: string): Promise<{ token: string }> => {
+  login: (email: string, password: string): Promise<{ token: string }> => {
     return fetchWrapper<{ token: string }>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ emailOrCpf, pass }),
+        body: JSON.stringify({ email, password }),
     });
   },
 
