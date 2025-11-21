@@ -111,20 +111,32 @@ const authenticateToken = (req, res, next) => {
 // --- Generic API Handlers ---
 const handleGet = (tableName) => async (req, res) => {
     try {
-        let [rows] = await db.query(`SELECT * FROM \`${tableName}\``);
+        const [rows] = await db.query(`SELECT * FROM \`${tableName}\``);
         
         // Handle special cases with related data
         if (tableName === 'class_schedules') {
             const [assistants] = await db.query('SELECT * FROM schedule_assistants');
-            rows.forEach(row => {
+            for (const row of rows) {
                 row.assistantIds = assistants.filter(a => a.scheduleId === row.id).map(a => a.assistantId);
-            });
+            }
         }
         if (tableName === 'students') {
              const [payments] = await db.query('SELECT * FROM payment_history');
-             rows.forEach(row => {
+             for (const row of rows) {
                 row.paymentHistory = payments.filter(p => p.studentId === row.id);
-             });
+             }
+        }
+        if (tableName === 'students' || tableName === 'professors') {
+            for (const row of rows) {
+                if (row.medals && typeof row.medals === 'string') {
+                    try {
+                        row.medals = JSON.parse(row.medals);
+                    } catch (e) {
+                        console.error(`Failed to parse medals for ID ${row.id}:`, row.medals);
+                        row.medals = { gold: 0, silver: 0, bronze: 0 };
+                    }
+                }
+            }
         }
         res.json(rows);
     } catch (error) {
@@ -190,10 +202,10 @@ app.post('/api/auth/login', async (req, res) => {
             WHERE u.email = ? 
             OR s.cpf = ?
         `;
-        const [rows] = await db.query(query, [emailOrCpf, emailOrCpf]);
-        if (rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
+        const [[user]] = await db.query(query, [emailOrCpf, emailOrCpf]);
         
-        const user = rows[0];
+        if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+        
         const passwordHash = user.role === 'student' ? user.studentPass : user.academyPass;
         if (!passwordHash) return res.status(401).json({ message: 'Invalid credentials' });
         
@@ -238,7 +250,7 @@ app.delete('/api/professors/:id', handleDelete('professors'));
 // Students
 app.post('/api/students', async (req, res) => {
     const data = req.body;
-    const studentId = data.id || uuidv4();
+    const studentId = uuidv4();
     const userId = uuidv4();
     const hashedPassword = await bcrypt.hash(data.password, 10);
     const connection = await db.getConnection();
@@ -251,26 +263,31 @@ app.post('/api/students', async (req, res) => {
         res.status(201).json({ id: studentId, ...data });
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to create student", error: error.message }); } finally { connection.release(); }
 });
+
 app.put('/api/students/:id', async (req, res) => {
     const { id } = req.params;
     const data = req.body;
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-        let passwordQuery = '';
+        
+        let updateQuery = 'UPDATE students SET name=?, email=?, birthDate=?, cpf=?, fjjpe_registration=?, phone=?, address=?, beltId=?, academyId=?, firstGraduationDate=?, lastPromotionDate=?, paymentDueDateDay=?, stripes=?, isCompetitor=?, lastCompetition=?, medals=?, imageUrl=? WHERE id=?';
         const queryParams = [data.name, data.email, data.birthDate, data.cpf, data.fjjpe_registration, data.phone, data.address, data.beltId, data.academyId, data.firstGraduationDate, data.lastPromotionDate, data.paymentDueDateDay, data.stripes, data.isCompetitor, data.lastCompetition, JSON.stringify(data.medals || {}), data.imageUrl, id];
+        
         if (data.password) {
             const hashedPassword = await bcrypt.hash(data.password, 10);
-            passwordQuery = ', password = ?';
+            updateQuery = 'UPDATE students SET name=?, email=?, password=?, birthDate=?, cpf=?, fjjpe_registration=?, phone=?, address=?, beltId=?, academyId=?, firstGraduationDate=?, lastPromotionDate=?, paymentDueDateDay=?, stripes=?, isCompetitor=?, lastCompetition=?, medals=?, imageUrl=? WHERE id=?';
             queryParams.splice(2, 0, hashedPassword); // Insert password in the right place
         }
-        await connection.query(`UPDATE students SET name=?, email=?, birthDate=?, cpf=?, fjjpe_registration=?, phone=?, address=?, beltId=?, academyId=?, firstGraduationDate=?, lastPromotionDate=?, paymentDueDateDay=?, stripes=?, isCompetitor=?, lastCompetition=?, medals=?, imageUrl=? ${passwordQuery} WHERE id=?`, queryParams);
+
+        await connection.query(updateQuery, queryParams);
         await connection.query('UPDATE users SET name=?, email=?, birthDate=? WHERE studentId=?', [data.name, data.email, data.birthDate, id]);
         await logActivity(req.user.userId, 'Update Student', `Updated student ${data.name}`);
         await connection.commit();
         res.status(200).json({ id, ...data });
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to update student", error: error.message }); } finally { connection.release(); }
 });
+
 app.delete('/api/students/:id', async (req, res) => {
   const { id } = req.params;
   const connection = await db.getConnection();
@@ -295,8 +312,7 @@ app.post('/api/students/:studentId/payment', async (req, res) => {
         if (status === 'paid') await connection.query('INSERT INTO payment_history (id, studentId, date, amount) VALUES (?, ?, ?, ?)', [uuidv4(), studentId, new Date(), amount]);
         await logActivity(req.user.userId, 'Update Payment', `Updated payment for student ${studentId} to ${status}`);
         await connection.commit();
-        const [studentRows] = await db.query('SELECT * FROM students WHERE id = ?', [studentId]);
-        const [student] = studentRows;
+        const [[student]] = await db.query('SELECT * FROM students WHERE id = ?', [studentId]);
         const [payments] = await db.query('SELECT * FROM payment_history WHERE studentId = ?', [studentId]);
         student.paymentHistory = payments;
         res.status(200).json(student);
@@ -308,30 +324,33 @@ const handleSave = (tableName, fields) => async (req, res) => {
     const data = req.body;
     const isNew = !data.id;
     const id = isNew ? uuidv4() : data.id;
+    const connection = await db.getConnection();
     try {
+        await connection.beginTransaction();
+
         if (isNew) {
-            const columns = ['id', ...fields].join(', ');
+            const columns = ['id', ...fields].map(f => `\`${f}\``).join(', ');
             const placeholders = ['?', ...fields.map(() => '?')].join(', ');
-            const values = [id, ...fields.map(f => data[f])];
-            await db.query(`INSERT INTO \`${tableName}\` (${columns}) VALUES (${placeholders})`, values);
+            const values = [id, ...fields.map(f => data[f] ?? null)];
+            await connection.query(`INSERT INTO \`${tableName}\` (${columns}) VALUES (${placeholders})`, values);
         } else {
             const setClause = fields.map(f => `\`${f}\` = ?`).join(', ');
-            const values = [...fields.map(f => data[f]), id];
-            await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE id = ?`, values);
+            const values = [...fields.map(f => data[f] ?? null), id];
+            await connection.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE id = ?`, values);
         }
 
-        // Special handling for schedule assistants
         if (tableName === 'class_schedules') {
-            await db.query('DELETE FROM schedule_assistants WHERE scheduleId = ?', [id]);
+            await connection.query('DELETE FROM schedule_assistants WHERE scheduleId = ?', [id]);
             if (data.assistantIds && data.assistantIds.length > 0) {
                 const assistantValues = data.assistantIds.map(assistantId => [id, assistantId]);
-                await db.query('INSERT INTO schedule_assistants (scheduleId, assistantId) VALUES ?', [assistantValues]);
+                await connection.query('INSERT INTO schedule_assistants (scheduleId, assistantId) VALUES ?', [assistantValues]);
             }
         }
 
+        await connection.commit();
         await logActivity(req.user.userId, `Save ${tableName}`, `${isNew ? 'Created' : 'Updated'} item ${data.name || id}`);
         res.status(isNew ? 201 : 200).json({ id, ...data });
-    } catch (error) { console.error(error); res.status(500).json({ message: `Failed to save to ${tableName}`, error: error.message }); }
+    } catch (error) { await connection.rollback(); console.error(error); res.status(500).json({ message: `Failed to save to ${tableName}`, error: error.message }); } finally { connection.release(); }
 };
 
 app.post('/api/academies', handleSave('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
@@ -361,13 +380,15 @@ app.put('/api/graduations/ranks', async (req, res) => {
 app.post('/api/attendance', async (req, res) => {
     const record = req.body;
     const id = uuidv4();
+    const connection = await db.getConnection();
     try {
-        // Upsert logic: Delete existing record for the same day/student/schedule, then insert.
-        await db.query('DELETE FROM attendance_records WHERE studentId = ? AND scheduleId = ? AND date = ?', [record.studentId, record.scheduleId, record.date]);
-        await db.query('INSERT INTO attendance_records (id, studentId, scheduleId, date, status) VALUES (?,?,?,?,?)', [id, record.studentId, record.scheduleId, record.date, record.status]);
+        await connection.beginTransaction();
+        await connection.query('DELETE FROM attendance_records WHERE studentId = ? AND scheduleId = ? AND date = ?', [record.studentId, record.scheduleId, record.date]);
+        await connection.query('INSERT INTO attendance_records (id, studentId, scheduleId, date, status) VALUES (?,?,?,?,?)', [id, record.studentId, record.scheduleId, record.date, record.status]);
+        await connection.commit();
         await logActivity(req.user.userId, 'Save Attendance', `Logged attendance for student ${record.studentId} on ${record.date}`);
         res.status(201).json({ id, ...record });
-    } catch(error) { res.status(500).json({ message: "Failed to save attendance", error: error.message }); }
+    } catch(error) { await connection.rollback(); res.status(500).json({ message: "Failed to save attendance", error: error.message }); } finally { connection.release(); }
 });
 
 

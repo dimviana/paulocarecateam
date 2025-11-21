@@ -136,12 +136,12 @@ Agora, use o script `deployct.txt` para automatizar a configuração.
 
 ## Troubleshooting (Solução de Problemas)
 
-### Erro: 502 Bad Gateway
+### Erro: 502 Bad Gateway / Erro de Cadastro com "Please provide username and password"
 
-Este é o erro mais comum e significa que o Nginx não conseguiu se comunicar com sua aplicação backend (o processo PM2). Siga estes passos para diagnosticar:
+Estes são os erros mais comuns e quase sempre significam que o Nginx não conseguiu se comunicar com sua aplicação backend (o processo PM2) ou que o backend não conseguiu se conectar ao banco de dados.
 
 1.  **Verifique o Status do PM2**:
-    *   Execute o comando `pm2 list`.
+    *   Execute `pm2 list`.
     *   Procure pelo processo `jiujitsu-hub-backend`.
     *   **Se o status for `errored` ou `stopped`**, o problema está no backend. Prossiga para o próximo passo.
     *   **Se o status for `online`**, o problema pode ser na configuração do Nginx ou firewall.
@@ -149,20 +149,12 @@ Este é o erro mais comum e significa que o Nginx não conseguiu se comunicar co
 2.  **Verifique os Logs do Backend (Passo Mais Importante)**:
     *   Execute `pm2 logs jiujitsu-hub-backend`.
     *   Os logs mostrarão o erro exato que impediu sua aplicação de iniciar. Erros comuns incluem:
-        *   **Erro de conexão com o banco de dados**: Verifique se o `DATABASE_URL` no arquivo `.env` do backend está correto (usuário, senha, host, porta, nome do banco).
+        *   **Erro de conexão com o banco de dados (ECONNREFUSED, Access denied)**: Verifique se o `DATABASE_URL` no arquivo `.env` do backend está correto (usuário, senha, host, porta, nome do banco).
         *   **`SyntaxError`**: Um erro no código do `server.js`.
         *   **`Cannot find module`**: Uma dependência está faltando. Execute `npm install` no diretório do backend.
+        *   **`TypeError: require is not a function` / `SyntaxError: Cannot use import...`**: Existe um conflito entre módulos CommonJS (`require`) e ES Modules (`import`). A versão atual dos arquivos de configuração (`server.js`, `ecosystem.config.js`) usa ES Modules e deve resolver isso.
 
 3.  **Verifique a Configuração do Nginx**:
     *   Execute `sudo nginx -t`.
     *   Se este comando mostrar algum erro, há um problema de sintaxe no arquivo de configuração do seu site em `/etc/nginx/sites-available/`.
     *   Verifique se a porta no `proxy_pass` corresponde à porta no seu arquivo `ecosystem.config.js`.
-
----
-
-## Gerenciamento Pós-Instalação
-
-*   **Logs do backend**: `pm2 logs jiujitsu-hub-backend`
-*   **Reiniciar o backend**: `pm2 restart jiujitsu-hub-backend`
-*   **Atualizar o frontend**: Use a opção "5) Atualizar Jiu-Jitsu Hub" no script de deploy.
-*   **Atualizar o backend**: Navegue até o diretório do backend, execute `git pull`, `npm install` (se necessário) e `pm2 restart jiujitsu-hub-backend`.

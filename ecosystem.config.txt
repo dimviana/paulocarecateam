@@ -63,4 +63,4 @@ export default {
   ]
 };
 
-# ------------------ FIM DO CÓDIGO PARA COPIAR ------------------
+# ------------------ FIM DO CÓDIGO PARA COPIAR -------------------
