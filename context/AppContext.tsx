@@ -11,7 +11,7 @@ interface NotificationType {
 
 interface AppContextType {
   themeSettings: ThemeSettings;
-  setThemeSettings: (settings: ThemeSettings) => void;
+  setThemeSettings: (settings: ThemeSettings) => Promise<void>;
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
@@ -58,13 +58,7 @@ interface AppContextType {
 export const AppContext = createContext<AppContextType>(null!);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [themeSettings, setThemeSettingsState] = useState<ThemeSettings>(() => {
-    const saved = localStorage.getItem('themeSettings');
-    const settings = saved ? JSON.parse(saved) : initialThemeSettings;
-    settings.theme = 'light';
-    return settings;
-  });
-  
+  const [themeSettings, setThemeSettingsState] = useState<ThemeSettings>(initialThemeSettings);
   const [user, setUser] = useState<User | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [academies, setAcademies] = useState<Academy[]>([]);
@@ -163,35 +157,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [themeSettings]);
 
   useEffect(() => {
-    const verifyTokenAndFetchData = async () => {
+    const initializeApp = async () => {
         setLoading(true);
-        const token = localStorage.getItem('authToken');
-        if (!token) { setLoading(false); return; }
         try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            if (payload.exp * 1000 < Date.now()) { logout(); setLoading(false); return; }
-            const allUsers = await api.getUsers();
-            setUsers(allUsers);
-            const loggedInUser = allUsers.find(u => u.id === payload.userId);
-            if (loggedInUser) { setUser(loggedInUser); await refetchData(); } else { logout(); }
+            const settings = await api.getThemeSettings();
+            setThemeSettingsState(settings);
+
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                if (payload.exp * 1000 < Date.now()) {
+                    logout();
+                } else {
+                    await refetchData(); // This fetches users, students etc.
+                    const allUsers = await api.getUsers(); // Re-fetch to be sure, context state updates can be tricky.
+                    setUsers(allUsers);
+                    const loggedInUser = allUsers.find(u => u.id === payload.userId);
+                    if (loggedInUser) {
+                        setUser(loggedInUser);
+                    } else {
+                        logout();
+                    }
+                }
+            }
         } catch (error) {
-            handleApiError(error, 'verifyToken');
-            logout();
+            handleApiError(error, 'initializeApp');
+            if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+                logout();
+            }
         } finally {
             setLoading(false);
         }
     };
-    verifyTokenAndFetchData();
+    initializeApp();
   }, [logout, refetchData, handleApiError]);
 
-  useEffect(() => { localStorage.setItem('themeSettings', JSON.stringify(themeSettings)); }, [themeSettings]);
   useEffect(() => { localStorage.setItem('showcasedComponents', JSON.stringify(showcasedComponents)); }, [showcasedComponents]);
   useEffect(() => { document.documentElement.classList.remove('dark'); }, []);
-
-  const setThemeSettings = (settings: ThemeSettings) => {
-    settings.theme = 'light';
-    setThemeSettingsState(settings);
-  };
   
   const login = async (email: string, password: string) => {
     try {
@@ -211,7 +213,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return false;
     } catch (error) {
       if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('Invalid credentials') || error.message.includes('Please provide username and password'))) {
-        // It's an auth error, don't show global notification. Let the page handle it.
         console.error("Authentication failed:", error.message);
       } else {
         handleApiError(error, 'login');
@@ -239,6 +240,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } catch (error) {
           handleApiError(error, context);
       }
+  };
+
+  const setThemeSettings = async (settings: ThemeSettings) => {
+    try {
+      const updatedSettings = await api.saveThemeSettings(settings);
+      setThemeSettingsState(updatedSettings);
+      setNotification({ type: 'success', message: 'Configurações Salvas', details: 'As alterações foram aplicadas com sucesso.'});
+    } catch(error) {
+      handleApiError(error, 'saveThemeSettings');
+    }
   };
 
   const updateStudentPayment = async (studentId: string, status: 'paid' | 'unpaid') => {

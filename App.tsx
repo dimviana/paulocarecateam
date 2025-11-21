@@ -35,7 +35,6 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
     responsible: '',
     responsibleRegistration: '',
     professorId: '',
-    assistantIds: [] as string[],
     imageUrl: '',
     email: '',
     password: '',
@@ -46,13 +45,7 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    if (name === 'assistantIds' && e.target instanceof HTMLSelectElement) {
-      // FIX: Explicitly type `option` as HTMLOptionElement to resolve TS error.
-      const selectedIds = Array.from(e.target.selectedOptions).map((option: HTMLOptionElement) => option.value);
-      setFormData(prev => ({ ...prev, assistantIds: selectedIds }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,19 +106,6 @@ const AcademyForm: React.FC<AcademyFormProps> = ({ academy, onSave, onClose }) =
         <select name="professorId" value={formData.professorId} onChange={handleChange} required className={selectStyles}>
            <option value="">Selecione um professor</option>
            {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-[var(--theme-text-primary)]/80 mb-1">Assistentes (segure Ctrl/Cmd para selecionar)</label>
-        <select
-          name="assistantIds"
-          value={formData.assistantIds}
-          onChange={handleChange}
-          multiple
-          className={`${selectStyles} h-24`}
-        >
-          {professors.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
       

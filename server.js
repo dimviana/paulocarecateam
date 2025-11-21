@@ -137,13 +137,13 @@ const handleGet = (tableName) => async (req, res) => {
                 row.paymentHistory = payments.filter(p => p.studentId === row.id);
              }
         }
-        if (tableName === 'students' || tableName === 'professors') {
+        if (tableName === 'students') {
             for (const row of rows) {
                 if (row.medals && typeof row.medals === 'string') {
                     try {
                         row.medals = JSON.parse(row.medals);
                     } catch (e) {
-                        console.error(`Failed to parse medals for ID ${row.id}:`, row.medals);
+                        console.error(`Failed to parse medals for student ID ${row.id}:`, row.medals);
                         row.medals = { gold: 0, silver: 0, bronze: 0 };
                     }
                 }
@@ -209,65 +209,52 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     try {
-        let userRecord;
-        let passwordHash;
         const isEmail = String(emailOrCpf).includes('@');
+        let query;
+        let queryParams;
 
         if (isEmail) {
-            // --- Login com Email ---
-            const [users] = await db.query('SELECT * FROM users WHERE email = ?', [emailOrCpf]);
-            if (!users.length) {
-                return res.status(401).json({ message: 'Credenciais inválidas' });
-            }
-            
-            userRecord = users[0];
-
-            if (userRecord.role === 'student') {
-                const [students] = await db.query('SELECT password FROM students WHERE id = ?', [userRecord.studentId]);
-                passwordHash = students.length ? students[0].password : null;
-            } else { // 'academy_admin' or 'general_admin'
-                const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [userRecord.academyId]);
-                passwordHash = academies.length ? academies[0].password : null;
-            }
-        } else {
-            // --- Login com CPF (apenas para alunos) ---
+            // Busca por email, juntando tabelas para pegar a senha de alunos ou academias em uma única consulta.
+            query = `
+                SELECT 
+                    u.id AS userId, u.role,
+                    COALESCE(s.password, a.password) AS passwordHash
+                FROM users u
+                LEFT JOIN students s ON u.studentId = s.id
+                LEFT JOIN academies a ON u.academyId = a.id
+                WHERE u.email = ?
+            `;
+            queryParams = [emailOrCpf];
+        } else { // Login com CPF (apenas para alunos)
             const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
-            const [students] = await db.query(
-                'SELECT id, password FROM students WHERE REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?', 
-                [sanitizedCpf]
-            );
-
-            if (!students.length) {
-                return res.status(401).json({ message: 'Credenciais inválidas' });
-            }
-
-            const student = students[0];
-            passwordHash = student.password;
-
-            // Encontrar o usuário correspondente para obter o ID e o papel para o token
-            const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
-            if (!users.length) {
-                // Inconsistência de dados, mas para o usuário é uma falha de login
-                return res.status(401).json({ message: 'Credenciais inválidas' });
-            }
-            userRecord = users[0];
+            // Busca por CPF, juntando com a tabela de usuários.
+            query = `
+                SELECT 
+                    u.id AS userId, u.role, s.password AS passwordHash
+                FROM users u
+                JOIN students s ON u.studentId = s.id
+                WHERE REPLACE(REPLACE(s.cpf, ".", ""), "-", "") = ?
+            `;
+            queryParams = [sanitizedCpf];
         }
-        
-        // --- Validação da Senha e Geração do Token ---
-        if (!userRecord || !passwordHash) {
+
+        const [results] = await db.query(query, queryParams);
+
+        if (results.length === 0 || !results[0].passwordHash) {
             return res.status(401).json({ message: 'Credenciais inválidas' });
         }
 
-        const isMatch = await bcrypt.compare(pass, passwordHash);
+        const userData = results[0];
+        const isMatch = await bcrypt.compare(pass, userData.passwordHash);
+
         if (!isMatch) {
             return res.status(401).json({ message: 'Credenciais inválidas' });
         }
 
-        const payload = { userId: userRecord.id, role: userRecord.role };
+        const payload = { userId: userData.userId, role: userData.role };
         const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
 
-        await logActivity(userRecord.id, 'Login', 'Usuário logado com sucesso.');
-
+        await logActivity(userData.userId, 'Login', 'Usuário logado com sucesso.');
         res.json({ token });
 
     } catch (error) {
@@ -277,8 +264,20 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 
-// --- Simple GET routes (no auth needed for this one as per frontend logic)
+// --- Public GET routes (for initial app load) ---
 app.get('/api/users', handleGet('users'));
+app.get('/api/settings', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
+        if (rows.length === 0) {
+            return res.status(404).json({ message: 'Settings not found.' });
+        }
+        res.json(rows[0]);
+    } catch (error) {
+        console.error('Error fetching settings:', error);
+        res.status(500).json({ message: 'Failed to fetch settings.' });
+    }
+});
 
 // --- Protected Routes ---
 app.use(authenticateToken);
@@ -445,6 +444,33 @@ app.post('/api/attendance', async (req, res) => {
         await logActivity(req.user.userId, 'Save Attendance', `Logged attendance for student ${record.studentId} on ${record.date}`);
         res.status(201).json({ id, ...record });
     } catch(error) { await connection.rollback(); res.status(500).json({ message: "Failed to save attendance", error: error.message }); } finally { connection.release(); }
+});
+
+app.put('/api/settings', async (req, res) => {
+    const settings = req.body;
+    const { id, ...settingsToUpdate } = settings;
+
+    try {
+        settingsToUpdate.publicPageEnabled = settingsToUpdate.publicPageEnabled ? 1 : 0;
+        settingsToUpdate.useGradient = settingsToUpdate.useGradient ? 1 : 0;
+        settingsToUpdate.socialLoginEnabled = settingsToUpdate.socialLoginEnabled ? 1 : 0;
+
+        const fields = Object.keys(settingsToUpdate);
+        const values = Object.values(settingsToUpdate);
+        
+        const setClause = fields.map(field => `\`${field}\` = ?`).join(', ');
+        const query = `UPDATE theme_settings SET ${setClause} WHERE id = 1`;
+
+        await db.query(query, values);
+        
+        await logActivity(req.user.userId, 'Update Settings', 'System settings updated.');
+        
+        const [updatedRows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
+        res.json(updatedRows[0]);
+    } catch (error) {
+        console.error('Error updating settings:', error);
+        res.status(500).json({ message: 'Failed to update settings.', error: error.message });
+    }
 });
 
 

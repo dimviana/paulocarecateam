@@ -21,8 +21,13 @@ const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> & { l
 const SettingsPage: React.FC = () => {
     const { themeSettings, setThemeSettings, activityLogs, users, user } = useContext(AppContext);
     const [settings, setSettings] = useState(themeSettings);
-    const [saved, setSaved] = useState(false);
     const [activeTab, setActiveTab] = useState<'system' | 'webpage' | 'activities' | 'pagamentos' | 'direitos'>('system');
+
+    // Sync local state when themeSettings from context changes
+    React.useEffect(() => {
+        setSettings(themeSettings);
+    }, [themeSettings]);
+
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
@@ -36,8 +41,6 @@ const SettingsPage: React.FC = () => {
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
         setThemeSettings(settings);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
     };
 
     return (
@@ -228,7 +231,6 @@ const SettingsPage: React.FC = () => {
                         )}
                         
                         <div className="flex justify-end items-center gap-4 pt-4 border-t border-[var(--theme-text-primary)]/10 mt-6">
-                            {saved && <span className="text-green-600">Salvo com sucesso!</span>}
                             <Button type="submit">Salvar Alterações</Button>
                         </div>
                     </form>

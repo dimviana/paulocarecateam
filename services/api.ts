@@ -1,4 +1,4 @@
-import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog } from '../types';
+import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog, ThemeSettings } from '../types';
 
 const API_URL = '/api'; // All requests will be proxied by Nginx to the backend.
 
@@ -162,5 +162,14 @@ export const api = {
   deleteProfessor: async (id: string): Promise<{ success: boolean }> => {
     await fetchWrapper(`/professors/${id}`, { method: 'DELETE' });
     return { success: true };
+  },
+
+  getThemeSettings: (): Promise<ThemeSettings> => fetchWrapper<ThemeSettings>('/settings'),
+
+  saveThemeSettings: (settings: ThemeSettings): Promise<ThemeSettings> => {
+    return fetchWrapper<ThemeSettings>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
   },
 };

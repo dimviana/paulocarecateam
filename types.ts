@@ -67,7 +67,6 @@ export interface Academy {
   responsible: string;
   responsibleRegistration: string;
   professorId: string;
-  assistantIds: string[];
   imageUrl?: string;
   email?: string;
   password?: string;
