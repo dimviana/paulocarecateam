@@ -16,7 +16,7 @@
  * ==============================================================================
  */
 
-export default {
+module.exports = {
   apps: [
     /**
      * --- Configuração para: Jiu-Jitsu Hub ---
@@ -25,7 +25,7 @@ export default {
      */
     {
       name: 'jiujitsu-hub-backend',
-      script: './server.js', // <-- Aponta para o novo server.js com ES Modules
+      script: './server.js',
       instances: 1,
       autorestart: true,
       watch: false,

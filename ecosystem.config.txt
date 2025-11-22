@@ -2,8 +2,9 @@
 #           Guia de Configuração do PM2 (ecosystem.config.js)
 # ==============================================================================
 #
-# Para iniciar seu backend com PM2 de forma robusta e compatível com projetos
-# modernos (que usam ES Modules), siga os passos abaixo.
+# Para iniciar seu backend com PM2 de forma robusta, siga os passos abaixo.
+# Este arquivo usa a sintaxe CommonJS (`module.exports`), que é a mais
+# compatível com o ambiente PM2.
 #
 # 1. COPIE TODO O CONTEÚDO do bloco de código JavaScript abaixo.
 #
@@ -12,8 +13,8 @@
 #
 # 3. COLE o conteúdo copiado nesse novo arquivo.
 #
-# 4. A configuração já está pronta. Apenas verifique se o arquivo de entrada do
-#    seu servidor se chama 'server.js'. Se tiver outro nome, altere a linha 'script'.
+# 4. Verifique se o arquivo de entrada do seu servidor se chama 'server.js'.
+#    Se tiver outro nome, altere a linha 'script'.
 #
 # 5. Salve o arquivo `ecosystem.config.js`.
 #
@@ -24,7 +25,7 @@
 
 # ----------------- INÍCIO DO CÓDIGO PARA COPIAR -----------------
 
-export default {
+module.exports = {
   apps: [
     /**
      * --- Configuração para: Jiu-Jitsu Hub ---
@@ -63,4 +64,4 @@ export default {
   ]
 };
 
-# ------------------ FIM DO CÓDIGO PARA COPIAR -------------------
+# ------------------ FIM DO CÓDIGO PARA COPIAR ------------------

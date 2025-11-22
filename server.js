@@ -5,7 +5,8 @@
  *
  * This single file acts as the complete backend for the application. It uses
  * Express.js to create an API that connects to a MySQL database.
- * This version uses ES Modules (`import`/`export`) for compatibility.
+ * This version uses CommonJS (`require`/`module.exports`) for maximum compatibility
+ * with PM2 and standard Node.js environments.
  *
  * Features:
  * - RESTful API for all resources (Students, Academies, etc.).
@@ -25,14 +26,14 @@
  * ==============================================================================
  */
 
-// --- Dependencies (ESM Syntax) ---
-import express from 'express';
-import mysql from 'mysql2/promise';
-import cors from 'cors';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
-import 'dotenv/config'; // Automatically loads .env file
+// --- Dependencies (CommonJS Syntax) ---
+const express = require('express');
+const mysql = require('mysql2/promise');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const { v4: uuidv4 } = require('uuid');
+require('dotenv').config(); // Automatically loads .env file
 
 // --- Environment Variables ---
 const {
@@ -57,9 +58,18 @@ async function connectToDatabase() {
     if (!DATABASE_URL) {
       throw new Error("DATABASE_URL environment variable is not defined.");
     }
-    const pool = mysql.createPool({ uri: DATABASE_URL, connectionLimit: 10, enableKeepAlive: true, keepAliveInitialDelay: 10000 });
+    // Configure pool
+    const pool = mysql.createPool({ 
+        uri: DATABASE_URL, 
+        connectionLimit: 10, 
+        enableKeepAlive: true, 
+        keepAliveInitialDelay: 10000 
+    });
+    
+    // Test connection
     const connection = await pool.getConnection();
     connection.release();
+    
     db = pool;
     console.log('Successfully connected to the MySQL database.');
     isDbConnected = true;
@@ -105,7 +115,7 @@ const authenticateToken = (req, res, next) => {
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      console.error('JWT Verification Error:', err.message); // Added for better debugging
+      console.error('JWT Verification Error:', err.message);
       return res.sendStatus(403);
     }
     req.user = user;
@@ -132,7 +142,7 @@ const initialThemeSettings = {
   theme: 'light',
   monthlyFeeAmount: 150,
   publicPageEnabled: true,
-  heroHtml: `...`,
+  heroHtml: `...`, // Shortened for brevity in defaults, real fetch will get DB values
   aboutHtml: `...`,
   branchesHtml: `...`,
   footerHtml: `...`,
