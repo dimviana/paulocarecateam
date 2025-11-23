@@ -303,6 +303,17 @@ const handleSave = (tableName, fields) => async (req, res) => {
 // 1. PUBLIC ROUTES (No Authentication Required)
 // ============================================
 
+// Settings should be PUBLIC and FIRST to avoid any middleware issues
+apiRouter.get('/settings', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
+        if (rows && rows.length > 0) return res.json(rows[0]);
+        res.json(initialThemeSettings);
+    } catch (error) {
+        res.json(initialThemeSettings);
+    }
+});
+
 // Auth: Register Academy
 apiRouter.post('/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
@@ -414,17 +425,6 @@ apiRouter.post('/auth/login', async (req, res) => {
     }
 });
 
-// Public Data Routes
-apiRouter.get('/users', handleGet('users'));
-apiRouter.get('/settings', async (req, res) => {
-    try {
-        const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
-        if (rows && rows.length > 0) return res.json(rows[0]);
-        res.json(initialThemeSettings);
-    } catch (error) {
-        res.json(initialThemeSettings);
-    }
-});
 
 // 2. PROTECTED ROUTES (Require Authentication)
 // ============================================
@@ -456,6 +456,7 @@ apiRouter.get('/auth/session', authenticateToken, async (req, res) => {
 apiRouter.use(authenticateToken);
 
 // Simple GET
+apiRouter.get('/users', handleGet('users')); // MOVED to Protected
 apiRouter.get('/students', handleGet('students'));
 apiRouter.get('/academies', handleGet('academies'));
 apiRouter.get('/news', handleGet('news_articles'));
