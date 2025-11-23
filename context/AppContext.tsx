@@ -161,12 +161,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setLoading(true);
         try {
             // Check for Auth Token in ENV for auto-login on system initialization
-            // Supports standard CRA/Webpack (process.env) or Vite (import.meta.env - if available via shim)
-            const envToken = process.env.REACT_APP_AUTH_TOKEN;
+            // Check both standard process.env and possible Vite replacement
+            const envToken = (typeof process !== 'undefined' && process.env && process.env.REACT_APP_AUTH_TOKEN);
             
-            if (envToken && !localStorage.getItem('authToken')) {
-                localStorage.setItem('authToken', envToken);
-                console.log("Auto-authenticating via ENV token.");
+            if (envToken) {
+                // If an ENV token is present, we set it to localStorage if it's different
+                // This effectively logs the user in automatically if the token is valid.
+                if (localStorage.getItem('authToken') !== envToken) {
+                    localStorage.setItem('authToken', envToken);
+                    console.log("Auto-authenticating via ENV token.");
+                }
             }
 
             const settings = await api.getThemeSettings();

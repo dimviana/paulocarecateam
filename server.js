@@ -303,7 +303,7 @@ const handleSave = (tableName, fields) => async (req, res) => {
 // 1. PUBLIC ROUTES (No Authentication Required)
 // ============================================
 
-// Settings should be PUBLIC and FIRST to avoid any middleware issues
+// Settings MUST be PUBLIC and FIRST to avoid any middleware issues
 apiRouter.get('/settings', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
@@ -455,8 +455,8 @@ apiRouter.get('/auth/session', authenticateToken, async (req, res) => {
 // Global Auth Middleware for all subsequent routes
 apiRouter.use(authenticateToken);
 
-// Simple GET
-apiRouter.get('/users', handleGet('users')); // MOVED to Protected
+// Protected API Routes
+apiRouter.get('/users', handleGet('users'));
 apiRouter.get('/students', handleGet('students'));
 apiRouter.get('/academies', handleGet('academies'));
 apiRouter.get('/news', handleGet('news_articles'));
