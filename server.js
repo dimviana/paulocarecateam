@@ -1,33 +1,11 @@
+
 /**
  * ==============================================================================
  *           Backend Server for Jiu-Jitsu Hub SAAS (server.js)
  * ==============================================================================
- *
- * This single file acts as the complete backend for the application. It uses
- * Express.js to create an API that connects to a MySQL database.
- * This version uses CommonJS (`require`/`module.exports`) for maximum compatibility
- * with PM2 and standard Node.js environments.
- *
- * Features:
- * - RESTful API for all resources (Students, Academies, etc.).
- * - JWT-based authentication for secure endpoints.
- * - Password hashing with bcrypt.
- * - Automatic activity logging for important actions.
- * - Database connection pooling for performance.
- *
- * Assumed NPM dependencies:
- * - express, mysql2, cors, jsonwebtoken, bcryptjs, uuid, dotenv
- *
- * How to Run (in your backend project directory):
- * 1. Ensure you have an .env file configured (based on env.txt).
- * 2. Run 'npm install' to get the dependencies above.
- * 3. Use PM2 to start the server: `pm2 start ecosystem.config.js`
- *
- * ==============================================================================
  */
 
-// --- Dependencies (CommonJS Syntax) ---
-require('dotenv').config(); // Automatically loads .env file at the VERY START
+require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
@@ -48,7 +26,10 @@ if (!JWT_SECRET) {
 
 // --- Express App Initialization ---
 const app = express();
-const apiRouter = express.Router(); // Create router instance early
+
+// Create separate routers for public and protected routes to avoid middleware conflicts
+const publicApiRouter = express.Router();
+const protectedApiRouter = express.Router();
 
 // --- Middleware ---
 app.use(cors());
@@ -56,21 +37,14 @@ app.use(express.json({ limit: '10mb' }));
 
 // --- Database Connection ---
 let db;
-let isDbConnected = false; // Flag to track DB connection status
+let isDbConnected = false;
 
 async function connectToDatabase() {
   try {
-    if (!DATABASE_URL) {
-      throw new Error("DATABASE_URL environment variable is not defined.");
-    }
-    
-    // When using a connection string (DATABASE_URL), pass it directly.
+    if (!DATABASE_URL) throw new Error("DATABASE_URL environment variable is not defined.");
     const pool = mysql.createPool(DATABASE_URL);
-    
-    // Test connection
     const connection = await pool.getConnection();
     connection.release();
-    
     db = pool;
     console.log('Successfully connected to the MySQL database.');
     isDbConnected = true;
@@ -80,7 +54,7 @@ async function connectToDatabase() {
   }
 }
 
-// --- Database Status Middleware ---
+// --- Database Status Middleware (Applied to all /api routes) ---
 app.use('/api', (req, res, next) => {
     if (!isDbConnected) {
         return res.status(503).json({ 
@@ -90,74 +64,6 @@ app.use('/api', (req, res, next) => {
     }
     next();
 });
-
-// --- Startup Scripts ---
-const ensureMasterAdmin = async () => {
-    if (!isDbConnected) {
-        console.log("Skipping Master Admin check: Database not connected.");
-        return;
-    }
-
-    const email = 'androiddiviana@gmail.com';
-    const plainPassword = 'dvsviana154';
-    const responsibleName = 'Admin Master';
-    const academyName = 'Academia Master';
-
-    console.log(`Checking for Master Admin: ${email}`);
-
-    let connection;
-    try {
-        connection = await db.getConnection();
-        await connection.beginTransaction();
-
-        // 1. Check/Update Academy (Auth source for admins)
-        const [academies] = await connection.query('SELECT * FROM academies WHERE email = ?', [email]);
-        let academyId;
-        const hashedPassword = await bcrypt.hash(plainPassword, 10);
-
-        if (academies.length === 0) {
-            // Create
-            academyId = uuidv4();
-            await connection.query(
-                'INSERT INTO academies (id, name, address, responsible, responsibleRegistration, email, password) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [academyId, academyName, 'System Address', responsibleName, '000.000.000-00', email, hashedPassword]
-            );
-            console.log('Created Master Academy record.');
-        } else {
-            // Update
-            academyId = academies[0].id;
-            await connection.query('UPDATE academies SET password = ? WHERE id = ?', [hashedPassword, academyId]);
-            console.log('Updated Master Academy password.');
-        }
-
-        // 2. Check/Update User
-        const [users] = await connection.query('SELECT * FROM users WHERE email = ?', [email]);
-        
-        if (users.length === 0) {
-            // Create
-            const userId = uuidv4();
-            await connection.query(
-                'INSERT INTO users (id, name, email, role, academyId) VALUES (?, ?, ?, ?, ?)',
-                [userId, responsibleName, email, 'general_admin', academyId]
-            );
-            console.log('Created Master Admin user record.');
-        } else {
-            // Update
-            await connection.query('UPDATE users SET role = ?, academyId = ? WHERE email = ?', ['general_admin', academyId, email]);
-            console.log('Updated Master Admin user role/link.');
-        }
-
-        await connection.commit();
-        console.log("Master Admin ensured successfully.");
-
-    } catch (error) {
-        if (connection) await connection.rollback();
-        console.error("Failed to ensure Master Admin:", error.message);
-    } finally {
-        if (connection) connection.release();
-    }
-};
-
 
 // --- Helper Functions ---
 const logActivity = async (actorId, action, details) => {
@@ -179,20 +85,19 @@ const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  if (token == null) return res.sendStatus(401);
+  if (token == null) return res.status(401).json({ message: 'Token de autenticação não fornecido.' });
 
-  // Use process.env.JWT_SECRET directly to ensure we get the loaded value
   jwt.verify(token, process.env.JWT_SECRET || JWT_SECRET, (err, user) => {
     if (err) {
       console.error('JWT Verification Error:', err.message);
-      return res.sendStatus(403);
+      return res.status(403).json({ message: 'Token inválido ou expirado.' });
     }
     req.user = user;
     next();
   });
 };
 
-// Default theme settings to be used as a fallback
+// Default theme settings
 const initialThemeSettings = {
   logoUrl: 'https://tailwindui.com/img/logos/mark.svg?color=amber&shade=500',
   systemName: 'Jiu-Jitsu Hub',
@@ -211,7 +116,7 @@ const initialThemeSettings = {
   theme: 'light',
   monthlyFeeAmount: 150,
   publicPageEnabled: true,
-  heroHtml: `...`, // Shortened for brevity in defaults
+  heroHtml: `...`,
   aboutHtml: `...`,
   branchesHtml: `...`,
   footerHtml: `...`,
@@ -226,11 +131,10 @@ const initialThemeSettings = {
   systemVersion: '1.0.0',
 };
 
-// --- Generic API Handlers ---
+// --- Generic Handlers ---
 const handleGet = (tableName) => async (req, res) => {
     try {
         const [rows] = await db.query(`SELECT * FROM \`${tableName}\``);
-        
         if (tableName === 'class_schedules') {
             const [assistants] = await db.query('SELECT * FROM schedule_assistants');
             for (const row of rows) {
@@ -242,11 +146,7 @@ const handleGet = (tableName) => async (req, res) => {
              for (const row of rows) {
                 row.paymentHistory = payments.filter(p => p.studentId === row.id);
                 if (row.medals && typeof row.medals === 'string') {
-                    try {
-                        row.medals = JSON.parse(row.medals);
-                    } catch (e) {
-                        row.medals = { gold: 0, silver: 0, bronze: 0 };
-                    }
+                    try { row.medals = JSON.parse(row.medals); } catch (e) { row.medals = { gold: 0, silver: 0, bronze: 0 }; }
                 }
              }
         }
@@ -274,7 +174,6 @@ const handleSave = (tableName, fields) => async (req, res) => {
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-
         if (isNew) {
             const columns = ['id', ...fields].map(f => `\`${f}\``).join(', ');
             const placeholders = ['?', ...fields.map(() => '?')].join(', ');
@@ -298,28 +197,27 @@ const handleSave = (tableName, fields) => async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: `Failed to save to ${tableName}`, error: error.message }); } finally { connection.release(); }
 };
 
-// --- API Routes ---
+// =================================================================
+// 1. PUBLIC ROUTES (Attached to publicApiRouter)
+// =================================================================
 
-// 1. PUBLIC ROUTES (No Authentication Required)
-// ============================================
-
-// Settings MUST be PUBLIC and FIRST to avoid any middleware issues
-apiRouter.get('/settings', async (req, res) => {
+// Settings - Public Access
+publicApiRouter.get('/settings', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
         if (rows && rows.length > 0) return res.json(rows[0]);
         res.json(initialThemeSettings);
     } catch (error) {
+        console.error("Error fetching settings:", error);
         res.json(initialThemeSettings);
     }
 });
 
-// Auth: Register Academy
-apiRouter.post('/auth/register', async (req, res) => {
+// Auth - Public Access
+publicApiRouter.post('/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
-    if (!name || !responsible || !email || !password) {
-        return res.status(400).json({ message: 'Missing required fields for registration.' });
-    }
+    if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Missing required fields.' });
+    
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -336,16 +234,14 @@ apiRouter.post('/auth/register', async (req, res) => {
         res.status(201).json(newAcademy[0]);
     } catch (error) {
         await connection.rollback();
-        if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Email or another unique field already exists.' });
+        if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Email already exists.' });
         res.status(500).json({ message: 'Failed to register academy.' });
     } finally {
         connection.release();
     }
 });
 
-// Auth: Login
-apiRouter.post('/auth/login', async (req, res) => {
-    // Robust check for parameters (accepting both naming conventions)
+publicApiRouter.post('/auth/login', async (req, res) => {
     const emailOrCpf = req.body.emailOrCpf || req.body.email;
     const pass = req.body.pass || req.body.password;
 
@@ -355,7 +251,7 @@ apiRouter.post('/auth/login', async (req, res) => {
         let user = null;
         let loginSuccessful = false;
         
-        // 1. Try Admin Login (Academies Table)
+        // 1. Try Admin Login
         const [academies] = await db.query('SELECT * FROM academies WHERE email = ?', [emailOrCpf]);
         if (academies.length > 0) {
             const academy = academies[0];
@@ -370,7 +266,7 @@ apiRouter.post('/auth/login', async (req, res) => {
             }
         }
 
-        // 2. Try Student Login (Students Table)
+        // 2. Try Student Login
         if (!loginSuccessful) {
             const isEmail = String(emailOrCpf).includes('@');
             const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
@@ -395,14 +291,10 @@ apiRouter.post('/auth/login', async (req, res) => {
             return res.json({ token });
         }
 
-        // If login failed, check if the user exists at all to return a specific error (404 vs 401)
-        // This helps the frontend decide whether to prompt for registration.
+        // Check existence for better error message (404 vs 401)
         let exists = false;
-        // Check academy email
         const [checkAcademies] = await db.query('SELECT id FROM academies WHERE email = ?', [emailOrCpf]);
         if (checkAcademies.length > 0) exists = true;
-
-        // Check student email/cpf
         if (!exists) {
              const isEmail = String(emailOrCpf).includes('@');
              const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
@@ -412,25 +304,24 @@ apiRouter.post('/auth/login', async (req, res) => {
              if (checkStudents.length > 0) exists = true;
         }
 
-        if (!exists) {
-            // The message must be EXACTLY this for the frontend to detect 404 correctly.
-            return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
-        }
-
+        if (!exists) return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
         return res.status(401).json({ message: 'Senha incorreta.' });
 
     } catch (error) {
         console.error('Login Error:', error);
-        res.status(500).json({ message: 'Erro interno no servidor durante o login.', error: error.message });
+        res.status(500).json({ message: 'Erro interno no servidor.', error: error.message });
     }
 });
 
+// =================================================================
+// 2. PROTECTED ROUTES (Attached to protectedApiRouter)
+// =================================================================
 
-// 2. PROTECTED ROUTES (Require Authentication)
-// ============================================
+// Apply Authentication Middleware to this router
+protectedApiRouter.use(authenticateToken);
 
-// Special Case: Session Validation (Protected but needs explicit auth on route due to router structure)
-apiRouter.get('/auth/session', authenticateToken, async (req, res) => {
+// Session Validation
+protectedApiRouter.get('/auth/session', async (req, res) => {
     try {
         const userId = req.user.userId;
         const [users] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
@@ -446,35 +337,31 @@ apiRouter.get('/auth/session', authenticateToken, async (req, res) => {
                 academyId: academy.id
             });
         }
-        return res.status(401).json({ message: 'User not found.' });
+        return res.status(401).json({ message: 'User session not found.' });
     } catch (error) {
         res.status(500).json({ message: 'Failed to validate session.' });
     }
 });
 
-// Global Auth Middleware for all subsequent routes
-apiRouter.use(authenticateToken);
+// Protected Resource Routes
+protectedApiRouter.get('/users', handleGet('users'));
+protectedApiRouter.get('/students', handleGet('students'));
+protectedApiRouter.get('/academies', handleGet('academies'));
+protectedApiRouter.get('/news', handleGet('news_articles'));
+protectedApiRouter.get('/graduations', handleGet('graduations'));
+protectedApiRouter.get('/schedules', handleGet('class_schedules'));
+protectedApiRouter.get('/attendance', handleGet('attendance_records'));
+protectedApiRouter.get('/professors', handleGet('professors'));
+protectedApiRouter.get('/logs', handleGet('activity_logs'));
 
-// Protected API Routes
-apiRouter.get('/users', handleGet('users'));
-apiRouter.get('/students', handleGet('students'));
-apiRouter.get('/academies', handleGet('academies'));
-apiRouter.get('/news', handleGet('news_articles'));
-apiRouter.get('/graduations', handleGet('graduations'));
-apiRouter.get('/schedules', handleGet('class_schedules'));
-apiRouter.get('/attendance', handleGet('attendance_records'));
-apiRouter.get('/professors', handleGet('professors'));
-apiRouter.get('/logs', handleGet('activity_logs'));
+protectedApiRouter.delete('/academies/:id', handleDelete('academies'));
+protectedApiRouter.delete('/graduations/:id', handleDelete('graduations'));
+protectedApiRouter.delete('/schedules/:id', handleDelete('schedules'));
+protectedApiRouter.delete('/attendance/:id', handleDelete('attendance_records'));
+protectedApiRouter.delete('/professors/:id', handleDelete('professors'));
 
-// Simple DELETE
-apiRouter.delete('/academies/:id', handleDelete('academies'));
-apiRouter.delete('/graduations/:id', handleDelete('graduations'));
-apiRouter.delete('/schedules/:id', handleDelete('schedules'));
-apiRouter.delete('/attendance/:id', handleDelete('attendance_records'));
-apiRouter.delete('/professors/:id', handleDelete('professors'));
-
-// Complex Operations
-apiRouter.post('/students', async (req, res) => {
+// Complex Protected Operations
+protectedApiRouter.post('/students', async (req, res) => {
     const data = req.body;
     const studentId = uuidv4();
     const userId = uuidv4();
@@ -489,7 +376,8 @@ apiRouter.post('/students', async (req, res) => {
         res.status(201).json({ id: studentId, ...data });
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to create student", error: error.message }); } finally { connection.release(); }
 });
-apiRouter.put('/students/:id', async (req, res) => {
+
+protectedApiRouter.put('/students/:id', async (req, res) => {
     const { id } = req.params;
     const data = req.body;
     const connection = await db.getConnection();
@@ -497,13 +385,11 @@ apiRouter.put('/students/:id', async (req, res) => {
         await connection.beginTransaction();
         let queryParams = [data.name, data.email, data.birthDate, data.cpf, data.fjjpe_registration, data.phone, data.address, data.beltId, data.academyId, data.firstGraduationDate, data.lastPromotionDate, data.paymentDueDateDay, data.stripes, data.isCompetitor, data.lastCompetition, JSON.stringify(data.medals || {}), data.imageUrl];
         let setClauses = 'name=?, email=?, birthDate=?, cpf=?, fjjpe_registration=?, phone=?, address=?, beltId=?, academyId=?, firstGraduationDate=?, lastPromotionDate=?, paymentDueDateDay=?, stripes=?, isCompetitor=?, lastCompetition=?, medals=?, imageUrl=?';
-        
         if (data.password) {
             setClauses += ', password=?';
             queryParams.push(await bcrypt.hash(data.password, 10));
         }
         queryParams.push(id);
-        
         await connection.query(`UPDATE students SET ${setClauses} WHERE id=?`, queryParams);
         await connection.query('UPDATE users SET name=?, email=?, birthDate=? WHERE studentId=?', [data.name, data.email, data.birthDate, id]);
         await logActivity(req.user.userId, 'Update Student', `Updated student ${data.name}`);
@@ -511,7 +397,8 @@ apiRouter.put('/students/:id', async (req, res) => {
         res.status(200).json({ id, ...data });
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to update student", error: error.message }); } finally { connection.release(); }
 });
-apiRouter.delete('/students/:id', async (req, res) => {
+
+protectedApiRouter.delete('/students/:id', async (req, res) => {
   const { id } = req.params;
   const connection = await db.getConnection();
   try {
@@ -525,7 +412,8 @@ apiRouter.delete('/students/:id', async (req, res) => {
     res.status(204).send();
   } catch (error) { await connection.rollback(); res.status(500).json({ message: `Failed to delete student.` }); } finally { connection.release(); }
 });
-apiRouter.post('/students/:studentId/payment', async (req, res) => {
+
+protectedApiRouter.post('/students/:studentId/payment', async (req, res) => {
     const { studentId } = req.params;
     const { status, amount } = req.body;
     const connection = await db.getConnection();
@@ -541,15 +429,17 @@ apiRouter.post('/students/:studentId/payment', async (req, res) => {
         res.status(200).json(student);
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to update payment status", error: error.message }); } finally { connection.release(); }
 });
-apiRouter.post('/academies', handleSave('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
-apiRouter.put('/academies/:id', handleSave('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
-apiRouter.post('/professors', handleSave('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
-apiRouter.put('/professors/:id', handleSave('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
-apiRouter.post('/graduations', handleSave('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
-apiRouter.put('/graduations/:id', handleSave('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
-apiRouter.post('/schedules', handleSave('class_schedules', ['className', 'dayOfWeek', 'startTime', 'endTime', 'professorId', 'academyId', 'requiredGraduationId']));
-apiRouter.put('/schedules/:id', handleSave('class_schedules', ['className', 'dayOfWeek', 'startTime', 'endTime', 'professorId', 'academyId', 'requiredGraduationId']));
-apiRouter.put('/graduations/ranks', async (req, res) => {
+
+protectedApiRouter.post('/academies', handleSave('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
+protectedApiRouter.put('/academies/:id', handleSave('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
+protectedApiRouter.post('/professors', handleSave('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
+protectedApiRouter.put('/professors/:id', handleSave('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
+protectedApiRouter.post('/graduations', handleSave('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
+protectedApiRouter.put('/graduations/:id', handleSave('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
+protectedApiRouter.post('/schedules', handleSave('class_schedules', ['className', 'dayOfWeek', 'startTime', 'endTime', 'professorId', 'academyId', 'requiredGraduationId']));
+protectedApiRouter.put('/schedules/:id', handleSave('class_schedules', ['className', 'dayOfWeek', 'startTime', 'endTime', 'professorId', 'academyId', 'requiredGraduationId']));
+
+protectedApiRouter.put('/graduations/ranks', async (req, res) => {
     const gradsWithNewRanks = req.body;
     const connection = await db.getConnection();
     try {
@@ -561,7 +451,8 @@ apiRouter.put('/graduations/ranks', async (req, res) => {
         res.json({ success: true });
     } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to update ranks', error: error.message }); } finally { connection.release(); }
 });
-apiRouter.post('/attendance', async (req, res) => {
+
+protectedApiRouter.post('/attendance', async (req, res) => {
     const record = req.body;
     const id = uuidv4();
     const connection = await db.getConnection();
@@ -574,7 +465,8 @@ apiRouter.post('/attendance', async (req, res) => {
         res.status(201).json({ id, ...record });
     } catch(error) { await connection.rollback(); res.status(500).json({ message: "Failed to save attendance", error: error.message }); } finally { connection.release(); }
 });
-apiRouter.put('/settings', async (req, res) => {
+
+protectedApiRouter.put('/settings', async (req, res) => {
     const { id, ...settingsToUpdate } = req.body;
     try {
         const booleanFields = ['publicPageEnabled', 'useGradient', 'socialLoginEnabled'];
@@ -587,7 +479,6 @@ apiRouter.put('/settings', async (req, res) => {
         
         await db.query(`UPDATE theme_settings SET ${setClause} WHERE id = 1`, values);
         await logActivity(req.user.userId, 'Update Settings', 'System settings updated.');
-        
         const [updatedRows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
         res.json(updatedRows[0]);
     } catch (error) {
@@ -595,15 +486,49 @@ apiRouter.put('/settings', async (req, res) => {
     }
 });
 
-// --- MOUNT API ROUTER ---
-app.use('/api', apiRouter);
+// --- MOUNT ROUTERS ---
+app.use('/api', publicApiRouter);
+app.use('/api', protectedApiRouter);
 
 // --- 404 HANDLER FOR API ---
-// This ensures that if a request hits the backend but matches no route, we return JSON, not HTML.
 app.use('/api/*', (req, res) => {
     console.warn(`404 Not Found: ${req.method} ${req.originalUrl}`);
     res.status(404).json({ message: `API endpoint not found: ${req.method} ${req.originalUrl}` });
 });
+
+// --- Startup Script ---
+const ensureMasterAdmin = async () => {
+    if (!isDbConnected) return;
+    const email = 'androiddiviana@gmail.com';
+    const plainPassword = 'dvsviana154';
+    let connection;
+    try {
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+        const [academies] = await connection.query('SELECT * FROM academies WHERE email = ?', [email]);
+        let academyId = academies.length > 0 ? academies[0].id : uuidv4();
+        const hashedPassword = await bcrypt.hash(plainPassword, 10);
+
+        if (academies.length === 0) {
+            await connection.query('INSERT INTO academies (id, name, address, responsible, responsibleRegistration, email, password) VALUES (?, ?, ?, ?, ?, ?, ?)', [academyId, 'Academia Master', 'System Address', 'Admin Master', '000.000.000-00', email, hashedPassword]);
+        } else {
+            await connection.query('UPDATE academies SET password = ? WHERE id = ?', [hashedPassword, academyId]);
+        }
+
+        const [users] = await connection.query('SELECT * FROM users WHERE email = ?', [email]);
+        if (users.length === 0) {
+            await connection.query('INSERT INTO users (id, name, email, role, academyId) VALUES (?, ?, ?, ?, ?)', [uuidv4(), 'Admin Master', email, 'general_admin', academyId]);
+        } else {
+            await connection.query('UPDATE users SET role = ?, academyId = ? WHERE email = ?', ['general_admin', academyId, email]);
+        }
+        await connection.commit();
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error("Failed to ensure Master Admin:", error.message);
+    } finally {
+        if (connection) connection.release();
+    }
+};
 
 // --- Server Start ---
 (async () => {
@@ -611,8 +536,5 @@ app.use('/api/*', (req, res) => {
   await ensureMasterAdmin();
   app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-    if (!isDbConnected) {
-      console.warn('Warning: Server started, but is NOT connected to the database. API requests will fail.');
-    }
   });
 })();

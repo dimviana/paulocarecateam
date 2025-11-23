@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog } from '../types';
 import { initialThemeSettings } from '../constants';
@@ -161,20 +162,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setLoading(true);
         try {
             // Check for Auth Token in ENV for auto-login on system initialization
-            // Check both standard process.env and possible Vite replacement
-            const envToken = (typeof process !== 'undefined' && process.env && process.env.REACT_APP_AUTH_TOKEN);
+            // We check both standard process.env and Vite's import.meta.env
+            let envToken = '';
+            
+            try {
+                // @ts-ignore
+                if (import.meta && import.meta.env && import.meta.env.VITE_AUTH_TOKEN) {
+                    // @ts-ignore
+                    envToken = import.meta.env.VITE_AUTH_TOKEN;
+                }
+            } catch (e) { /* ignore if import.meta is not available */ }
+
+            if (!envToken && typeof process !== 'undefined' && process.env && process.env.REACT_APP_AUTH_TOKEN) {
+                envToken = process.env.REACT_APP_AUTH_TOKEN;
+            }
             
             if (envToken) {
                 // If an ENV token is present, we set it to localStorage if it's different
-                // This effectively logs the user in automatically if the token is valid.
                 if (localStorage.getItem('authToken') !== envToken) {
                     localStorage.setItem('authToken', envToken);
                     console.log("Auto-authenticating via ENV token.");
                 }
             }
 
-            const settings = await api.getThemeSettings();
-            setThemeSettingsState(settings);
+            try {
+                const settings = await api.getThemeSettings();
+                setThemeSettingsState(settings);
+            } catch (error) {
+                console.error("Failed to load settings:", error);
+                // Continue initialization even if settings fail, using defaults
+            }
 
             const token = localStorage.getItem('authToken');
             if (token) {
