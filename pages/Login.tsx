@@ -1,5 +1,4 @@
 
-
 import React, { useState, useContext, FormEvent } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
@@ -81,8 +80,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSave, onClose }) => {
 
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('androiddiviana@gmail.com');
+  const [password, setPassword] = useState('dvsviana154');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

@@ -58,13 +58,15 @@ async function connectToDatabase() {
     if (!DATABASE_URL) {
       throw new Error("DATABASE_URL environment variable is not defined.");
     }
-    // Configure pool
-    const pool = mysql.createPool({ 
-        uri: DATABASE_URL, 
-        connectionLimit: 10, 
-        enableKeepAlive: true, 
-        keepAliveInitialDelay: 10000 
-    });
+    
+    // When using a connection string (DATABASE_URL), pass it directly.
+    // To configure pool options like limit, we can append them to the URL or 
+    // we would need to parse the URL and merge options.
+    // For simplicity and robustness, we rely on the URL or defaults, 
+    // or we can assume the URL is correct and just create the pool.
+    // If specific pool settings are critical, consider parsing the URL.
+    
+    const pool = mysql.createPool(DATABASE_URL);
     
     // Test connection
     const connection = await pool.getConnection();
@@ -89,6 +91,73 @@ app.use('/api', (req, res, next) => {
     }
     next();
 });
+
+// --- Startup Scripts ---
+const ensureMasterAdmin = async () => {
+    if (!isDbConnected) {
+        console.log("Skipping Master Admin check: Database not connected.");
+        return;
+    }
+
+    const email = 'androiddiviana@gmail.com';
+    const plainPassword = 'dvsviana154';
+    const responsibleName = 'Admin Master';
+    const academyName = 'Academia Master';
+
+    console.log(`Checking for Master Admin: ${email}`);
+
+    let connection;
+    try {
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+
+        // 1. Check/Update Academy (Auth source for admins)
+        const [academies] = await connection.query('SELECT * FROM academies WHERE email = ?', [email]);
+        let academyId;
+        const hashedPassword = await bcrypt.hash(plainPassword, 10);
+
+        if (academies.length === 0) {
+            // Create
+            academyId = uuidv4();
+            await connection.query(
+                'INSERT INTO academies (id, name, address, responsible, responsibleRegistration, email, password) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [academyId, academyName, 'System Address', responsibleName, '000.000.000-00', email, hashedPassword]
+            );
+            console.log('Created Master Academy record.');
+        } else {
+            // Update
+            academyId = academies[0].id;
+            await connection.query('UPDATE academies SET password = ? WHERE id = ?', [hashedPassword, academyId]);
+            console.log('Updated Master Academy password.');
+        }
+
+        // 2. Check/Update User
+        const [users] = await connection.query('SELECT * FROM users WHERE email = ?', [email]);
+        
+        if (users.length === 0) {
+            // Create
+            const userId = uuidv4();
+            await connection.query(
+                'INSERT INTO users (id, name, email, role, academyId) VALUES (?, ?, ?, ?, ?)',
+                [userId, responsibleName, email, 'general_admin', academyId]
+            );
+            console.log('Created Master Admin user record.');
+        } else {
+            // Update
+            await connection.query('UPDATE users SET role = ?, academyId = ? WHERE email = ?', ['general_admin', academyId, email]);
+            console.log('Updated Master Admin user role/link.');
+        }
+
+        await connection.commit();
+        console.log("Master Admin ensured successfully.");
+
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error("Failed to ensure Master Admin:", error.message);
+    } finally {
+        if (connection) connection.release();
+    }
+};
 
 
 // --- Helper Functions ---
@@ -475,6 +544,7 @@ app.use('/api', apiRouter); // All routes here are protected
 // --- Server Start ---
 (async () => {
   await connectToDatabase();
+  await ensureMasterAdmin();
   app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     if (!isDbConnected) {
