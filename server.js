@@ -180,8 +180,8 @@ const authenticateToken = (req, res, next) => {
 
   if (token == null) return res.sendStatus(401);
 
-  // Use the secret from .env (or variable)
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  // Use process.env.JWT_SECRET directly to ensure we get the loaded value
+  jwt.verify(token, process.env.JWT_SECRET || JWT_SECRET, (err, user) => {
     if (err) {
       console.error('JWT Verification Error:', err.message);
       return res.sendStatus(403);
@@ -273,7 +273,7 @@ const handleDelete = (tableName) => async (req, res) => {
 
 // --- Route Definitions ---
 
-// 1. Auth Routes (Public)
+// 1. Auth Routes (Public & Protected Session)
 authRouter.post('/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) {
@@ -377,7 +377,8 @@ authRouter.post('/login', async (req, res) => {
         }
 
         // Gera o token JWT usando a SECRET do .env
-        const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+        const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
+        const token = jwt.sign({ userId: user.id, role: user.role }, currentSecret, { expiresIn: '1d' });
         
         // Log assíncrono
         logActivity(user.id, 'Login', 'Usuário logado com sucesso.').catch(console.error);
@@ -390,24 +391,9 @@ authRouter.post('/login', async (req, res) => {
     }
 });
 
-// 2. Other Public Routes
-publicRouter.get('/users', handleGet('users'));
-publicRouter.get('/settings', async (req, res) => {
-    try {
-        const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
-        if (rows && rows.length > 0) return res.json(rows[0]);
-        res.json(initialThemeSettings);
-    } catch (error) {
-        console.error('Error fetching settings, serving defaults:', error.message);
-        res.json(initialThemeSettings);
-    }
-});
-
-// 3. Protected API Routes
-apiRouter.use(authenticateToken);
-
-// NEW: Endpoint to validate session and return current user details
-apiRouter.get('/auth/validate', async (req, res) => {
+// Endpoint to validate session and return current user details
+// Located at /api/auth/session, protected by authenticateToken
+authRouter.get('/session', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.userId;
         const [users] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
@@ -436,6 +422,22 @@ apiRouter.get('/auth/validate', async (req, res) => {
         res.status(500).json({ message: 'Failed to validate session.' });
     }
 });
+
+// 2. Other Public Routes
+publicRouter.get('/users', handleGet('users'));
+publicRouter.get('/settings', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
+        if (rows && rows.length > 0) return res.json(rows[0]);
+        res.json(initialThemeSettings);
+    } catch (error) {
+        console.error('Error fetching settings, serving defaults:', error.message);
+        res.json(initialThemeSettings);
+    }
+});
+
+// 3. Protected API Routes
+apiRouter.use(authenticateToken);
 
 // Simple GET routes
 apiRouter.get('/students', handleGet('students'));
