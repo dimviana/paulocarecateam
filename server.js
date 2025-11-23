@@ -225,11 +225,6 @@ const initialThemeSettings = {
   systemVersion: '1.0.0',
 };
 
-// --- API Routers ---
-const authRouter = express.Router();
-const publicRouter = express.Router();
-const apiRouter = express.Router(); // This will be the protected router
-
 // --- Generic API Handlers ---
 const handleGet = (tableName) => async (req, res) => {
     try {
@@ -271,192 +266,6 @@ const handleDelete = (tableName) => async (req, res) => {
     }
 };
 
-// --- Route Definitions ---
-
-// 1. Auth Routes (Public & Protected Session)
-authRouter.post('/register', async (req, res) => {
-    const { name, address, responsible, responsibleRegistration, email, password } = req.body;
-    if (!name || !responsible || !email || !password) {
-        return res.status(400).json({ message: 'Missing required fields for registration.' });
-    }
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-        const academyId = uuidv4();
-        const userId = uuidv4();
-        const hashedPassword = await bcrypt.hash(password, 10);
-        
-        await connection.query('INSERT INTO academies (id, name, address, responsible, responsibleRegistration, email, password) VALUES (?, ?, ?, ?, ?, ?, ?)', [academyId, name, address, responsible, responsibleRegistration, email, hashedPassword]);
-        await connection.query('INSERT INTO users (id, name, email, role, academyId, birthDate) VALUES (?, ?, ?, ?, ?, ?)', [userId, responsible, email, 'academy_admin', academyId, req.body.birthDate || null]);
-        
-        await logActivity(userId, 'Academy Registration', `Academy "${name}" registered.`);
-        await connection.commit();
-        const [newAcademy] = await db.query('SELECT * FROM academies WHERE id = ?', [academyId]);
-        res.status(201).json(newAcademy[0]);
-    } catch (error) {
-        await connection.rollback();
-        if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Email or another unique field already exists.' });
-        res.status(500).json({ message: 'Failed to register academy.' });
-    } finally {
-        connection.release();
-    }
-});
-
-authRouter.post('/login', async (req, res) => {
-    const { emailOrCpf, pass } = req.body;
-    if (!emailOrCpf || !pass) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
-
-    try {
-        let user = null;
-        let role = '';
-        let userId = '';
-
-        // 1. TENTATIVA: Login de Administrador (Consulta Direta na Tabela ACADEMIES)
-        const [academies] = await db.query('SELECT * FROM academies WHERE email = ?', [emailOrCpf]);
-        
-        if (academies.length > 0) {
-            const academy = academies[0];
-            const match = await bcrypt.compare(pass, academy.password);
-            
-            if (match) {
-                // Senha correta na tabela de academias.
-                // Agora buscamos o usuário vinculado para manter consistência de ID/Role
-                const [users] = await db.query('SELECT * FROM users WHERE academyId = ?', [academy.id]);
-                
-                if (users.length > 0) {
-                    user = users[0];
-                } else {
-                    // Fallback de segurança: se a tabela users estiver dessincronizada,
-                    // criamos um objeto de usuário baseado na academia para permitir o login.
-                    user = {
-                        id: academy.id, // Usa o ID da academia temporariamente
-                        role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin',
-                        name: academy.name
-                    };
-                }
-            }
-        }
-
-        // 2. TENTATIVA: Login de Aluno (Tabela STUDENTS)
-        // Se não logou como admin/academia, tenta como aluno
-        if (!user) {
-            const isEmail = String(emailOrCpf).includes('@');
-            let studentQuery = '';
-            let studentParams = [];
-
-            if (isEmail) {
-                studentQuery = 'SELECT * FROM students WHERE email = ?';
-                studentParams = [emailOrCpf];
-            } else {
-                // Tratamento de CPF (remove caracteres não numéricos)
-                const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
-                studentQuery = 'SELECT * FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?';
-                studentParams = [emailOrCpf, sanitizedCpf];
-            }
-
-            const [students] = await db.query(studentQuery, studentParams);
-            
-            if (students.length > 0) {
-                const student = students[0];
-                if (student.password) { // Alunos podem não ter senha definida inicialmente
-                    const match = await bcrypt.compare(pass, student.password);
-                    if (match) {
-                        const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
-                        if (users.length > 0) {
-                            user = users[0];
-                        } else {
-                            user = { id: student.id, role: 'student', name: student.name };
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!user) {
-            return res.status(401).json({ message: 'Credenciais inválidas ou usuário não encontrado.' });
-        }
-
-        // Gera o token JWT usando a SECRET do .env
-        const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
-        const token = jwt.sign({ userId: user.id, role: user.role }, currentSecret, { expiresIn: '1d' });
-        
-        // Log assíncrono
-        logActivity(user.id, 'Login', 'Usuário logado com sucesso.').catch(console.error);
-        
-        res.json({ token });
-
-    } catch (error) {
-        console.error('Login Error:', error);
-        res.status(500).json({ message: 'Erro interno no servidor durante o login.', error: error.message });
-    }
-});
-
-// Endpoint to validate session and return current user details
-// Located at /api/auth/session, protected by authenticateToken
-authRouter.get('/session', authenticateToken, async (req, res) => {
-    try {
-        const userId = req.user.userId;
-        const [users] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
-        
-        if (users.length > 0) {
-            return res.json(users[0]);
-        }
-        
-        // Fallback for Academies logged in without synced user record
-        const [academies] = await db.query('SELECT * FROM academies WHERE id = ?', [userId]);
-        if (academies.length > 0) {
-             const academy = academies[0];
-             return res.json({
-                id: academy.id,
-                role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin',
-                name: academy.name,
-                academyId: academy.id
-            });
-        }
-
-        // If not found in users or academies, token payload is stale/invalid
-        return res.status(401).json({ message: 'User not found.' });
-
-    } catch (error) {
-        console.error("Validate Session Error:", error);
-        res.status(500).json({ message: 'Failed to validate session.' });
-    }
-});
-
-// 2. Other Public Routes
-publicRouter.get('/users', handleGet('users'));
-publicRouter.get('/settings', async (req, res) => {
-    try {
-        const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
-        if (rows && rows.length > 0) return res.json(rows[0]);
-        res.json(initialThemeSettings);
-    } catch (error) {
-        console.error('Error fetching settings, serving defaults:', error.message);
-        res.json(initialThemeSettings);
-    }
-});
-
-// 3. Protected API Routes
-apiRouter.use(authenticateToken);
-
-// Simple GET routes
-apiRouter.get('/students', handleGet('students'));
-apiRouter.get('/academies', handleGet('academies'));
-apiRouter.get('/news', handleGet('news_articles'));
-apiRouter.get('/graduations', handleGet('graduations'));
-apiRouter.get('/schedules', handleGet('class_schedules'));
-apiRouter.get('/attendance', handleGet('attendance_records'));
-apiRouter.get('/professors', handleGet('professors'));
-apiRouter.get('/logs', handleGet('activity_logs'));
-
-// Simple DELETE routes
-apiRouter.delete('/academies/:id', handleDelete('academies'));
-apiRouter.delete('/graduations/:id', handleDelete('graduations'));
-apiRouter.delete('/schedules/:id', handleDelete('schedules'));
-apiRouter.delete('/attendance/:id', handleDelete('attendance_records'));
-apiRouter.delete('/professors/:id', handleDelete('professors'));
-
-// Complex CRUD and Special Routes
 const handleSave = (tableName, fields) => async (req, res) => {
     const data = req.body;
     const isNew = !data.id;
@@ -488,6 +297,151 @@ const handleSave = (tableName, fields) => async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: `Failed to save to ${tableName}`, error: error.message }); } finally { connection.release(); }
 };
 
+// --- Main API Router Configuration ---
+const apiRouter = express.Router();
+
+// 1. PUBLIC ROUTES (No Authentication Required)
+// ============================================
+
+// Auth: Register Academy
+apiRouter.post('/auth/register', async (req, res) => {
+    const { name, address, responsible, responsibleRegistration, email, password } = req.body;
+    if (!name || !responsible || !email || !password) {
+        return res.status(400).json({ message: 'Missing required fields for registration.' });
+    }
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        const academyId = uuidv4();
+        const userId = uuidv4();
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        await connection.query('INSERT INTO academies (id, name, address, responsible, responsibleRegistration, email, password) VALUES (?, ?, ?, ?, ?, ?, ?)', [academyId, name, address, responsible, responsibleRegistration, email, hashedPassword]);
+        await connection.query('INSERT INTO users (id, name, email, role, academyId, birthDate) VALUES (?, ?, ?, ?, ?, ?)', [userId, responsible, email, 'academy_admin', academyId, req.body.birthDate || null]);
+        
+        await logActivity(userId, 'Academy Registration', `Academy "${name}" registered.`);
+        await connection.commit();
+        const [newAcademy] = await db.query('SELECT * FROM academies WHERE id = ?', [academyId]);
+        res.status(201).json(newAcademy[0]);
+    } catch (error) {
+        await connection.rollback();
+        if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Email or another unique field already exists.' });
+        res.status(500).json({ message: 'Failed to register academy.' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Auth: Login
+apiRouter.post('/auth/login', async (req, res) => {
+    const { emailOrCpf, pass } = req.body;
+    if (!emailOrCpf || !pass) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
+
+    try {
+        let user = null;
+        
+        // 1. Try Admin Login (Academies Table)
+        const [academies] = await db.query('SELECT * FROM academies WHERE email = ?', [emailOrCpf]);
+        if (academies.length > 0) {
+            const academy = academies[0];
+            if (await bcrypt.compare(pass, academy.password)) {
+                const [users] = await db.query('SELECT * FROM users WHERE academyId = ?', [academy.id]);
+                if (users.length > 0) {
+                    user = users[0];
+                } else {
+                    user = { id: academy.id, role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin', name: academy.name };
+                }
+            }
+        }
+
+        // 2. Try Student Login (Students Table)
+        if (!user) {
+            const isEmail = String(emailOrCpf).includes('@');
+            const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
+            const query = isEmail ? 'SELECT * FROM students WHERE email = ?' : 'SELECT * FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?';
+            const params = isEmail ? [emailOrCpf] : [emailOrCpf, sanitizedCpf];
+            
+            const [students] = await db.query(query, params);
+            if (students.length > 0) {
+                const student = students[0];
+                if (student.password && await bcrypt.compare(pass, student.password)) {
+                    const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
+                    user = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name };
+                }
+            }
+        }
+
+        if (!user) return res.status(401).json({ message: 'Credenciais inválidas ou usuário não encontrado.' });
+
+        const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
+        const token = jwt.sign({ userId: user.id, role: user.role }, currentSecret, { expiresIn: '1d' });
+        logActivity(user.id, 'Login', 'Usuário logado com sucesso.').catch(console.error);
+        res.json({ token });
+    } catch (error) {
+        console.error('Login Error:', error);
+        res.status(500).json({ message: 'Erro interno no servidor durante o login.', error: error.message });
+    }
+});
+
+// Public Data Routes
+apiRouter.get('/users', handleGet('users'));
+apiRouter.get('/settings', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
+        if (rows && rows.length > 0) return res.json(rows[0]);
+        res.json(initialThemeSettings);
+    } catch (error) {
+        res.json(initialThemeSettings);
+    }
+});
+
+// 2. PROTECTED ROUTES (Require Authentication)
+// ============================================
+
+// Special Case: Session Validation (Protected but needs explicit auth on route due to router structure)
+apiRouter.get('/auth/session', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const [users] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
+        if (users.length > 0) return res.json(users[0]);
+        
+        const [academies] = await db.query('SELECT * FROM academies WHERE id = ?', [userId]);
+        if (academies.length > 0) {
+             const academy = academies[0];
+             return res.json({
+                id: academy.id,
+                role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin',
+                name: academy.name,
+                academyId: academy.id
+            });
+        }
+        return res.status(401).json({ message: 'User not found.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to validate session.' });
+    }
+});
+
+// Global Auth Middleware for all subsequent routes
+apiRouter.use(authenticateToken);
+
+// Simple GET
+apiRouter.get('/students', handleGet('students'));
+apiRouter.get('/academies', handleGet('academies'));
+apiRouter.get('/news', handleGet('news_articles'));
+apiRouter.get('/graduations', handleGet('graduations'));
+apiRouter.get('/schedules', handleGet('class_schedules'));
+apiRouter.get('/attendance', handleGet('attendance_records'));
+apiRouter.get('/professors', handleGet('professors'));
+apiRouter.get('/logs', handleGet('activity_logs'));
+
+// Simple DELETE
+apiRouter.delete('/academies/:id', handleDelete('academies'));
+apiRouter.delete('/graduations/:id', handleDelete('graduations'));
+apiRouter.delete('/schedules/:id', handleDelete('schedules'));
+apiRouter.delete('/attendance/:id', handleDelete('attendance_records'));
+apiRouter.delete('/professors/:id', handleDelete('professors'));
+
+// Complex Operations
 apiRouter.post('/students', async (req, res) => {
     const data = req.body;
     const studentId = uuidv4();
@@ -555,7 +509,6 @@ apiRouter.post('/students/:studentId/payment', async (req, res) => {
         res.status(200).json(student);
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to update payment status", error: error.message }); } finally { connection.release(); }
 });
-
 apiRouter.post('/academies', handleSave('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
 apiRouter.put('/academies/:id', handleSave('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
 apiRouter.post('/professors', handleSave('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
@@ -610,12 +563,15 @@ apiRouter.put('/settings', async (req, res) => {
     }
 });
 
+// --- MOUNT API ROUTER ---
+app.use('/api', apiRouter);
 
-// --- Register Routers with the main app ---
-app.use('/api/auth', authRouter);
-app.use('/api', publicRouter);
-app.use('/api', apiRouter); // All routes here are protected
-
+// --- 404 HANDLER FOR API ---
+// This ensures that if a request hits the backend but matches no route, we return JSON, not HTML.
+app.use('/api/*', (req, res) => {
+    console.warn(`404 Not Found: ${req.method} ${req.originalUrl}`);
+    res.status(404).json({ message: `API endpoint not found: ${req.method} ${req.originalUrl}` });
+});
 
 // --- Server Start ---
 (async () => {
