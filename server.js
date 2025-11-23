@@ -27,13 +27,13 @@
  */
 
 // --- Dependencies (CommonJS Syntax) ---
+require('dotenv').config(); // Automatically loads .env file at the VERY START
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-require('dotenv').config(); // Automatically loads .env file
 
 // --- Environment Variables ---
 const {
@@ -41,6 +41,10 @@ const {
   JWT_SECRET,
   PORT = 3001
 } = process.env;
+
+if (!JWT_SECRET) {
+    console.warn("WARNING: JWT_SECRET not found in .env. Using unsafe default for development only.");
+}
 
 // --- Express App Initialization ---
 const app = express();
@@ -176,6 +180,7 @@ const authenticateToken = (req, res, next) => {
 
   if (token == null) return res.sendStatus(401);
 
+  // Use the secret from .env (or variable)
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
       console.error('JWT Verification Error:', err.message);
@@ -371,7 +376,7 @@ authRouter.post('/login', async (req, res) => {
             return res.status(401).json({ message: 'Credenciais inválidas ou usuário não encontrado.' });
         }
 
-        // Gera o token JWT
+        // Gera o token JWT usando a SECRET do .env
         const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
         
         // Log assíncrono
@@ -400,6 +405,37 @@ publicRouter.get('/settings', async (req, res) => {
 
 // 3. Protected API Routes
 apiRouter.use(authenticateToken);
+
+// NEW: Endpoint to validate session and return current user details
+apiRouter.get('/auth/validate', async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const [users] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
+        
+        if (users.length > 0) {
+            return res.json(users[0]);
+        }
+        
+        // Fallback for Academies logged in without synced user record
+        const [academies] = await db.query('SELECT * FROM academies WHERE id = ?', [userId]);
+        if (academies.length > 0) {
+             const academy = academies[0];
+             return res.json({
+                id: academy.id,
+                role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin',
+                name: academy.name,
+                academyId: academy.id
+            });
+        }
+
+        // If not found in users or academies, token payload is stale/invalid
+        return res.status(401).json({ message: 'User not found.' });
+
+    } catch (error) {
+        console.error("Validate Session Error:", error);
+        res.status(500).json({ message: 'Failed to validate session.' });
+    }
+});
 
 // Simple GET routes
 apiRouter.get('/students', handleGet('students'));

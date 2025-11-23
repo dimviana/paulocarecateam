@@ -165,26 +165,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
             const token = localStorage.getItem('authToken');
             if (token) {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                if (payload.exp * 1000 < Date.now()) {
-                    logout();
-                } else {
-                    await refetchData(); // This fetches users, students etc.
-                    const allUsers = await api.getUsers(); // Re-fetch to be sure, context state updates can be tricky.
-                    setUsers(allUsers);
-                    const loggedInUser = allUsers.find(u => u.id === payload.userId);
-                    if (loggedInUser) {
-                        setUser(loggedInUser);
-                    } else {
-                        logout();
-                    }
+                // Try to validate the session with the backend using the secret stored there
+                try {
+                  const validatedUser = await api.validateSession();
+                  setUser(validatedUser);
+                  await refetchData(); // Fetch the rest of the app data
+                } catch (validationError) {
+                  console.warn("Session validation failed:", validationError);
+                  logout(); // Token is invalid or expired
                 }
             }
         } catch (error) {
             handleApiError(error, 'initializeApp');
-            if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
-                logout();
-            }
         } finally {
             setLoading(false);
         }
@@ -200,15 +192,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const { token } = await api.login(email, password);
       if (token) {
         localStorage.setItem('authToken', token);
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const allUsers = await api.getUsers();
-        setUsers(allUsers);
-        const loggedInUser = allUsers.find(u => u.id === payload.userId);
-        if (loggedInUser) {
-          setUser(loggedInUser);
-          await refetchData();
-          return true;
-        }
+        // Validating immediately after login to ensure user object is correct
+        const validatedUser = await api.validateSession();
+        setUser(validatedUser);
+        await refetchData();
+        return true;
       }
       return false;
     } catch (error) {

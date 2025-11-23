@@ -53,6 +53,9 @@ export const api = {
     });
   },
 
+  // Validates the current token with the backend and returns the User object if valid
+  validateSession: (): Promise<User> => fetchWrapper<User>('/auth/validate'),
+
   registerAcademy: (data: { 
     name: string; 
     address: string;
