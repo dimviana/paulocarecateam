@@ -200,8 +200,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       return false;
     } catch (error) {
-      if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('Invalid credentials') || error.message.includes('Please provide username and password'))) {
-        console.error("Authentication failed:", error.message);
+      if (error instanceof Error) {
+          // Suppress notification for expected auth errors and 404s (handled by UI)
+          if (
+            error.message.includes('401') || 
+            error.message.includes('Unauthorized') || 
+            error.message.includes('Invalid credentials') || 
+            error.message.includes('Please provide username and password') ||
+            error.message.includes('Usuário não encontrado') ||
+            error.message.includes('USER_NOT_FOUND') ||
+            error.message.includes('404')
+          ) {
+            console.warn("Authentication failed (Expected):", error.message);
+          } else {
+            handleApiError(error, 'login');
+          }
       } else {
         handleApiError(error, 'login');
       }

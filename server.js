@@ -334,7 +334,10 @@ apiRouter.post('/auth/register', async (req, res) => {
 
 // Auth: Login
 apiRouter.post('/auth/login', async (req, res) => {
-    const { emailOrCpf, pass } = req.body;
+    // Robust check for parameters (accepting both naming conventions)
+    const emailOrCpf = req.body.emailOrCpf || req.body.email;
+    const pass = req.body.pass || req.body.password;
+
     if (!emailOrCpf || !pass) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
 
     try {
@@ -399,6 +402,7 @@ apiRouter.post('/auth/login', async (req, res) => {
         }
 
         if (!exists) {
+            // The message must be EXACTLY this for the frontend to detect 404 correctly.
             return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
         }
 
