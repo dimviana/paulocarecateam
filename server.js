@@ -48,6 +48,7 @@ if (!JWT_SECRET) {
 
 // --- Express App Initialization ---
 const app = express();
+const apiRouter = express.Router(); // Create router instance early
 
 // --- Middleware ---
 app.use(cors());
@@ -297,8 +298,7 @@ const handleSave = (tableName, fields) => async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: `Failed to save to ${tableName}`, error: error.message }); } finally { connection.release(); }
 };
 
-// --- Main API Router Configuration ---
-const apiRouter = express.Router();
+// --- API Routes ---
 
 // 1. PUBLIC ROUTES (No Authentication Required)
 // ============================================
@@ -339,6 +339,7 @@ apiRouter.post('/auth/login', async (req, res) => {
 
     try {
         let user = null;
+        let loginSuccessful = false;
         
         // 1. Try Admin Login (Academies Table)
         const [academies] = await db.query('SELECT * FROM academies WHERE email = ?', [emailOrCpf]);
@@ -351,11 +352,12 @@ apiRouter.post('/auth/login', async (req, res) => {
                 } else {
                     user = { id: academy.id, role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin', name: academy.name };
                 }
+                loginSuccessful = true;
             }
         }
 
         // 2. Try Student Login (Students Table)
-        if (!user) {
+        if (!loginSuccessful) {
             const isEmail = String(emailOrCpf).includes('@');
             const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
             const query = isEmail ? 'SELECT * FROM students WHERE email = ?' : 'SELECT * FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?';
@@ -367,16 +369,41 @@ apiRouter.post('/auth/login', async (req, res) => {
                 if (student.password && await bcrypt.compare(pass, student.password)) {
                     const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
                     user = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name };
+                    loginSuccessful = true;
                 }
             }
         }
 
-        if (!user) return res.status(401).json({ message: 'Credenciais inválidas ou usuário não encontrado.' });
+        if (loginSuccessful && user) {
+            const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
+            const token = jwt.sign({ userId: user.id, role: user.role }, currentSecret, { expiresIn: '1d' });
+            logActivity(user.id, 'Login', 'Usuário logado com sucesso.').catch(console.error);
+            return res.json({ token });
+        }
 
-        const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
-        const token = jwt.sign({ userId: user.id, role: user.role }, currentSecret, { expiresIn: '1d' });
-        logActivity(user.id, 'Login', 'Usuário logado com sucesso.').catch(console.error);
-        res.json({ token });
+        // If login failed, check if the user exists at all to return a specific error (404 vs 401)
+        // This helps the frontend decide whether to prompt for registration.
+        let exists = false;
+        // Check academy email
+        const [checkAcademies] = await db.query('SELECT id FROM academies WHERE email = ?', [emailOrCpf]);
+        if (checkAcademies.length > 0) exists = true;
+
+        // Check student email/cpf
+        if (!exists) {
+             const isEmail = String(emailOrCpf).includes('@');
+             const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
+             const query = isEmail ? 'SELECT id FROM students WHERE email = ?' : 'SELECT id FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?';
+             const params = isEmail ? [emailOrCpf] : [emailOrCpf, sanitizedCpf];
+             const [checkStudents] = await db.query(query, params);
+             if (checkStudents.length > 0) exists = true;
+        }
+
+        if (!exists) {
+            return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
+        }
+
+        return res.status(401).json({ message: 'Senha incorreta.' });
+
     } catch (error) {
         console.error('Login Error:', error);
         res.status(500).json({ message: 'Erro interno no servidor durante o login.', error: error.message });

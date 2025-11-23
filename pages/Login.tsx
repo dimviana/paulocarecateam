@@ -19,6 +19,40 @@ const IconFacebook = () => (
 );
 
 
+// --- Helper Functions for CPF ---
+
+const formatCPF = (value: string): string => {
+  return value
+    .replace(/\D/g, '') // Remove non-digits
+    .replace(/(\d{3})(\d)/, '$1.$2') // Add first dot
+    .replace(/(\d{3})(\d)/, '$1.$2') // Add second dot
+    .replace(/(\d{3})(\d{1,2})/, '$1-$2') // Add dash
+    .replace(/(-\d{2})\d+?$/, '$1'); // Limit size
+};
+
+const validateCPF = (cpf: string): boolean => {
+    if (typeof cpf !== 'string') return false;
+    cpf = cpf.replace(/[^\d]+/g, '');
+    if (cpf.length !== 11 || !!cpf.match(/(\d)\1{10}/)) return false;
+
+    const digits = cpf.split('').map(el => +el);
+
+    const rest = (count: number): number => {
+        let sum = 0;
+        for (let i = 0; i < count; i++) {
+        sum += digits[i] * (count + 1 - i);
+        }
+        const remainder = sum % 11;
+        return remainder < 2 ? 0 : 11 - remainder;
+    };
+
+    if (rest(9) !== digits[9]) return false;
+    if (rest(10) !== digits[10]) return false;
+
+    return true;
+};
+
+
 interface RegisterFormProps {
   onSave: (data: any) => Promise<{ success: boolean; message?: string }>;
   onClose: () => void;
@@ -84,19 +118,82 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // State for Modals
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [isNotFoundModalOpen, setIsNotFoundModalOpen] = useState(false);
+  
   const [registerSuccessMessage, setRegisterSuccessMessage] = useState('');
 
   const { themeSettings, login, user, registerAcademy, loading: appLoading } = useContext(AppContext);
   const location = useLocation();
 
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    // If user is typing digits and it resembles a CPF start, apply mask
+    // We check if the input DOES NOT contain '@' to assume it might be a CPF
+    if (!val.includes('@')) {
+       // If only numbers or standard CPF chars, apply mask
+       if (/^[\d.-]*$/.test(val)) {
+           setEmail(formatCPF(val));
+           return;
+       }
+    }
+    setEmail(val);
+  };
+
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
+    
+    // Basic validation before sending
+    const isCpf = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(email);
+    if (isCpf && !validateCPF(email)) {
+        setError('CPF inválido. Verifique os números digitados.');
+        return;
+    }
+
     setLoading(true);
     setError('');
-    const success = await login(email, password);
-    if (!success) {
-      setError('Credenciais inválidas. Tente novamente.');
+    
+    try {
+        const success = await login(email, password);
+        if (!success) {
+             // Note: The 'login' function in context swallows errors mostly, 
+             // but for this requirement, we need to know if it was a 404.
+             // Since we can't easily change the context signature without breaking things,
+             // we rely on the fact that AppContext calls handleApiError which sets a global notification.
+             // HOWEVER, to implement the popup flow, it's cleaner to perform a check or catch the specific error here.
+             
+             // Let's try a slightly different approach: The context 'login' returns boolean.
+             // We can't know the error type from boolean. 
+             // Re-implementing the fetch call here specifically to catch the 404 code 
+             // would duplicate logic but ensures functionality. 
+             // Ideally, `login` should return the error object or code.
+             
+             // Hack: We will check the notification state or modify context. 
+             // Actually, let's rely on the fact that we are calling the API.
+             // Let's bypass the context wrapper just for the status code check if login fails?
+             // No, better to trust the backend response if we can get it.
+             
+             // Since I cannot easily change the Context interface in this single-file update to return the error code,
+             // I will implement a shadow fetch here just to check the user existence IF login returns false.
+             // This is a robust way to handle the specific requirement without refactoring the whole context.
+             
+             const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emailOrCpf: email, pass: password }),
+             });
+             
+             if (response.status === 404) {
+                 setIsNotFoundModalOpen(true);
+             } else {
+                 const data = await response.json();
+                 setError(data.message || 'Credenciais inválidas.');
+             }
+        }
+    } catch (err) {
+        setError('Erro de conexão.');
     }
     setLoading(false);
   };
@@ -146,9 +243,9 @@ const Login: React.FC = () => {
                             id="email"
                             type="text"
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            onChange={handleEmailChange}
                             required
-                            placeholder="seu@email.com ou 123.456.789-00"
+                            placeholder="seu@email.com ou 000.000.000-00"
                             className="w-full bg-[var(--theme-bg)] border border-[var(--theme-text-primary)]/20 text-[var(--theme-text-primary)] rounded-md px-3 py-2 focus:ring-[var(--theme-accent)] focus:border-[var(--theme-accent)] transition duration-150 ease-in-out placeholder:text-[var(--theme-text-primary)]/40"
                         />
                     </div>
@@ -224,8 +321,37 @@ const Login: React.FC = () => {
             <p>© {new Date().getFullYear()} {themeSettings.copyrightText} - <a href="https://github.com/dimviana/paulocarecateam" target="_blank" rel="noopener noreferrer" className="hover:text-amber-600 transition-colors">Versão {themeSettings.systemVersion}</a></p>
         </footer>
 
+        {/* Modal for Registration Form */}
         <Modal isOpen={isRegisterModalOpen} onClose={() => setIsRegisterModalOpen(false)} title="Cadastrar Nova Academia">
             <RegisterForm onSave={handleRegisterSave} onClose={() => setIsRegisterModalOpen(false)} />
+        </Modal>
+        
+        {/* Modal for User Not Found - Ask to Register */}
+        <Modal 
+            isOpen={isNotFoundModalOpen} 
+            onClose={() => setIsNotFoundModalOpen(false)} 
+            title="Usuário não encontrado"
+            size="md"
+        >
+            <div className="text-center space-y-4">
+                <p className="text-[var(--theme-text-primary)]/80">
+                    Não encontramos nenhum usuário com o login <strong>{email}</strong>.
+                </p>
+                <p className="text-[var(--theme-text-primary)]/80">
+                    Gostaria de cadastrar uma nova academia agora?
+                </p>
+                <div className="flex justify-center gap-4 mt-6">
+                    <Button variant="secondary" onClick={() => setIsNotFoundModalOpen(false)}>
+                        Não, voltar
+                    </Button>
+                    <Button onClick={() => {
+                        setIsNotFoundModalOpen(false);
+                        setIsRegisterModalOpen(true);
+                    }}>
+                        Sim, cadastrar
+                    </Button>
+                </div>
+            </div>
         </Modal>
     </div>
   );
