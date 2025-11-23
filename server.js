@@ -60,12 +60,6 @@ async function connectToDatabase() {
     }
     
     // When using a connection string (DATABASE_URL), pass it directly.
-    // To configure pool options like limit, we can append them to the URL or 
-    // we would need to parse the URL and merge options.
-    // For simplicity and robustness, we rely on the URL or defaults, 
-    // or we can assume the URL is correct and just create the pool.
-    // If specific pool settings are critical, consider parsing the URL.
-    
     const pool = mysql.createPool(DATABASE_URL);
     
     // Test connection
@@ -211,7 +205,7 @@ const initialThemeSettings = {
   theme: 'light',
   monthlyFeeAmount: 150,
   publicPageEnabled: true,
-  heroHtml: `...`, // Shortened for brevity in defaults, real fetch will get DB values
+  heroHtml: `...`, // Shortened for brevity in defaults
   aboutHtml: `...`,
   branchesHtml: `...`,
   footerHtml: `...`,
@@ -308,42 +302,86 @@ authRouter.post('/login', async (req, res) => {
     if (!emailOrCpf || !pass) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
 
     try {
-        const isEmail = String(emailOrCpf).includes('@');
-        let userQuery, userParams;
+        let user = null;
+        let role = '';
+        let userId = '';
 
-        if (isEmail) {
-            userQuery = 'SELECT * FROM users WHERE email = ?';
-            userParams = [emailOrCpf];
-        } else {
-            const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
-            userQuery = `SELECT u.* FROM users u JOIN students s ON u.studentId = s.id WHERE s.cpf = ? OR REPLACE(REPLACE(s.cpf, ".", ""), "-", "") = ?`;
-            userParams = [emailOrCpf, sanitizedCpf];
+        // 1. TENTATIVA: Login de Administrador (Consulta Direta na Tabela ACADEMIES)
+        const [academies] = await db.query('SELECT * FROM academies WHERE email = ?', [emailOrCpf]);
+        
+        if (academies.length > 0) {
+            const academy = academies[0];
+            const match = await bcrypt.compare(pass, academy.password);
+            
+            if (match) {
+                // Senha correta na tabela de academias.
+                // Agora buscamos o usuário vinculado para manter consistência de ID/Role
+                const [users] = await db.query('SELECT * FROM users WHERE academyId = ?', [academy.id]);
+                
+                if (users.length > 0) {
+                    user = users[0];
+                } else {
+                    // Fallback de segurança: se a tabela users estiver dessincronizada,
+                    // criamos um objeto de usuário baseado na academia para permitir o login.
+                    user = {
+                        id: academy.id, // Usa o ID da academia temporariamente
+                        role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin',
+                        name: academy.name
+                    };
+                }
+            }
         }
 
-        const [users] = await db.query(userQuery, userParams);
-        if (users.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
+        // 2. TENTATIVA: Login de Aluno (Tabela STUDENTS)
+        // Se não logou como admin/academia, tenta como aluno
+        if (!user) {
+            const isEmail = String(emailOrCpf).includes('@');
+            let studentQuery = '';
+            let studentParams = [];
 
-        const user = users[0];
-        let passwordHash = null;
+            if (isEmail) {
+                studentQuery = 'SELECT * FROM students WHERE email = ?';
+                studentParams = [emailOrCpf];
+            } else {
+                // Tratamento de CPF (remove caracteres não numéricos)
+                const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
+                studentQuery = 'SELECT * FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?';
+                studentParams = [emailOrCpf, sanitizedCpf];
+            }
 
-        if (user.role === 'student' && user.studentId) {
-            const [students] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
-            if (students.length > 0) passwordHash = students[0].password;
-        } else if ((user.role === 'academy_admin' || user.role === 'general_admin') && user.academyId) {
-            const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
-            if (academies.length > 0) passwordHash = academies[0].password;
+            const [students] = await db.query(studentQuery, studentParams);
+            
+            if (students.length > 0) {
+                const student = students[0];
+                if (student.password) { // Alunos podem não ter senha definida inicialmente
+                    const match = await bcrypt.compare(pass, student.password);
+                    if (match) {
+                        const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
+                        if (users.length > 0) {
+                            user = users[0];
+                        } else {
+                            user = { id: student.id, role: 'student', name: student.name };
+                        }
+                    }
+                }
+            }
         }
 
-        if (!passwordHash || !await bcrypt.compare(pass, passwordHash)) {
-            return res.status(401).json({ message: 'Senha incorreta.' });
+        if (!user) {
+            return res.status(401).json({ message: 'Credenciais inválidas ou usuário não encontrado.' });
         }
 
+        // Gera o token JWT
         const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
-        await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
+        
+        // Log assíncrono
+        logActivity(user.id, 'Login', 'Usuário logado com sucesso.').catch(console.error);
+        
         res.json({ token });
+
     } catch (error) {
         console.error('Login Error:', error);
-        res.status(500).json({ message: 'Erro no servidor durante o login.' });
+        res.status(500).json({ message: 'Erro interno no servidor durante o login.', error: error.message });
     }
 });
 
