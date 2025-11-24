@@ -207,6 +207,9 @@ const Login: React.FC = () => {
              
              if (response.status === 404) {
                  setIsNotFoundModalOpen(true);
+             } else if (response.ok) {
+                 // Login was successful at backend, but Context failed (likely Session Validation)
+                 setError('Login bem-sucedido, mas falha ao validar sessão. Verifique sua conexão.');
              } else {
                  const data = await response.json();
                  setError(data.message || 'Credenciais inválidas.');
