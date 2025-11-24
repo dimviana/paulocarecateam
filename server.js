@@ -27,8 +27,6 @@ const CURRENT_JWT_SECRET = process.env.JWT_SECRET || "ThisIsAStrongerAndBetterSe
 
 // --- Express App Initialization ---
 const app = express();
-const publicRouter = express.Router();
-const protectedRouter = express.Router();
 
 
 // --- Middleware ---
@@ -112,11 +110,18 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// =================================================================
-// PUBLIC API ROUTES (Defined on publicRouter)
-// =================================================================
 
-publicRouter.get('/settings', async (req, res) => {
+// =================================================================
+// --- Global Middleware Setup ---
+// =================================================================
+app.use('/api', checkDbConnection);
+
+
+// =================================================================
+// --- PUBLIC API ROUTES ---
+// These routes are accessible without authentication.
+// =================================================================
+app.get('/api/settings', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
         if (rows && rows.length > 0) return res.json(rows[0]);
@@ -127,7 +132,7 @@ publicRouter.get('/settings', async (req, res) => {
     }
 });
 
-publicRouter.post('/auth/login', async (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
     const { emailOrCpf, pass } = req.body;
 
     if (!emailOrCpf || !pass) {
@@ -185,7 +190,7 @@ publicRouter.post('/auth/login', async (req, res) => {
     }
 });
 
-publicRouter.post('/auth/refresh', async (req, res) => {
+app.post('/api/auth/refresh', async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(401).json({ message: "Refresh token não fornecido." });
 
@@ -211,7 +216,7 @@ publicRouter.post('/auth/refresh', async (req, res) => {
     }
 });
 
-publicRouter.post('/auth/register', async (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
     
@@ -244,10 +249,19 @@ publicRouter.post('/auth/register', async (req, res) => {
     }
 });
 
+
 // =================================================================
-// PROTECTED API ROUTER - All routes below require authentication
+// --- AUTHENTICATION GATEWAY ---
+// All subsequent /api routes defined below this line are protected.
 // =================================================================
-protectedRouter.use(authenticateToken);
+app.use('/api', authenticateToken);
+
+
+// =================================================================
+// --- PROTECTED API ROUTES ---
+// Organized in a router for clarity.
+// =================================================================
+const protectedRouter = express.Router();
 
 protectedRouter.post('/auth/logout', async (req, res) => {
     try {
@@ -554,9 +568,9 @@ protectedRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 
 protectedRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
 protectedRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
 
-// --- Mount Routers ---
-app.use('/api', checkDbConnection, publicRouter);
-app.use('/api', checkDbConnection, protectedRouter);
+// Mount the protected router under the /api path
+app.use('/api', protectedRouter);
+
 
 // --- 404 HANDLER FOR API ---
 app.use('/api/*', (req, res) => {
