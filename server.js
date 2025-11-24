@@ -28,7 +28,7 @@ const CURRENT_JWT_SECRET = process.env.JWT_SECRET || "ThisIsAStrongerAndBetterSe
 
 // --- Express App Initialization ---
 const app = express();
-const apiRouter = express.Router();
+const apiRouter = express.Router(); // This router will handle all PROTECTED routes
 
 
 // --- Middleware ---
@@ -115,10 +115,10 @@ const authenticateToken = (req, res, next) => {
 };
 
 // =================================================================
-// PUBLIC API ROUTES (Defined BEFORE authentication middleware)
+// PUBLIC API ROUTES (Defined directly on the app object)
 // =================================================================
 
-apiRouter.get('/settings', async (req, res) => {
+app.get('/api/settings', checkDbConnection, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
         if (rows && rows.length > 0) return res.json(rows[0]);
@@ -129,7 +129,7 @@ apiRouter.get('/settings', async (req, res) => {
     }
 });
 
-apiRouter.post('/auth/login', async (req, res) => {
+app.post('/api/auth/login', checkDbConnection, async (req, res) => {
     const { emailOrCpf, pass } = req.body;
 
     if (!emailOrCpf || !pass) {
@@ -189,7 +189,7 @@ apiRouter.post('/auth/login', async (req, res) => {
     }
 });
 
-apiRouter.post('/auth/refresh', async (req, res) => {
+app.post('/api/auth/refresh', checkDbConnection, async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(401).json({ message: "Refresh token não fornecido." });
 
@@ -216,8 +216,7 @@ apiRouter.post('/auth/refresh', async (req, res) => {
     }
 });
 
-
-apiRouter.post('/auth/register', async (req, res) => {
+app.post('/api/auth/register', checkDbConnection, async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
     
@@ -251,15 +250,9 @@ apiRouter.post('/auth/register', async (req, res) => {
 });
 
 // =================================================================
-// APPLY AUTHENTICATION MIDDLEWARE
-// All routes defined below this line are protected
+// PROTECTED API ROUTER - All routes below require authentication
 // =================================================================
-
-apiRouter.use(authenticateToken);
-
-// =================================================================
-// PROTECTED API ROUTES
-// =================================================================
+apiRouter.use(authenticateToken); // Apply auth middleware to all routes on this router
 
 apiRouter.post('/auth/logout', async (req, res) => {
     try {
@@ -581,7 +574,7 @@ apiRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 'minTi
 apiRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
 apiRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
 
-// --- Mount API Router ---
+// --- Mount PROTECTED API Router ---
 app.use('/api', checkDbConnection, apiRouter);
 
 
