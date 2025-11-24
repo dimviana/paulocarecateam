@@ -22,13 +22,13 @@ const {
 if (!JWT_SECRET) {
     console.warn("WARNING: JWT_SECRET not found in .env. Using unsafe default for development only.");
 }
-// FIX: Replaced the JWT-formatted secret with a proper, strong string secret to ensure token validation works correctly.
 const CURRENT_JWT_SECRET = process.env.JWT_SECRET || "ThisIsAStrongerAndBetterSecretForJWT-JiuJitsuHub-2024";
 
 
 // --- Express App Initialization ---
 const app = express();
-const apiRouter = express.Router(); // This router will handle all PROTECTED routes
+const publicRouter = express.Router();
+const protectedRouter = express.Router();
 
 
 // --- Middleware ---
@@ -44,7 +44,6 @@ async function connectToDatabase() {
     if (!DATABASE_URL) {
       throw new Error("FATAL: DATABASE_URL environment variable is not defined. Please check your .env file.");
     }
-    // Check for a placeholder value to prevent common setup errors.
     if (DATABASE_URL.includes("@[HOST]:[PORTA]/[NOME_DO_BANCO]")) {
         throw new Error("FATAL: DATABASE_URL is using placeholder values. Please update your .env file with real database credentials.");
     }
@@ -64,7 +63,6 @@ async function connectToDatabase() {
     console.error('2. The database server is not running or is inaccessible from the app server.');
     console.error('3. The database user, password, or database name are incorrect.');
     isDbConnected = false;
-    // We exit here because the app is useless without a DB. PM2 will handle restarts.
     process.exit(1);
   }
 }
@@ -115,10 +113,10 @@ const authenticateToken = (req, res, next) => {
 };
 
 // =================================================================
-// PUBLIC API ROUTES (Defined directly on the app object)
+// PUBLIC API ROUTES (Defined on publicRouter)
 // =================================================================
 
-app.get('/api/settings', checkDbConnection, async (req, res) => {
+publicRouter.get('/settings', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
         if (rows && rows.length > 0) return res.json(rows[0]);
@@ -129,7 +127,7 @@ app.get('/api/settings', checkDbConnection, async (req, res) => {
     }
 });
 
-app.post('/api/auth/login', checkDbConnection, async (req, res) => {
+publicRouter.post('/auth/login', async (req, res) => {
     const { emailOrCpf, pass } = req.body;
 
     if (!emailOrCpf || !pass) {
@@ -173,11 +171,9 @@ app.post('/api/auth/login', checkDbConnection, async (req, res) => {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
-        // Generate Tokens
         const accessToken = jwt.sign({ userId: user.id, role: user.role }, CURRENT_JWT_SECRET, { expiresIn: '15m' });
         const refreshToken = jwt.sign({ userId: user.id }, CURRENT_JWT_SECRET, { expiresIn: '7d' });
         
-        // Store refresh token in DB
         await db.query('UPDATE users SET refreshToken = ? WHERE id = ?', [refreshToken, user.id]);
         
         await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
@@ -189,7 +185,7 @@ app.post('/api/auth/login', checkDbConnection, async (req, res) => {
     }
 });
 
-app.post('/api/auth/refresh', checkDbConnection, async (req, res) => {
+publicRouter.post('/auth/refresh', async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(401).json({ message: "Refresh token não fornecido." });
 
@@ -203,7 +199,6 @@ app.post('/api/auth/refresh', checkDbConnection, async (req, res) => {
 
         const user = users[0];
         
-        // Issue new tokens (token rotation)
         const newAccessToken = jwt.sign({ userId: user.id, role: user.role }, CURRENT_JWT_SECRET, { expiresIn: '15m' });
         const newRefreshToken = jwt.sign({ userId: user.id }, CURRENT_JWT_SECRET, { expiresIn: '7d' });
 
@@ -216,7 +211,7 @@ app.post('/api/auth/refresh', checkDbConnection, async (req, res) => {
     }
 });
 
-app.post('/api/auth/register', checkDbConnection, async (req, res) => {
+publicRouter.post('/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
     
@@ -252,9 +247,9 @@ app.post('/api/auth/register', checkDbConnection, async (req, res) => {
 // =================================================================
 // PROTECTED API ROUTER - All routes below require authentication
 // =================================================================
-apiRouter.use(authenticateToken); // Apply auth middleware to all routes on this router
+protectedRouter.use(authenticateToken);
 
-apiRouter.post('/auth/logout', async (req, res) => {
+protectedRouter.post('/auth/logout', async (req, res) => {
     try {
         const userId = req.user.userId;
         await db.query('UPDATE users SET refreshToken = NULL WHERE id = ?', [userId]);
@@ -266,7 +261,7 @@ apiRouter.post('/auth/logout', async (req, res) => {
     }
 });
 
-apiRouter.get('/auth/session', async (req, res) => {
+protectedRouter.get('/auth/session', async (req, res) => {
     try {
         const [users] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [req.user.userId]);
         if (users.length > 0) {
@@ -289,22 +284,19 @@ const genericGet = (tableName) => async (req, res) => {
     }
 };
 
-apiRouter.get('/users', genericGet('users'));
-apiRouter.get('/academies', genericGet('academies'));
-apiRouter.get('/graduations', genericGet('graduations'));
-apiRouter.get('/professors', genericGet('professors'));
-apiRouter.get('/logs', genericGet('activity_logs'));
-apiRouter.get('/attendance', genericGet('attendance_records'));
+protectedRouter.get('/users', genericGet('users'));
+protectedRouter.get('/graduations', genericGet('graduations'));
+protectedRouter.get('/professors', genericGet('professors'));
+protectedRouter.get('/logs', genericGet('activity_logs'));
+protectedRouter.get('/attendance', genericGet('attendance_records'));
 
-apiRouter.get('/students', async (req, res) => {
+protectedRouter.get('/students', async (req, res) => {
      try {
         const [students] = await db.query('SELECT * FROM students');
         const [payments] = await db.query('SELECT * FROM payment_history ORDER BY `date` DESC');
         
         const paymentsByStudent = payments.reduce((acc, payment) => {
-            if (!acc[payment.studentId]) {
-                acc[payment.studentId] = [];
-            }
+            if (!acc[payment.studentId]) acc[payment.studentId] = [];
             acc[payment.studentId].push(payment);
             return acc;
         }, {});
@@ -324,7 +316,7 @@ apiRouter.get('/students', async (req, res) => {
     }
 });
 
-apiRouter.post('/students', async (req, res) => {
+protectedRouter.post('/students', async (req, res) => {
     const data = req.body;
     if (!data.password) return res.status(400).json({ message: "Password is required for new students."});
     
@@ -343,7 +335,7 @@ apiRouter.post('/students', async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to create student", error: error.message }); } finally { connection.release(); }
 });
 
-apiRouter.put('/students/:id', async (req, res) => {
+protectedRouter.put('/students/:id', async (req, res) => {
     const { id } = req.params;
     const data = req.body;
     const connection = await db.getConnection();
@@ -369,7 +361,7 @@ apiRouter.put('/students/:id', async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to update student", error: error.message }); } finally { connection.release(); }
 });
 
-apiRouter.delete('/students/:id', async (req, res) => {
+protectedRouter.delete('/students/:id', async (req, res) => {
     const { id } = req.params;
     const connection = await db.getConnection();
     try {
@@ -379,22 +371,13 @@ apiRouter.delete('/students/:id', async (req, res) => {
         await connection.query('DELETE FROM users WHERE studentId = ?', [id]);
         const [result] = await connection.query('DELETE FROM students WHERE id = ?', [id]);
         await connection.commit();
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Student not found.' });
-        }
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Student not found.' });
         await logActivity(req.user.userId, 'Delete Student', `Deleted student with id ${id}`);
         res.status(204).send();
-    } catch (error) {
-        await connection.rollback();
-        console.error('Error deleting student:', error);
-        res.status(500).json({ message: "Failed to delete student", error: error.message });
-    } finally {
-        connection.release();
-    }
+    } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to delete student", error: error.message }); } finally { connection.release(); }
 });
 
-
-apiRouter.put('/settings', async (req, res) => {
+protectedRouter.put('/settings', async (req, res) => {
     const { id, ...settingsToUpdate } = req.body;
     try {
         const booleanFields = ['publicPageEnabled', 'useGradient', 'socialLoginEnabled'];
@@ -415,7 +398,7 @@ apiRouter.put('/settings', async (req, res) => {
     }
 });
 
-apiRouter.post('/students/:studentId/payment', async (req, res) => {
+protectedRouter.post('/students/:studentId/payment', async (req, res) => {
     const { studentId } = req.params;
     const { status, amount } = req.body;
     if (!['paid', 'unpaid'].includes(status)) return res.status(400).json({ message: "Invalid status." });
@@ -457,8 +440,22 @@ const simpleCrud = (tableName, fields) => {
                 await db.query(`INSERT INTO \`${tableName}\` (${columns}) VALUES (${placeholders})`, values);
             } else {
                 const setClause = fields.map(f => `\`${f}\` = ?`).join(', ');
-                const values = [...fields.map(f => data[f] ?? null), id];
-                await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE \`id\` = ?`, values);
+                let values = [...fields.map(f => data[f] ?? null)];
+
+                // Special handling for academy password to prevent overwriting with null
+                if (tableName === 'academies' && fields.includes('password')) {
+                    const passwordIndex = fields.indexOf('password');
+                    if (!data.password) {
+                        // If password is not provided, remove it from update
+                        fields.splice(passwordIndex, 1);
+                        values.splice(passwordIndex, 1);
+                    } else {
+                        values[passwordIndex] = await bcrypt.hash(data.password, 10);
+                    }
+                }
+                values.push(id);
+                const finalSetClause = fields.map(f => `\`${f}\` = ?`).join(', ');
+                if(finalSetClause) await db.query(`UPDATE \`${tableName}\` SET ${finalSetClause} WHERE \`id\` = ?`, values);
             }
             await logActivity(req.user.userId, `Save ${tableName}`, `${isNew ? 'Created' : 'Updated'} item ${data.name || id}`);
             const [[savedItem]] = await db.query(`SELECT * FROM \`${tableName}\` WHERE id = ?`, [id]);
@@ -471,24 +468,20 @@ const simpleCrud = (tableName, fields) => {
     return router;
 }
 
-apiRouter.put('/graduations/ranks', async (req, res) => {
+protectedRouter.put('/graduations/ranks', async (req, res) => {
     const gradsWithNewRanks = req.body;
-    if (!Array.isArray(gradsWithNewRanks)) {
-        return res.status(400).json({ message: 'Expected an array of graduations.' });
-    }
+    if (!Array.isArray(gradsWithNewRanks)) return res.status(400).json({ message: 'Expected an array of graduations.' });
+    
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-        const promises = gradsWithNewRanks.map(grad =>
-            connection.query('UPDATE graduations SET `rank` = ? WHERE id = ?', [grad.rank, grad.id])
-        );
+        const promises = gradsWithNewRanks.map(grad => connection.query('UPDATE graduations SET `rank` = ? WHERE id = ?', [grad.rank, grad.id]));
         await Promise.all(promises);
         await connection.commit();
         await logActivity(req.user.userId, 'Update Graduation Ranks', `Reordered ${gradsWithNewRanks.length} graduations.`);
         res.status(200).json({ success: true });
     } catch (error) {
         await connection.rollback();
-        console.error('Error updating graduation ranks:', error);
         res.status(500).json({ message: 'Failed to update graduation ranks.', error: error.message });
     } finally {
         connection.release();
@@ -498,26 +491,12 @@ apiRouter.put('/graduations/ranks', async (req, res) => {
 const scheduleRouter = express.Router();
 scheduleRouter.get('/', async (req, res) => {
     try {
-        const [schedules] = await db.query(`
-            SELECT 
-                cs.*, 
-                GROUP_CONCAT(sa.assistantId) as assistantIds 
-            FROM 
-                class_schedules cs 
-            LEFT JOIN 
-                schedule_assistants sa ON cs.id = sa.scheduleId 
-            GROUP BY 
-                cs.id
-        `);
-
+        const [schedules] = await db.query('SELECT cs.*, GROUP_CONCAT(sa.assistantId) as assistantIds FROM class_schedules cs LEFT JOIN schedule_assistants sa ON cs.id = sa.scheduleId GROUP BY cs.id');
         for (const schedule of schedules) {
             schedule.assistantIds = schedule.assistantIds ? schedule.assistantIds.split(',') : [];
         }
         res.json(schedules);
-    } catch (error) {
-        console.error('Error fetching schedules:', error);
-        res.status(500).json({ message: 'Failed to fetch schedules.' });
-    }
+    } catch (error) { res.status(500).json({ message: 'Failed to fetch schedules.' }); }
 });
 scheduleRouter.post('/', async (req, res) => {
     const { assistantIds = [], ...data } = req.body;
@@ -568,15 +547,16 @@ scheduleRouter.delete('/:id', async (req, res) => {
         res.status(204).send();
     } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to delete schedule', error: error.message }); } finally { connection.release(); }
 });
-apiRouter.use('/schedules', scheduleRouter);
+protectedRouter.use('/schedules', scheduleRouter);
 
-apiRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
-apiRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
-apiRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
+protectedRouter.use('/academies', simpleCrud('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
+protectedRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
+protectedRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
+protectedRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
 
-// --- Mount PROTECTED API Router ---
-app.use('/api', checkDbConnection, apiRouter);
-
+// --- Mount Routers ---
+app.use('/api', checkDbConnection, publicRouter);
+app.use('/api', checkDbConnection, protectedRouter);
 
 // --- 404 HANDLER FOR API ---
 app.use('/api/*', (req, res) => {
