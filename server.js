@@ -246,6 +246,7 @@ apiRouter.get('/academies', genericGet('academies'));
 apiRouter.get('/graduations', genericGet('graduations'));
 apiRouter.get('/professors', genericGet('professors'));
 apiRouter.get('/logs', genericGet('activity_logs'));
+apiRouter.get('/attendance', genericGet('attendance_records'));
 
 apiRouter.get('/students', async (req, res) => {
      try {
@@ -264,20 +265,6 @@ apiRouter.get('/students', async (req, res) => {
     } catch (error) {
         console.error('Error fetching students:', error);
         res.status(500).json({ message: 'Failed to fetch students.' });
-    }
-});
-
-apiRouter.get('/schedules', async (req, res) => {
-    try {
-        const [schedules] = await db.query('SELECT * FROM class_schedules');
-        const [assistants] = await db.query('SELECT * FROM schedule_assistants');
-        for (const schedule of schedules) {
-            schedule.assistantIds = assistants.filter(a => a.scheduleId === schedule.id).map(a => a.assistantId);
-        }
-        res.json(schedules);
-    } catch (error) {
-        console.error('Error fetching schedules:', error);
-        res.status(500).json({ message: 'Failed to fetch schedules.' });
     }
 });
 
@@ -326,6 +313,31 @@ apiRouter.put('/students/:id', async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to update student", error: error.message }); } finally { connection.release(); }
 });
 
+apiRouter.delete('/students/:id', async (req, res) => {
+    const { id } = req.params;
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        await connection.query('DELETE FROM payment_history WHERE studentId = ?', [id]);
+        await connection.query('DELETE FROM attendance_records WHERE studentId = ?', [id]);
+        await connection.query('DELETE FROM users WHERE studentId = ?', [id]);
+        const [result] = await connection.query('DELETE FROM students WHERE id = ?', [id]);
+        await connection.commit();
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Student not found.' });
+        }
+        await logActivity(req.user.userId, 'Delete Student', `Deleted student with id ${id}`);
+        res.status(204).send();
+    } catch (error) {
+        await connection.rollback();
+        console.error('Error deleting student:', error);
+        res.status(500).json({ message: "Failed to delete student", error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
+
 apiRouter.put('/settings', async (req, res) => {
     const { id, ...settingsToUpdate } = req.body;
     try {
@@ -366,18 +378,15 @@ apiRouter.post('/students/:studentId/payment', async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to update payment status", error: error.message }); } finally { connection.release(); }
 });
 
-
-// Add other protected routes here...
-// Generic handlers for simple tables
 const simpleCrud = (tableName, fields) => {
     const router = express.Router();
     
     router.delete('/:id', async (req, res) => {
         try {
-            await db.query(`DELETE FROM \`${tableName}\` WHERE id = ?`, [req.params.id]);
+            await db.query(`DELETE FROM \`${tableName}\` WHERE \`id\` = ?`, [req.params.id]);
             await logActivity(req.user.userId, `Delete ${tableName}`, `Deleted item with id ${req.params.id}`);
             res.status(204).send();
-        } catch (error) { res.status(500).json({ message: `Failed to delete from ${tableName}.` }); }
+        } catch (error) { res.status(500).json({ message: `Failed to delete from ${tableName}.`, error: error.message }); }
     });
 
     const handleSave = async (req, res) => {
@@ -386,17 +395,17 @@ const simpleCrud = (tableName, fields) => {
         const id = isNew ? uuidv4() : data.id;
         try {
             if (isNew) {
-                const columns = ['id', ...fields].join(', ');
+                const columns = ['`id`', ...fields.map(f => `\`${f}\``)].join(', ');
                 const placeholders = ['?', ...fields.map(() => '?')].join(', ');
                 const values = [id, ...fields.map(f => data[f] ?? null)];
                 await db.query(`INSERT INTO \`${tableName}\` (${columns}) VALUES (${placeholders})`, values);
             } else {
-                const setClause = fields.map(f => `${f} = ?`).join(', ');
+                const setClause = fields.map(f => `\`${f}\` = ?`).join(', ');
                 const values = [...fields.map(f => data[f] ?? null), id];
-                await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE id = ?`, values);
+                await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE \`id\` = ?`, values);
             }
             await logActivity(req.user.userId, `Save ${tableName}`, `${isNew ? 'Created' : 'Updated'} item ${data.name || id}`);
-            const [[savedItem]] = await db.query(`SELECT * FROM ${tableName} WHERE id = ?`, [id]);
+            const [[savedItem]] = await db.query(`SELECT * FROM \`${tableName}\` WHERE id = ?`, [id]);
             res.status(isNew ? 201 : 200).json(savedItem);
         } catch (error) { res.status(500).json({ message: `Failed to save to ${tableName}`, error: error.message }); }
     };
@@ -406,9 +415,98 @@ const simpleCrud = (tableName, fields) => {
     return router;
 }
 
+apiRouter.put('/graduations/ranks', async (req, res) => {
+    const gradsWithNewRanks = req.body;
+    if (!Array.isArray(gradsWithNewRanks)) {
+        return res.status(400).json({ message: 'Expected an array of graduations.' });
+    }
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        const promises = gradsWithNewRanks.map(grad =>
+            connection.query('UPDATE graduations SET `rank` = ? WHERE id = ?', [grad.rank, grad.id])
+        );
+        await Promise.all(promises);
+        await connection.commit();
+        await logActivity(req.user.userId, 'Update Graduation Ranks', `Reordered ${gradsWithNewRanks.length} graduations.`);
+        res.status(200).json({ success: true });
+    } catch (error) {
+        await connection.rollback();
+        console.error('Error updating graduation ranks:', error);
+        res.status(500).json({ message: 'Failed to update graduation ranks.', error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
+const scheduleRouter = express.Router();
+scheduleRouter.get('/', async (req, res) => {
+    try {
+        const [schedules] = await db.query('SELECT * FROM class_schedules');
+        const [assistants] = await db.query('SELECT * FROM schedule_assistants');
+        for (const schedule of schedules) {
+            schedule.assistantIds = assistants.filter(a => a.scheduleId === schedule.id).map(a => a.assistantId);
+        }
+        res.json(schedules);
+    } catch (error) {
+        console.error('Error fetching schedules:', error);
+        res.status(500).json({ message: 'Failed to fetch schedules.' });
+    }
+});
+scheduleRouter.post('/', async (req, res) => {
+    const { assistantIds = [], ...data } = req.body;
+    const scheduleId = uuidv4();
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        await connection.query('INSERT INTO class_schedules (id, className, dayOfWeek, startTime, endTime, professorId, academyId, requiredGraduationId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [scheduleId, data.className, data.dayOfWeek, data.startTime, data.endTime, data.professorId, data.academyId, data.requiredGraduationId]);
+        if (assistantIds.length > 0) {
+            const assistantValues = assistantIds.map(assistId => [scheduleId, assistId]);
+            await connection.query('INSERT INTO schedule_assistants (scheduleId, assistantId) VALUES ?', [assistantValues]);
+        }
+        await connection.commit();
+        await logActivity(req.user.userId, 'Create Schedule', `Created schedule ${data.className}`);
+        const [[newSchedule]] = await db.query('SELECT * FROM class_schedules WHERE id = ?', [scheduleId]);
+        newSchedule.assistantIds = assistantIds;
+        res.status(201).json(newSchedule);
+    } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to create schedule', error: error.message }); } finally { connection.release(); }
+});
+scheduleRouter.put('/:id', async (req, res) => {
+    const { id } = req.params;
+    const { assistantIds = [], ...data } = req.body;
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        await connection.query('UPDATE class_schedules SET className=?, dayOfWeek=?, startTime=?, endTime=?, professorId=?, academyId=?, requiredGraduationId=? WHERE id=?', [data.className, data.dayOfWeek, data.startTime, data.endTime, data.professorId, data.academyId, data.requiredGraduationId, id]);
+        await connection.query('DELETE FROM schedule_assistants WHERE scheduleId = ?', [id]);
+        if (assistantIds.length > 0) {
+            const assistantValues = assistantIds.map(assistId => [id, assistId]);
+            await connection.query('INSERT INTO schedule_assistants (scheduleId, assistantId) VALUES ?', [assistantValues]);
+        }
+        await connection.commit();
+        await logActivity(req.user.userId, 'Update Schedule', `Updated schedule ${data.className}`);
+        const [[updatedSchedule]] = await db.query('SELECT * FROM class_schedules WHERE id = ?', [id]);
+        updatedSchedule.assistantIds = assistantIds;
+        res.status(200).json(updatedSchedule);
+    } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to update schedule', error: error.message }); } finally { connection.release(); }
+});
+scheduleRouter.delete('/:id', async (req, res) => {
+    const { id } = req.params;
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        await connection.query('DELETE FROM schedule_assistants WHERE scheduleId = ?', [id]);
+        await connection.query('DELETE FROM class_schedules WHERE id = ?', [id]);
+        await connection.commit();
+        await logActivity(req.user.userId, 'Delete Schedule', `Deleted schedule with id ${id}`);
+        res.status(204).send();
+    } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to delete schedule', error: error.message }); } finally { connection.release(); }
+});
+apiRouter.use('/schedules', scheduleRouter);
+
 apiRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
 apiRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
-
+apiRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
 
 // --- Mount API Router ---
 app.use('/api', apiRouter);
