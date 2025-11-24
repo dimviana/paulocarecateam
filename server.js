@@ -22,7 +22,8 @@ const {
 if (!JWT_SECRET) {
     console.warn("WARNING: JWT_SECRET not found in .env. Using unsafe default for development only.");
 }
-const CURRENT_JWT_SECRET = process.env.JWT_SECRET || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.KMUFsIDTnFmyG3nMiGM6H9FNFUROf3wh7SmqJp-QV30";
+// FIX: Replaced the JWT-formatted secret with a proper, strong string secret to ensure token validation works correctly.
+const CURRENT_JWT_SECRET = process.env.JWT_SECRET || "ThisIsAStrongerAndBetterSecretForJWT-JiuJitsuHub-2024";
 
 
 // --- Express App Initialization ---
