@@ -1,32 +1,78 @@
 
 import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog, ThemeSettings } from '../types';
 
-const API_URL = '/api'; // All requests will be proxied by Nginx to the backend.
+const API_URL = '/api';
+
+// --- Token Refresh Logic ---
+let refreshTokenPromise: Promise<any> | null = null;
+
+const refreshToken = async () => {
+  const currentRefreshToken = localStorage.getItem('refreshToken');
+  if (!currentRefreshToken) {
+    throw new Error("No refresh token available");
+  }
+  const response = await fetch(`${API_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: currentRefreshToken }),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to refresh token");
+  }
+  const data = await response.json();
+  localStorage.setItem('accessToken', data.accessToken);
+  localStorage.setItem('refreshToken', data.refreshToken); // Token rotation
+  return data.accessToken;
+};
 
 /**
- * A generic wrapper around the Fetch API.
+ * A generic wrapper around the Fetch API with automatic token refresh.
  * @param endpoint The API endpoint to call (e.g., '/students').
  * @param options The standard `fetch` options object.
  * @returns A promise that resolves with the JSON response.
  */
 async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${API_URL}${endpoint}`;
-    
-    const token = localStorage.getItem('authToken');
-    const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        ...options.headers,
+    const makeRequest = async (): Promise<Response> => {
+        const url = `${API_URL}${endpoint}`;
+        const token = localStorage.getItem('accessToken');
+        const headers: HeadersInit = {
+            'Content-Type': 'application/json',
+            ...options.headers,
+        };
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        return fetch(url, { ...options, headers });
     };
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+
+    let response = await makeRequest();
+
+    if (response.status === 401) {
+        // Potential token expiry, try to parse error code
+        let errorBody;
+        try {
+            errorBody = await response.json();
+        } catch (e) {
+            // Not a JSON response, throw a standard error
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        if (errorBody.code === 'TOKEN_EXPIRED') {
+            try {
+                if (!refreshTokenPromise) {
+                    refreshTokenPromise = refreshToken();
+                }
+                await refreshTokenPromise;
+                refreshTokenPromise = null;
+                // Retry the original request with the new token
+                response = await makeRequest();
+            } catch (refreshError) {
+                 // Dispatch a global event for the app to handle logout
+                 window.dispatchEvent(new Event('session-expired'));
+                 throw new Error("Sua sessão expirou. Por favor, faça login novamente.");
+            }
+        }
     }
-
-    const config: RequestInit = {
-        ...options,
-        headers,
-    };
-
-    const response = await fetch(url, config);
 
     if (!response.ok) {
         let errorMessage = `HTTP error! status: ${response.status}`;
@@ -39,33 +85,38 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         throw new Error(errorMessage);
     }
     
-    if (response.status === 204) { // No Content
+    if (response.status === 204) {
         return null as T;
     }
 
     return response.json() as Promise<T>;
 }
 
+type AuthResponse = {
+  accessToken: string;
+  refreshToken: string;
+};
+
 export const api = {
-  login: (email: string, password: string): Promise<{ token: string }> => {
-    return fetchWrapper<{ token: string }>('/auth/login', {
+  login: (email: string, password: string): Promise<AuthResponse> => {
+    return fetchWrapper<AuthResponse>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ emailOrCpf: email, pass: password }),
     });
   },
 
-  loginGoogle: (token: string): Promise<{ token: string }> => {
-    return fetchWrapper<{ token: string }>('/auth/google', {
+  loginGoogle: (token: string): Promise<AuthResponse> => {
+    return fetchWrapper<AuthResponse>('/auth/google', {
         method: 'POST',
         body: JSON.stringify({ token }),
     });
   },
   
   logout: (): Promise<void> => {
+      // The fetchWrapper will automatically add the access token
       return fetchWrapper('/auth/logout', { method: 'POST' });
   },
 
-  // Validates the current token with the backend and returns the User object if valid
   validateSession: (): Promise<User> => fetchWrapper<User>('/auth/session'),
 
   registerAcademy: (data: { 

@@ -11,7 +11,6 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const crypto = require('crypto');
 
 // --- Environment Variables ---
 const {
@@ -92,32 +91,26 @@ const logActivity = async (actorId, action, details) => {
   }
 };
 
-// --- JWT Authentication Middleware (Stateful) ---
-const authenticateToken = async (req, res, next) => {
+// --- JWT Authentication Middleware (Stateless) ---
+const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  if (token == null) return res.status(401).json({ message: 'Token de autenticação não fornecido.' });
-
-  try {
-    const decoded = jwt.verify(token, CURRENT_JWT_SECRET);
-    
-    const [rows] = await db.query('SELECT sessionToken FROM users WHERE id = ?', [decoded.userId]);
-    
-    if (rows.length === 0) {
-         return res.status(401).json({ message: 'Usuário não encontrado.' });
-    }
-    
-    if (rows[0].sessionToken !== decoded.sessionToken) {
-         return res.status(403).json({ message: 'Sessão inválida. Você conectou em outro dispositivo ou fez logout.' });
-    }
-
-    req.user = decoded;
-    next();
-  } catch (err) {
-      console.error('Authentication Error:', err.message);
-      return res.status(403).json({ message: 'Token inválido ou expirado.' });
+  if (token == null) {
+      return res.status(401).json({ message: 'Token de autenticação não fornecido.' });
   }
+
+  jwt.verify(token, CURRENT_JWT_SECRET, (err, user) => {
+      if (err) {
+          const isExpired = err.name === 'TokenExpiredError';
+          return res.status(401).json({
+              message: isExpired ? 'Sua sessão expirou.' : 'Token inválido.',
+              code: isExpired ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID'
+          });
+      }
+      req.user = user;
+      next();
+  });
 };
 
 // =================================================================
@@ -146,7 +139,6 @@ apiRouter.post('/auth/login', async (req, res) => {
         let user;
         let passwordHash;
 
-        // Step 1: Find the user record from the 'users' table.
         if (emailOrCpf.includes('@')) {
             const [users] = await db.query('SELECT * FROM users WHERE email = ?', [emailOrCpf]);
             if (users.length > 0) user = users[0];
@@ -159,12 +151,10 @@ apiRouter.post('/auth/login', async (req, res) => {
             }
         }
 
-        // If no user record was found, return a generic unauthorized error.
         if (!user) {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
-        // Step 2: Retrieve the correct password hash based on the user's role.
         if (user.role === 'student') {
             const [students] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
             if (students.length > 0) passwordHash = students[0].password;
@@ -173,30 +163,55 @@ apiRouter.post('/auth/login', async (req, res) => {
             if (academies.length > 0) passwordHash = academies[0].password;
         }
         
-        // If password hash couldn't be found for the identified user, it's an invalid credential.
         if (!passwordHash) {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
-        // Step 3: Compare the provided password with the stored hash.
         const isMatch = await bcrypt.compare(pass, passwordHash);
         if (!isMatch) {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
-        // Step 4: Login successful. Generate a new session token and the JWT.
-        const sessionToken = crypto.randomBytes(32).toString('base64');
-        await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, user.id]);
+        // Generate Tokens
+        const accessToken = jwt.sign({ userId: user.id, role: user.role }, CURRENT_JWT_SECRET, { expiresIn: '15m' });
+        const refreshToken = jwt.sign({ userId: user.id }, CURRENT_JWT_SECRET, { expiresIn: '7d' });
         
-        const payload = { userId: user.id, role: user.role, sessionToken };
-        const token = jwt.sign(payload, CURRENT_JWT_SECRET, { expiresIn: '1d' });
+        // Store refresh token in DB
+        await db.query('UPDATE users SET refreshToken = ? WHERE id = ?', [refreshToken, user.id]);
         
         await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
-        res.json({ token });
+        res.json({ accessToken, refreshToken });
 
     } catch (error) {
         console.error('Login Error:', error);
         res.status(500).json({ message: 'Erro interno no servidor durante o login.', error: error.message });
+    }
+});
+
+apiRouter.post('/auth/refresh', async (req, res) => {
+    const { token } = req.body;
+    if (!token) return res.status(401).json({ message: "Refresh token não fornecido." });
+
+    try {
+        const decoded = jwt.verify(token, CURRENT_JWT_SECRET);
+        const [users] = await db.query('SELECT * FROM users WHERE id = ? AND refreshToken = ?', [decoded.userId, token]);
+
+        if (users.length === 0) {
+            return res.status(403).json({ message: "Refresh token inválido ou revogado." });
+        }
+
+        const user = users[0];
+        
+        // Issue new tokens (token rotation)
+        const newAccessToken = jwt.sign({ userId: user.id, role: user.role }, CURRENT_JWT_SECRET, { expiresIn: '15m' });
+        const newRefreshToken = jwt.sign({ userId: user.id }, CURRENT_JWT_SECRET, { expiresIn: '7d' });
+
+        await db.query('UPDATE users SET refreshToken = ? WHERE id = ?', [newRefreshToken, user.id]);
+
+        res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
+
+    } catch (error) {
+        return res.status(403).json({ message: "Refresh token inválido ou expirado." });
     }
 });
 
@@ -248,7 +263,7 @@ apiRouter.use(authenticateToken);
 apiRouter.post('/auth/logout', async (req, res) => {
     try {
         const userId = req.user.userId;
-        await db.query('UPDATE users SET sessionToken = NULL WHERE id = ?', [userId]);
+        await db.query('UPDATE users SET refreshToken = NULL WHERE id = ?', [userId]);
         await logActivity(userId, 'Logout', 'Usuário deslogado.');
         res.status(200).json({ message: 'Logout bem-sucedido.' });
     } catch (error) {

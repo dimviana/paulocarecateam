@@ -82,6 +82,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const handleApiError = useCallback((error: any, context: string) => {
     console.error(`API Error in ${context}:`, error);
 
+    // Don't show notification for session expired, as it will trigger a logout.
+    if (error?.message?.includes('Sua sessão expirou')) {
+      return;
+    }
+
     let message = 'Falha de Conexão';
     let details = 'Não foi possível se comunicar com o servidor. Verifique se o processo (PM2) está online, sua conexão com a internet e as configurações do Nginx.';
 
@@ -102,14 +107,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-        // Invalidate session on server
-        await api.logout();
-    } catch (e) {
-        console.warn("Logout request failed, clearing local state anyway.", e);
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+        try {
+            await api.logout(); // Invalidate session on server
+        } catch (e) {
+            console.warn("Logout request failed, clearing local state anyway.", e);
+        }
     }
     setUser(null);
-    localStorage.removeItem('authToken');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
   }, []);
 
   const refetchData = useCallback(async () => {
@@ -141,6 +149,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [logout, handleApiError]);
 
   useEffect(() => {
+    // Global listener to handle logout when refresh token fails anywhere.
+    const handleSessionExpired = () => {
+        console.warn("Session expired. Logging out.");
+        logout();
+    };
+    window.addEventListener('session-expired', handleSessionExpired);
+    return () => {
+        window.removeEventListener('session-expired', handleSessionExpired);
+    };
+  }, [logout]);
+
+
+  useEffect(() => {
     const styleId = 'dynamic-theme-styles';
     let styleElement = document.getElementById(styleId) as HTMLStyleElement | null;
     if (!styleElement) {
@@ -168,26 +189,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const initializeApp = async () => {
         setLoading(true);
         try {
-            // Check for Auth Token in ENV for auto-login on system initialization
-            // We check both standard process.env and Vite's import.meta.env
-            let envToken = '';
-            
-            try {
-                // @ts-ignore
-                if (import.meta && import.meta.env && import.meta.env.VITE_AUTH_TOKEN) {
-                    // @ts-ignore
-                    envToken = import.meta.env.VITE_AUTH_TOKEN;
-                }
-            } catch (e) { /* ignore if import.meta is not available */ }
-
-            if (!envToken && typeof process !== 'undefined' && process.env && process.env.REACT_APP_AUTH_TOKEN) {
-                envToken = process.env.REACT_APP_AUTH_TOKEN;
-            }
-            
+            const envToken = process.env.REACT_APP_AUTH_TOKEN;
             if (envToken) {
-                // If an ENV token is present, we set it to localStorage if it's different
-                if (localStorage.getItem('authToken') !== envToken) {
-                    localStorage.setItem('authToken', envToken);
+                if (localStorage.getItem('accessToken') !== envToken) {
+                    localStorage.setItem('accessToken', envToken);
                     console.log("Auto-authenticating via ENV token.");
                 }
             }
@@ -197,19 +202,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 setThemeSettingsState(settings);
             } catch (error) {
                 console.error("Failed to load settings, using defaults:", error);
-                // Continue initialization even if settings fail, using defaults
             }
 
-            const token = localStorage.getItem('authToken');
-            if (token) {
-                // Try to validate the session with the backend using the secret stored there
+            const token = localStorage.getItem('accessToken');
+            const refreshToken = localStorage.getItem('refreshToken');
+            if (token && refreshToken) {
                 try {
                   const validatedUser = await api.validateSession();
                   setUser(validatedUser);
-                  await refetchData(); // Fetch the rest of the app data
+                  await refetchData();
                 } catch (validationError) {
-                  console.warn("Session validation failed:", validationError);
-                  logout(); // Token is invalid or expired
+                  console.warn("Session validation failed during app init:", validationError);
+                  logout();
                 }
             }
         } catch (error) {
@@ -226,10 +230,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   
   const login = async (email: string, password: string) => {
     try {
-      const { token } = await api.login(email, password);
-      if (token) {
-        localStorage.setItem('authToken', token);
-        // Validating immediately after login to ensure user object is correct
+      const { accessToken, refreshToken } = await api.login(email, password);
+      if (accessToken && refreshToken) {
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
         const validatedUser = await api.validateSession();
         setUser(validatedUser);
         await refetchData();
@@ -238,12 +242,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return false;
     } catch (error) {
       if (error instanceof Error) {
-          // Suppress notification for expected auth errors and 404s (handled by UI)
           if (
             error.message.includes('401') || 
             error.message.includes('Unauthorized') || 
             error.message.includes('Invalid credentials') || 
-            error.message.includes('Please provide username and password') ||
+            error.message.includes('Credenciais inválidas') ||
             error.message.includes('Usuário não encontrado') ||
             error.message.includes('USER_NOT_FOUND') ||
             error.message.includes('404')
@@ -263,8 +266,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const loginGoogle = async (token: string) => {
     try {
       const response = await api.loginGoogle(token);
-      if (response.token) {
-        localStorage.setItem('authToken', response.token);
+      if (response.accessToken && response.refreshToken) {
+        localStorage.setItem('accessToken', response.accessToken);
+        localStorage.setItem('refreshToken', response.refreshToken);
         const validatedUser = await api.validateSession();
         setUser(validatedUser);
         await refetchData();
@@ -273,7 +277,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return false;
     } catch (error: any) {
        if (error.message && error.message.includes('404')) {
-         // Let the UI handle the 404 specifically for Google Login
          throw new Error('USER_NOT_FOUND'); 
        }
        handleApiError(error, 'loginGoogle');

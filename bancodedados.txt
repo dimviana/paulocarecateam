@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS users (
     academyId TEXT, -- FK para academies (se for admin de academia)
     studentId TEXT, -- FK para students (se for aluno)
     birthDate DATE, -- Data de nascimento (para aniversariantes do dia)
-    sessionToken TEXT -- Token de sessão único (openssl rand -base64 32)
+    refreshToken TEXT -- Armazena o refresh token para manter a sessão ativa
 );
 
 -- -----------------------------------------------------
