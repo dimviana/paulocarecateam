@@ -47,12 +47,18 @@ async function connectToDatabase() {
     if (!DATABASE_URL) throw new Error("DATABASE_URL environment variable is not defined.");
     const pool = mysql.createPool(DATABASE_URL);
     const connection = await pool.getConnection();
-    // Check if sessionToken column exists, if not, try to add it (Migration fallback)
+    
+    // Check if sessionToken column exists, if not, try to add it (Migration)
     try {
         await connection.query('SELECT sessionToken FROM users LIMIT 1');
     } catch (e) {
         console.log("Migration: Adding sessionToken column to users table...");
-        await connection.query('ALTER TABLE users ADD COLUMN sessionToken TEXT');
+        try {
+            await connection.query('ALTER TABLE users ADD COLUMN sessionToken TEXT');
+            console.log("Migration: sessionToken column added successfully.");
+        } catch (alterError) {
+            console.error("Migration Failed:", alterError);
+        }
     }
 
     connection.release();
@@ -65,7 +71,7 @@ async function connectToDatabase() {
   }
 }
 
-// --- Default Theme Settings (with Auto-Activate for Google if ENV is present) ---
+// --- Default Theme Settings ---
 const initialThemeSettings = {
   logoUrl: 'https://tailwindui.com/img/logos/mark.svg?color=amber&shade=500',
   systemName: 'Jiu-Jitsu Hub',
@@ -153,7 +159,7 @@ html {
   customJs: `
 // console.log("Custom JS loaded!");
   `,
-  socialLoginEnabled: !!GOOGLE_CLIENT_ID, // Auto-enable if Client ID is provided in ENV
+  socialLoginEnabled: !!GOOGLE_CLIENT_ID,
   googleClientId: GOOGLE_CLIENT_ID || '',
   facebookAppId: FACEBOOK_APP_ID || '',
   pixKey: '',
@@ -179,21 +185,16 @@ const logActivity = async (actorId, action, details) => {
   }
 };
 
-// Helper to search for a user in both Academies (Admins) and Students tables
 const findUserByEmail = async (email) => {
     if (!isDbConnected) return null;
-    
     try {
-        // 1. Try Admin (Academies)
         const [academies] = await db.query('SELECT * FROM academies WHERE email = ?', [email]);
         if (academies.length > 0) {
             const academy = academies[0];
-            // Check if this academy has a specific user entry, otherwise construct user object
             const [users] = await db.query('SELECT * FROM users WHERE academyId = ? AND role LIKE "%admin%"', [academy.id]);
             if (users.length > 0) {
                 return { user: users[0], type: 'admin', authData: academy };
             } else {
-                // Fallback if user entry missing
                 return { 
                     user: { id: academy.id, role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin', name: academy.name }, 
                     type: 'admin', 
@@ -201,8 +202,6 @@ const findUserByEmail = async (email) => {
                 };
             }
         }
-
-        // 2. Try Student
         const [students] = await db.query('SELECT * FROM students WHERE email = ?', [email]);
         if (students.length > 0) {
             const student = students[0];
@@ -213,7 +212,6 @@ const findUserByEmail = async (email) => {
     } catch (e) {
         console.error("Error finding user by email:", e);
     }
-
     return null;
 };
 
@@ -241,7 +239,6 @@ const authenticateToken = (req, res, next) => {
         }
         
         // If the sessionToken in the JWT does not match the one in DB, the session is invalid
-        // (e.g. user logged in on another device, or logged out)
         if (rows[0].sessionToken !== decoded.sessionToken) {
              return res.status(403).json({ message: 'Sessão inválida. Você conectou em outro dispositivo ou fez logout.' });
         }
@@ -250,6 +247,7 @@ const authenticateToken = (req, res, next) => {
         next();
     } catch (dbErr) {
         console.error("Session Validation Error:", dbErr);
+        // Fail open or closed? Closed for security.
         return res.status(500).json({ message: 'Erro ao validar sessão no banco de dados.' });
     }
   });
@@ -260,24 +258,18 @@ const authenticateToken = (req, res, next) => {
 // 1. PUBLIC ROUTES (Attached to publicApiRouter)
 // =================================================================
 
-// Settings - Public Access (Fallback to defaults if DB is down)
 publicApiRouter.get('/settings', async (req, res) => {
     try {
         if (isDbConnected) {
             const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
-            if (rows && rows.length > 0) {
-                return res.json(rows[0]);
-            }
+            if (rows && rows.length > 0) return res.json(rows[0]);
         }
-        // If DB not connected or no settings found, return initial
         res.json(initialThemeSettings);
     } catch (error) {
-        console.error("Error fetching settings:", error);
         res.json(initialThemeSettings);
     }
 });
 
-// Auth: Standard Login (Email or CPF)
 publicApiRouter.post('/auth/login', async (req, res) => {
     if (!isDbConnected) return res.status(503).json({ message: 'Database unavailable.' });
     
@@ -292,14 +284,12 @@ publicApiRouter.post('/auth/login', async (req, res) => {
         let passwordHash = null;
 
         if (isEmail) {
-            // Use helper for email lookup (checks Admins then Students)
             const result = await findUserByEmail(emailOrCpf);
             if (result) {
                 foundUser = result.user;
                 passwordHash = result.authData.password;
             }
         } else {
-            // CPF Login (Students Only)
             const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
             const [students] = await db.query(
                 'SELECT * FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?', 
@@ -309,7 +299,6 @@ publicApiRouter.post('/auth/login', async (req, res) => {
             if (students.length > 0) {
                 const student = students[0];
                 passwordHash = student.password;
-                // Get associated User object
                 const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
                 foundUser = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name, studentId: student.id, academyId: student.academyId };
             }
@@ -325,10 +314,9 @@ publicApiRouter.post('/auth/login', async (req, res) => {
                 await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, foundUser.id]);
 
                 const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
-                // Include sessionToken in JWT payload
                 const token = jwt.sign({ userId: foundUser.id, role: foundUser.role, sessionToken }, currentSecret, { expiresIn: '1d' });
                 
-                logActivity(foundUser.id, 'Login', 'Usuário logado com sucesso (Senha).').catch(console.error);
+                logActivity(foundUser.id, 'Login', 'Usuário logado com sucesso.').catch(console.error);
                 return res.json({ token });
             } else {
                  return res.status(401).json({ message: 'Senha incorreta.' });
@@ -343,7 +331,6 @@ publicApiRouter.post('/auth/login', async (req, res) => {
     }
 });
 
-// Auth: Google Login
 publicApiRouter.post('/auth/google', async (req, res) => {
     if (!isDbConnected) return res.status(503).json({ message: 'Database unavailable.' });
 
@@ -351,17 +338,12 @@ publicApiRouter.post('/auth/google', async (req, res) => {
     if (!token) return res.status(400).json({ message: 'Token do Google não fornecido.' });
 
     try {
-        // 1. Verify Google Token
         const googleResponse = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${token}`);
         const googleData = await googleResponse.json();
 
-        if (googleData.error) {
-            return res.status(400).json({ message: 'Token do Google inválido.' });
-        }
+        if (googleData.error) return res.status(400).json({ message: 'Token do Google inválido.' });
 
         const email = googleData.email;
-
-        // 2. Check if user exists in our database
         const result = await findUserByEmail(email);
 
         if (result) {
@@ -369,7 +351,7 @@ publicApiRouter.post('/auth/google', async (req, res) => {
             
             // Generate secure session token
             const sessionToken = crypto.randomBytes(32).toString('base64');
-             // Update User in DB
+            // Update User in DB
             await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, foundUser.id]);
 
             const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
@@ -378,11 +360,7 @@ publicApiRouter.post('/auth/google', async (req, res) => {
             await logActivity(foundUser.id, 'Login Google', 'Usuário logado via Google.');
             return res.json({ token: appToken });
         } else {
-             // User not found in DB despite having a valid Google Account
-             return res.status(404).json({ 
-                 message: 'Email não cadastrado no sistema. Entre em contato com sua academia.', 
-                 code: 'USER_NOT_FOUND' 
-             });
+             return res.status(404).json({ message: 'Email não cadastrado.', code: 'USER_NOT_FOUND' });
         }
     } catch (error) {
         console.error('Google Login Error:', error);
@@ -393,7 +371,7 @@ publicApiRouter.post('/auth/google', async (req, res) => {
 publicApiRouter.post('/auth/register', async (req, res) => {
     if (!isDbConnected) return res.status(503).json({ message: 'Database unavailable.' });
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
-    if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Missing required fields.' });
+    if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Missing fields.' });
     
     const connection = await db.getConnection();
     try {
@@ -422,10 +400,8 @@ publicApiRouter.post('/auth/register', async (req, res) => {
 // 2. PROTECTED ROUTES (Attached to protectedApiRouter)
 // =================================================================
 
-// Apply Authentication Middleware to this router
 protectedApiRouter.use(authenticateToken);
 
-// Helper functions for generic CRUD
 const handleGet = (tableName) => async (req, res) => {
     try {
         const [rows] = await db.query(`SELECT * FROM \`${tableName}\``);
@@ -491,11 +467,10 @@ const handleSave = (tableName, fields) => async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: `Failed to save to ${tableName}`, error: error.message }); } finally { connection.release(); }
 };
 
-// Logout Route (Invalidate session in DB)
+// Logout Endpoint
 protectedApiRouter.post('/auth/logout', async (req, res) => {
     try {
         const userId = req.user.userId;
-        // Clear session token in DB
         await db.query('UPDATE users SET sessionToken = NULL WHERE id = ?', [userId]);
         await logActivity(userId, 'Logout', 'User logged out.');
         res.status(200).json({ message: 'Logged out successfully.' });
@@ -504,18 +479,14 @@ protectedApiRouter.post('/auth/logout', async (req, res) => {
     }
 });
 
-
-// Session Validation
+// Session Endpoint
 protectedApiRouter.get('/auth/session', async (req, res) => {
     try {
         const userId = req.user.userId;
         const [users] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
         
-        // Double check token validity here is implied by middleware, but fetching user details
         if (users.length > 0) {
-            const user = users[0];
-            // Middleware already checked sessionToken, just return user data
-            return res.json(user);
+            return res.json(users[0]);
         }
         
         const [academies] = await db.query('SELECT * FROM academies WHERE id = ?', [userId]);
@@ -534,7 +505,6 @@ protectedApiRouter.get('/auth/session', async (req, res) => {
     }
 });
 
-// Protected Resource Routes
 protectedApiRouter.get('/users', handleGet('users'));
 protectedApiRouter.get('/students', handleGet('students'));
 protectedApiRouter.get('/academies', handleGet('academies'));
@@ -551,7 +521,6 @@ protectedApiRouter.delete('/schedules/:id', handleDelete('schedules'));
 protectedApiRouter.delete('/attendance/:id', handleDelete('attendance_records'));
 protectedApiRouter.delete('/professors/:id', handleDelete('professors'));
 
-// Complex Protected Operations
 protectedApiRouter.post('/students', async (req, res) => {
     const data = req.body;
     const studentId = uuidv4();
@@ -721,7 +690,6 @@ const ensureMasterAdmin = async () => {
     }
 };
 
-// --- Server Start ---
 (async () => {
   await connectToDatabase();
   await ensureMasterAdmin();

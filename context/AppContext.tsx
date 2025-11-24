@@ -103,10 +103,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const logout = useCallback(async () => {
     try {
+        // Invalidate session on server
         await api.logout();
     } catch (e) {
-        // Ignore errors on logout (e.g. network fail), just clear client state
-        console.warn("Logout request failed, clearing local state anyway.");
+        console.warn("Logout request failed, clearing local state anyway.", e);
     }
     setUser(null);
     localStorage.removeItem('authToken');
