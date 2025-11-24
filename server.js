@@ -42,14 +42,28 @@ let isDbConnected = false;
 
 async function connectToDatabase() {
   try {
-    if (!DATABASE_URL) throw new Error("DATABASE_URL environment variable is not defined.");
+    if (!DATABASE_URL) {
+      throw new Error("FATAL: DATABASE_URL environment variable is not defined. Please check your .env file.");
+    }
+    // Check for a placeholder value to prevent common setup errors.
+    if (DATABASE_URL.includes("@[HOST]:[PORTA]/[NOME_DO_BANCO]")) {
+        throw new Error("FATAL: DATABASE_URL is using placeholder values. Please update your .env file with real database credentials.");
+    }
     const pool = mysql.createPool(DATABASE_URL);
     await pool.query('SELECT 1'); // Test connection
     db = pool;
     console.log('Successfully connected to the MySQL database.');
     isDbConnected = true;
   } catch (error) {
-    console.error('Failed to connect to the database:', error.message);
+    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    console.error('!!!         FAILED TO CONNECT TO THE DATABASE          !!!');
+    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    console.error('Error details:', error.message);
+    console.error('This is a fatal error. The application cannot start without a database connection.');
+    console.error('Common causes:');
+    console.error('1. The .env file is missing or `DATABASE_URL` is incorrect.');
+    console.error('2. The database server is not running or is inaccessible from the app server.');
+    console.error('3. The database user, password, or database name are incorrect.');
     isDbConnected = false;
     // We exit here because the app is useless without a DB. PM2 will handle restarts.
     process.exit(1);
