@@ -123,39 +123,41 @@ publicApiRouter.post('/auth/login', async (req, res) => {
         return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
     }
 
-    let user = null;
-    let passwordHash = null;
-
     try {
+        let user, passwordHash;
+
+        // Step 1: Find the user and their password hash
         if (emailOrCpf.includes('@')) {
+            // Login via Email
             const [users] = await db.query('SELECT * FROM users WHERE email = ?', [emailOrCpf]);
-            if (users.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
+            if (users.length === 0) {
+                return res.status(401).json({ message: 'Credenciais inválidas.' });
+            }
+            user = users[0];
             
-            const foundUser = users[0];
-            if (foundUser.role === 'student') {
-                const [students] = await db.query('SELECT password FROM students WHERE id = ?', [foundUser.studentId]);
-                if (students.length > 0) {
-                    passwordHash = students[0].password;
-                    user = foundUser;
-                }
-            } else {
-                const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [foundUser.academyId]);
-                if (academies.length > 0) {
-                    passwordHash = academies[0].password;
-                    user = foundUser;
-                }
+            if (user.role === 'student') {
+                const [students] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
+                if (students.length > 0) passwordHash = students[0].password;
+            } else { // 'academy_admin' or 'general_admin'
+                const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
+                if (academies.length > 0) passwordHash = academies[0].password;
             }
+
         } else {
+            // Login via CPF
             const sanitizedCpf = emailOrCpf.replace(/\D/g, '');
-            const [students] = await db.query('SELECT * FROM students WHERE cpf = ?', [sanitizedCpf]);
-            if (students.length > 0) {
-                const foundStudent = students[0];
-                passwordHash = foundStudent.password;
-                const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [foundStudent.id]);
-                if (users.length > 0) user = users[0];
+            const [students] = await db.query('SELECT id, password FROM students WHERE cpf = ?', [sanitizedCpf]);
+            
+            if (students.length === 0) {
+                return res.status(401).json({ message: 'Credenciais inválidas.' });
             }
+            passwordHash = students[0].password;
+            
+            const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [students[0].id]);
+            if (users.length > 0) user = users[0];
         }
 
+        // Step 2: Validate credentials
         if (!user || !passwordHash) {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
@@ -165,6 +167,7 @@ publicApiRouter.post('/auth/login', async (req, res) => {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
+        // Step 3: Create session and issue token
         const sessionToken = crypto.randomBytes(32).toString('base64');
         await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, user.id]);
         
