@@ -125,32 +125,49 @@ apiRouter.get('/settings', async (req, res) => {
 
 apiRouter.post('/auth/login', async (req, res) => {
     const { emailOrCpf, pass } = req.body;
-    if (!emailOrCpf || !pass) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
+    if (!emailOrCpf || !pass) {
+        return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
+    }
 
     try {
-        let user, passwordHash;
+        let user;
+        let passwordHash;
 
         if (emailOrCpf.includes('@')) {
-            // Login via Email
-            const [users] = await db.query('SELECT u.*, a.password as academyPass, s.password as studentPass FROM users u LEFT JOIN academies a ON u.academyId = a.id LEFT JOIN students s ON u.studentId = s.id WHERE u.email = ?', [emailOrCpf]);
-            if (users.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
-            
+            // --- Login via Email ---
+            const [users] = await db.query('SELECT * FROM users WHERE email = ?', [emailOrCpf]);
+            if (users.length === 0) {
+                return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
+            }
             user = users[0];
-            passwordHash = user.academyPass || user.studentPass;
 
+            if (user.role === 'student') {
+                const [students] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
+                passwordHash = students.length > 0 ? students[0].password : null;
+            } else { // 'general_admin' or 'academy_admin'
+                const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
+                passwordHash = academies.length > 0 ? academies[0].password : null;
+            }
         } else {
-            // Login via CPF
+            // --- Login via CPF ---
             const sanitizedCpf = emailOrCpf.replace(/\D/g, '');
-            const [students] = await db.query('SELECT s.*, u.id as userId, u.role as userRole FROM students s JOIN users u ON s.id = u.studentId WHERE s.cpf = ?', [sanitizedCpf]);
-            if (students.length === 0) return res.status(404).json({ message: 'Usuário com este CPF não encontrado.', code: 'USER_NOT_FOUND' });
-           
+            const [students] = await db.query('SELECT * FROM students WHERE cpf = ?', [sanitizedCpf]);
+            if (students.length === 0) {
+                return res.status(404).json({ message: 'Usuário com este CPF não encontrado.', code: 'USER_NOT_FOUND' });
+            }
             const student = students[0];
-            user = { id: student.userId, role: student.userRole };
             passwordHash = student.password;
+
+            // Find the corresponding user record for the student
+            const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
+            if (users.length === 0) {
+                return res.status(500).json({ message: 'Inconsistência de dados: Aluno encontrado, mas sem uma conta de usuário correspondente.' });
+            }
+            user = users[0];
         }
 
-        if (!user || !passwordHash) {
-            return res.status(500).json({ message: 'Inconsistência de dados: Conta de usuário incompleta.' });
+        if (!passwordHash) {
+            return res.status(401).json({ message: 'Credenciais inválidas. Nenhuma senha associada à conta.' });
         }
 
         const isMatch = await bcrypt.compare(pass, passwordHash);
@@ -159,17 +176,14 @@ apiRouter.post('/auth/login', async (req, res) => {
         }
         
         // --- Lógica de Sessão Stateful com JWT ---
-        // 1. Gera um token de sessão único e seguro.
         const sessionToken = crypto.randomBytes(32).toString('base64');
-        // 2. Armazena este token de sessão no banco de dados para o usuário.
-        //    Isso invalida quaisquer sessões anteriores em outros dispositivos.
         await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, user.id]);
-        // 3. Cria o payload do JWT incluindo o token de sessão.
+        
         const payload = { userId: user.id, role: user.role, sessionToken };
         const token = jwt.sign(payload, CURRENT_JWT_SECRET, { expiresIn: '1d' });
         
         await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
-        return res.json({ token });
+        res.json({ token });
 
     } catch (error) {
         console.error('Login Error:', error);
