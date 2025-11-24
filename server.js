@@ -17,7 +17,9 @@ const { v4: uuidv4 } = require('uuid');
 const {
   DATABASE_URL,
   JWT_SECRET,
-  PORT = 3001
+  PORT = 3001,
+  GOOGLE_CLIENT_ID,
+  FACEBOOK_APP_ID
 } = process.env;
 
 if (!JWT_SECRET) {
@@ -27,7 +29,7 @@ if (!JWT_SECRET) {
 // --- Express App Initialization ---
 const app = express();
 
-// Create separate routers for public and protected routes to avoid middleware conflicts
+// Create separate routers for public and protected routes
 const publicApiRouter = express.Router();
 const protectedApiRouter = express.Router();
 
@@ -54,81 +56,7 @@ async function connectToDatabase() {
   }
 }
 
-// --- Database Status Middleware (Applied to all /api routes) ---
-app.use('/api', (req, res, next) => {
-    if (!isDbConnected) {
-        return res.status(503).json({ 
-            message: 'Database connection failed.',
-            details: 'The server cannot connect to the database. Please check backend logs and .env configuration.'
-        });
-    }
-    next();
-});
-
-// --- Helper Functions ---
-const logActivity = async (actorId, action, details) => {
-  try {
-    if (!isDbConnected) return;
-    const id = uuidv4();
-    const timestamp = new Date();
-    await db.query(
-      'INSERT INTO activity_logs (id, actorId, action, timestamp, details) VALUES (?, ?, ?, ?, ?)',
-      [id, actorId, action, timestamp, details]
-    );
-  } catch (error) {
-    console.error('Failed to log activity:', error);
-  }
-};
-
-// --- Helper to Find User by Email ---
-const findUserByEmail = async (email) => {
-    // 1. Try Admin (Academies)
-    const [academies] = await db.query('SELECT * FROM academies WHERE email = ?', [email]);
-    if (academies.length > 0) {
-        const academy = academies[0];
-        // Check if this academy has a specific user entry, otherwise construct user object
-        const [users] = await db.query('SELECT * FROM users WHERE academyId = ? AND role LIKE "%admin%"', [academy.id]);
-        if (users.length > 0) {
-            return { user: users[0], type: 'admin', authData: academy };
-        } else {
-            return { 
-                user: { id: academy.id, role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin', name: academy.name }, 
-                type: 'admin', 
-                authData: academy 
-            };
-        }
-    }
-
-    // 2. Try Student
-    const [students] = await db.query('SELECT * FROM students WHERE email = ?', [email]);
-    if (students.length > 0) {
-        const student = students[0];
-        const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
-        const user = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name, studentId: student.id, academyId: student.academyId };
-        return { user, type: 'student', authData: student };
-    }
-
-    return null;
-};
-
-// --- JWT Authentication Middleware ---
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (token == null) return res.status(401).json({ message: 'Token de autenticação não fornecido.' });
-
-  jwt.verify(token, process.env.JWT_SECRET || JWT_SECRET, (err, user) => {
-    if (err) {
-      console.error('JWT Verification Error:', err.message);
-      return res.status(403).json({ message: 'Token inválido ou expirado.' });
-    }
-    req.user = user;
-    next();
-  });
-};
-
-// Default theme settings
+// --- Default Theme Settings (with Auto-Activate for Google if ENV is present) ---
 const initialThemeSettings = {
   logoUrl: 'https://tailwindui.com/img/logos/mark.svg?color=amber&shade=500',
   systemName: 'Jiu-Jitsu Hub',
@@ -147,22 +75,315 @@ const initialThemeSettings = {
   theme: 'light',
   monthlyFeeAmount: 150,
   publicPageEnabled: true,
-  heroHtml: `...`,
-  aboutHtml: `...`,
-  branchesHtml: `...`,
-  footerHtml: `...`,
-  customCss: `...`,
-  customJs: `...`,
-  socialLoginEnabled: false,
-  googleClientId: '',
-  facebookAppId: '',
+  heroHtml: `
+<div class="relative bg-white text-slate-800 text-center py-20 px-4 overflow-hidden" style="background-image: url('https://images.unsplash.com/photo-1581009137052-c40971b51c69?q=80&w=2070&auto=format&fit=crop'); background-size: cover; background-position: center;">
+    <div class="absolute inset-0 bg-white/50 backdrop-blur-sm"></div>
+    <div class="relative z-10 container mx-auto">
+        <h1 class="text-5xl font-bold mb-4 animate-fade-in-down">Jiu-Jitsu: Arte, Disciplina, Respeito</h1>
+        <p class="text-xl text-slate-600 animate-fade-in-up">Transforme sua vida dentro e fora do tatame. Junte-se à nossa família.</p>
+        <a href="#filiais" class="mt-8 inline-block bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-8 rounded-lg transition duration-300">Encontre uma Academia</a>
+    </div>
+</div>
+  `,
+  aboutHtml: `
+<div id="quem-somos" class="py-16 bg-slate-50 px-4">
+    <div class="container mx-auto text-center">
+        <h2 class="text-4xl font-bold text-amber-600 mb-6">Quem Somos</h2>
+        <p class="text-lg text-slate-600 max-w-3xl mx-auto">
+            Somos mais do que uma academia, somos uma comunidade unida pela paixão pelo Jiu-Jitsu. Com instrutores de classe mundial e um ambiente acolhedor, nossa missão é capacitar cada aluno a atingir seu potencial máximo, promovendo saúde, autoconfiança e respeito mútuo.
+        </p>
+    </div>
+</div>
+  `,
+  branchesHtml: `
+<div id="filiais" class="py-16 bg-white px-4">
+    <div class="container mx-auto text-center">
+        <h2 class="text-4xl font-bold text-amber-600 mb-10">Nossas Filiais</h2>
+        <p class="text-slate-600">Aqui você pode listar suas academias. Este conteúdo é totalmente personalizável na área de configurações!</p>
+        <!-- Exemplo: <div class="mt-4 p-4 bg-slate-100 rounded"><h3>Nome da Academia</h3><p>Endereço</p></div> -->
+    </div>
+</div>
+  `,
+  footerHtml: `
+<div class="py-8 bg-slate-100 text-center text-slate-500">
+    <p>{{{copyright_line}}}</p>
+    <p>Desenvolvido com a Arte Suave em mente.</p>
+</div>
+  `,
+  customCss: `
+@keyframes fade-in-down {
+    0% {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+@keyframes fade-in-up {
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.animate-fade-in-down {
+    animation: fade-in-down 1s ease-out forwards;
+}
+.animate-fade-in-up {
+    animation: fade-in-up 1s ease-out 0.5s forwards;
+}
+html {
+    scroll-behavior: smooth;
+}
+  `,
+  customJs: `
+// console.log("Custom JS loaded!");
+  `,
+  socialLoginEnabled: !!GOOGLE_CLIENT_ID, // Auto-enable if Client ID is provided in ENV
+  googleClientId: GOOGLE_CLIENT_ID || '',
+  facebookAppId: FACEBOOK_APP_ID || '',
   pixKey: '',
   pixHolderName: '',
   copyrightText: 'ABILDEVELOPER',
   systemVersion: '1.0.0',
 };
 
-// --- Generic Handlers ---
+
+// --- Helper Functions ---
+
+const logActivity = async (actorId, action, details) => {
+  try {
+    if (!isDbConnected) return;
+    const id = uuidv4();
+    const timestamp = new Date();
+    await db.query(
+      'INSERT INTO activity_logs (id, actorId, action, timestamp, details) VALUES (?, ?, ?, ?, ?)',
+      [id, actorId, action, timestamp, details]
+    );
+  } catch (error) {
+    console.error('Failed to log activity:', error);
+  }
+};
+
+// Helper to search for a user in both Academies (Admins) and Students tables
+const findUserByEmail = async (email) => {
+    if (!isDbConnected) return null;
+    
+    try {
+        // 1. Try Admin (Academies)
+        const [academies] = await db.query('SELECT * FROM academies WHERE email = ?', [email]);
+        if (academies.length > 0) {
+            const academy = academies[0];
+            // Check if this academy has a specific user entry, otherwise construct user object
+            const [users] = await db.query('SELECT * FROM users WHERE academyId = ? AND role LIKE "%admin%"', [academy.id]);
+            if (users.length > 0) {
+                return { user: users[0], type: 'admin', authData: academy };
+            } else {
+                // Fallback if user entry missing
+                return { 
+                    user: { id: academy.id, role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin', name: academy.name }, 
+                    type: 'admin', 
+                    authData: academy 
+                };
+            }
+        }
+
+        // 2. Try Student
+        const [students] = await db.query('SELECT * FROM students WHERE email = ?', [email]);
+        if (students.length > 0) {
+            const student = students[0];
+            const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
+            const user = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name, studentId: student.id, academyId: student.academyId };
+            return { user, type: 'student', authData: student };
+        }
+    } catch (e) {
+        console.error("Error finding user by email:", e);
+    }
+
+    return null;
+};
+
+// --- JWT Authentication Middleware ---
+const authenticateToken = (req, res, next) => {
+  if (!isDbConnected) return res.status(503).json({ message: 'Database unavailable.' });
+  
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token == null) return res.status(401).json({ message: 'Token de autenticação não fornecido.' });
+
+  jwt.verify(token, process.env.JWT_SECRET || JWT_SECRET, (err, user) => {
+    if (err) {
+      console.error('JWT Verification Error:', err.message);
+      return res.status(403).json({ message: 'Token inválido ou expirado.' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
+
+// =================================================================
+// 1. PUBLIC ROUTES (Attached to publicApiRouter)
+// =================================================================
+
+// Settings - Public Access (Fallback to defaults if DB is down)
+publicApiRouter.get('/settings', async (req, res) => {
+    try {
+        if (isDbConnected) {
+            const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
+            if (rows && rows.length > 0) {
+                return res.json(rows[0]);
+            }
+        }
+        // If DB not connected or no settings found, return initial
+        res.json(initialThemeSettings);
+    } catch (error) {
+        console.error("Error fetching settings:", error);
+        res.json(initialThemeSettings);
+    }
+});
+
+// Auth: Standard Login (Email or CPF)
+publicApiRouter.post('/auth/login', async (req, res) => {
+    if (!isDbConnected) return res.status(503).json({ message: 'Database unavailable.' });
+    
+    const emailOrCpf = req.body.emailOrCpf || req.body.email;
+    const pass = req.body.pass || req.body.password;
+
+    if (!emailOrCpf || !pass) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
+
+    try {
+        const isEmail = String(emailOrCpf).includes('@');
+        let foundUser = null;
+        let passwordHash = null;
+
+        if (isEmail) {
+            // Use helper for email lookup (checks Admins then Students)
+            const result = await findUserByEmail(emailOrCpf);
+            if (result) {
+                foundUser = result.user;
+                passwordHash = result.authData.password;
+            }
+        } else {
+            // CPF Login (Students Only)
+            const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
+            const [students] = await db.query(
+                'SELECT * FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?', 
+                [emailOrCpf, sanitizedCpf]
+            );
+            
+            if (students.length > 0) {
+                const student = students[0];
+                passwordHash = student.password;
+                // Get associated User object
+                const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
+                foundUser = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name, studentId: student.id, academyId: student.academyId };
+            }
+        }
+
+        if (foundUser && passwordHash) {
+            const isMatch = await bcrypt.compare(pass, passwordHash);
+            if (isMatch) {
+                const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
+                const token = jwt.sign({ userId: foundUser.id, role: foundUser.role }, currentSecret, { expiresIn: '1d' });
+                logActivity(foundUser.id, 'Login', 'Usuário logado com sucesso (Senha).').catch(console.error);
+                return res.json({ token });
+            } else {
+                 return res.status(401).json({ message: 'Senha incorreta.' });
+            }
+        }
+
+        return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
+
+    } catch (error) {
+        console.error('Login Error:', error);
+        res.status(500).json({ message: 'Erro interno no servidor.', error: error.message });
+    }
+});
+
+// Auth: Google Login
+publicApiRouter.post('/auth/google', async (req, res) => {
+    if (!isDbConnected) return res.status(503).json({ message: 'Database unavailable.' });
+
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ message: 'Token do Google não fornecido.' });
+
+    try {
+        // 1. Verify Google Token
+        const googleResponse = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${token}`);
+        const googleData = await googleResponse.json();
+
+        if (googleData.error) {
+            return res.status(400).json({ message: 'Token do Google inválido.' });
+        }
+
+        const email = googleData.email;
+
+        // 2. Check if user exists in our database
+        const result = await findUserByEmail(email);
+
+        if (result) {
+            const foundUser = result.user;
+            const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
+            const appToken = jwt.sign({ userId: foundUser.id, role: foundUser.role }, currentSecret, { expiresIn: '1d' });
+            
+            await logActivity(foundUser.id, 'Login Google', 'Usuário logado via Google.');
+            return res.json({ token: appToken });
+        } else {
+             // User not found in DB despite having a valid Google Account
+             return res.status(404).json({ 
+                 message: 'Email não cadastrado no sistema. Entre em contato com sua academia.', 
+                 code: 'USER_NOT_FOUND' 
+             });
+        }
+    } catch (error) {
+        console.error('Google Login Error:', error);
+        res.status(500).json({ message: 'Erro ao processar login com Google.' });
+    }
+});
+
+publicApiRouter.post('/auth/register', async (req, res) => {
+    if (!isDbConnected) return res.status(503).json({ message: 'Database unavailable.' });
+    const { name, address, responsible, responsibleRegistration, email, password } = req.body;
+    if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Missing required fields.' });
+    
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        const academyId = uuidv4();
+        const userId = uuidv4();
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        await connection.query('INSERT INTO academies (id, name, address, responsible, responsibleRegistration, email, password) VALUES (?, ?, ?, ?, ?, ?, ?)', [academyId, name, address, responsible, responsibleRegistration, email, hashedPassword]);
+        await connection.query('INSERT INTO users (id, name, email, role, academyId, birthDate) VALUES (?, ?, ?, ?, ?, ?)', [userId, responsible, email, 'academy_admin', academyId, req.body.birthDate || null]);
+        
+        await logActivity(userId, 'Academy Registration', `Academy "${name}" registered.`);
+        await connection.commit();
+        const [newAcademy] = await db.query('SELECT * FROM academies WHERE id = ?', [academyId]);
+        res.status(201).json(newAcademy[0]);
+    } catch (error) {
+        await connection.rollback();
+        if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Email already exists.' });
+        res.status(500).json({ message: 'Failed to register academy.' });
+    } finally {
+        connection.release();
+    }
+});
+
+// =================================================================
+// 2. PROTECTED ROUTES (Attached to protectedApiRouter)
+// =================================================================
+
+// Apply Authentication Middleware to this router
+protectedApiRouter.use(authenticateToken);
+
+// Helper functions for generic CRUD
 const handleGet = (tableName) => async (req, res) => {
     try {
         const [rows] = await db.query(`SELECT * FROM \`${tableName}\``);
@@ -227,145 +448,6 @@ const handleSave = (tableName, fields) => async (req, res) => {
         res.status(isNew ? 201 : 200).json({ id, ...data });
     } catch (error) { await connection.rollback(); res.status(500).json({ message: `Failed to save to ${tableName}`, error: error.message }); } finally { connection.release(); }
 };
-
-// =================================================================
-// 1. PUBLIC ROUTES (Attached to publicApiRouter)
-// =================================================================
-
-// Settings - Public Access
-publicApiRouter.get('/settings', async (req, res) => {
-    try {
-        const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
-        if (rows && rows.length > 0) return res.json(rows[0]);
-        res.json(initialThemeSettings);
-    } catch (error) {
-        console.error("Error fetching settings:", error);
-        res.json(initialThemeSettings);
-    }
-});
-
-// Auth - Public Access
-publicApiRouter.post('/auth/register', async (req, res) => {
-    const { name, address, responsible, responsibleRegistration, email, password } = req.body;
-    if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Missing required fields.' });
-    
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-        const academyId = uuidv4();
-        const userId = uuidv4();
-        const hashedPassword = await bcrypt.hash(password, 10);
-        
-        await connection.query('INSERT INTO academies (id, name, address, responsible, responsibleRegistration, email, password) VALUES (?, ?, ?, ?, ?, ?, ?)', [academyId, name, address, responsible, responsibleRegistration, email, hashedPassword]);
-        await connection.query('INSERT INTO users (id, name, email, role, academyId, birthDate) VALUES (?, ?, ?, ?, ?, ?)', [userId, responsible, email, 'academy_admin', academyId, req.body.birthDate || null]);
-        
-        await logActivity(userId, 'Academy Registration', `Academy "${name}" registered.`);
-        await connection.commit();
-        const [newAcademy] = await db.query('SELECT * FROM academies WHERE id = ?', [academyId]);
-        res.status(201).json(newAcademy[0]);
-    } catch (error) {
-        await connection.rollback();
-        if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Email already exists.' });
-        res.status(500).json({ message: 'Failed to register academy.' });
-    } finally {
-        connection.release();
-    }
-});
-
-publicApiRouter.post('/auth/login', async (req, res) => {
-    const emailOrCpf = req.body.emailOrCpf || req.body.email;
-    const pass = req.body.pass || req.body.password;
-
-    if (!emailOrCpf || !pass) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
-
-    try {
-        // Handle CPF login logic separately as it's unique to custom login
-        const isEmail = String(emailOrCpf).includes('@');
-        let foundUser = null;
-
-        if (isEmail) {
-            // Use standard lookup for email
-            const result = await findUserByEmail(emailOrCpf);
-            if (result) {
-                if (await bcrypt.compare(pass, result.authData.password)) {
-                    foundUser = result.user;
-                } else {
-                    return res.status(401).json({ message: 'Senha incorreta.' });
-                }
-            }
-        } else {
-            // CPF Login logic (only for Students)
-            const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
-            const [students] = await db.query('SELECT * FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?', [emailOrCpf, sanitizedCpf]);
-            
-            if (students.length > 0) {
-                const student = students[0];
-                if (student.password && await bcrypt.compare(pass, student.password)) {
-                    const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
-                    foundUser = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name };
-                } else {
-                     return res.status(401).json({ message: 'Senha incorreta.' });
-                }
-            }
-        }
-
-        if (foundUser) {
-            const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
-            const token = jwt.sign({ userId: foundUser.id, role: foundUser.role }, currentSecret, { expiresIn: '1d' });
-            logActivity(foundUser.id, 'Login', 'Usuário logado com sucesso (Senha).').catch(console.error);
-            return res.json({ token });
-        }
-
-        return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
-
-    } catch (error) {
-        console.error('Login Error:', error);
-        res.status(500).json({ message: 'Erro interno no servidor.', error: error.message });
-    }
-});
-
-// Google Login Route
-publicApiRouter.post('/auth/google', async (req, res) => {
-    const { token } = req.body;
-    if (!token) return res.status(400).json({ message: 'Token do Google não fornecido.' });
-
-    try {
-        // 1. Verify Google Token
-        const googleResponse = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${token}`);
-        const googleData = await googleResponse.json();
-
-        if (googleData.error) {
-            return res.status(400).json({ message: 'Token do Google inválido.' });
-        }
-
-        const email = googleData.email;
-
-        // 2. Check if user exists in our database
-        const result = await findUserByEmail(email);
-
-        if (result) {
-            // User exists, generate system JWT
-            const foundUser = result.user;
-            const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
-            const appToken = jwt.sign({ userId: foundUser.id, role: foundUser.role }, currentSecret, { expiresIn: '1d' });
-            
-            await logActivity(foundUser.id, 'Login Google', 'Usuário logado via Google.');
-            return res.json({ token: appToken });
-        } else {
-             return res.status(404).json({ message: 'Email não cadastrado no sistema. Entre em contato com sua academia.', code: 'USER_NOT_FOUND' });
-        }
-    } catch (error) {
-        console.error('Google Login Error:', error);
-        res.status(500).json({ message: 'Erro ao processar login com Google.' });
-    }
-});
-
-// =================================================================
-// 2. PROTECTED ROUTES (Attached to protectedApiRouter)
-// =================================================================
-
-// Apply Authentication Middleware to this router
-protectedApiRouter.use(authenticateToken);
 
 // Session Validation
 protectedApiRouter.get('/auth/session', async (req, res) => {

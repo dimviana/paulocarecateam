@@ -190,7 +190,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const settings = await api.getThemeSettings();
                 setThemeSettingsState(settings);
             } catch (error) {
-                console.error("Failed to load settings:", error);
+                console.error("Failed to load settings, using defaults:", error);
                 // Continue initialization even if settings fail, using defaults
             }
 
