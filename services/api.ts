@@ -60,6 +60,10 @@ export const api = {
         body: JSON.stringify({ token }),
     });
   },
+  
+  logout: (): Promise<void> => {
+      return fetchWrapper('/auth/logout', { method: 'POST' });
+  },
 
   // Validates the current token with the backend and returns the User object if valid
   validateSession: (): Promise<User> => fetchWrapper<User>('/auth/session'),

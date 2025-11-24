@@ -12,6 +12,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
 // --- Environment Variables ---
 const {
@@ -46,6 +47,14 @@ async function connectToDatabase() {
     if (!DATABASE_URL) throw new Error("DATABASE_URL environment variable is not defined.");
     const pool = mysql.createPool(DATABASE_URL);
     const connection = await pool.getConnection();
+    // Check if sessionToken column exists, if not, try to add it (Migration fallback)
+    try {
+        await connection.query('SELECT sessionToken FROM users LIMIT 1');
+    } catch (e) {
+        console.log("Migration: Adding sessionToken column to users table...");
+        await connection.query('ALTER TABLE users ADD COLUMN sessionToken TEXT');
+    }
+
     connection.release();
     db = pool;
     console.log('Successfully connected to the MySQL database.');
@@ -208,7 +217,7 @@ const findUserByEmail = async (email) => {
     return null;
 };
 
-// --- JWT Authentication Middleware ---
+// --- JWT Authentication Middleware (Stateful) ---
 const authenticateToken = (req, res, next) => {
   if (!isDbConnected) return res.status(503).json({ message: 'Database unavailable.' });
   
@@ -217,13 +226,32 @@ const authenticateToken = (req, res, next) => {
 
   if (token == null) return res.status(401).json({ message: 'Token de autenticação não fornecido.' });
 
-  jwt.verify(token, process.env.JWT_SECRET || JWT_SECRET, (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET || JWT_SECRET, async (err, decoded) => {
     if (err) {
       console.error('JWT Verification Error:', err.message);
       return res.status(403).json({ message: 'Token inválido ou expirado.' });
     }
-    req.user = user;
-    next();
+    
+    // Stateful Session Check: Validate sessionToken against DB
+    try {
+        const [rows] = await db.query('SELECT sessionToken FROM users WHERE id = ?', [decoded.userId]);
+        
+        if (rows.length === 0) {
+             return res.status(401).json({ message: 'Usuário não encontrado.' });
+        }
+        
+        // If the sessionToken in the JWT does not match the one in DB, the session is invalid
+        // (e.g. user logged in on another device, or logged out)
+        if (rows[0].sessionToken !== decoded.sessionToken) {
+             return res.status(403).json({ message: 'Sessão inválida. Você conectou em outro dispositivo ou fez logout.' });
+        }
+
+        req.user = decoded;
+        next();
+    } catch (dbErr) {
+        console.error("Session Validation Error:", dbErr);
+        return res.status(500).json({ message: 'Erro ao validar sessão no banco de dados.' });
+    }
   });
 };
 
@@ -290,8 +318,16 @@ publicApiRouter.post('/auth/login', async (req, res) => {
         if (foundUser && passwordHash) {
             const isMatch = await bcrypt.compare(pass, passwordHash);
             if (isMatch) {
+                // Generate secure session token (openssl rand -base64 32 equivalent)
+                const sessionToken = crypto.randomBytes(32).toString('base64');
+                
+                // Update User in DB with new session token (Invalidates previous sessions)
+                await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, foundUser.id]);
+
                 const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
-                const token = jwt.sign({ userId: foundUser.id, role: foundUser.role }, currentSecret, { expiresIn: '1d' });
+                // Include sessionToken in JWT payload
+                const token = jwt.sign({ userId: foundUser.id, role: foundUser.role, sessionToken }, currentSecret, { expiresIn: '1d' });
+                
                 logActivity(foundUser.id, 'Login', 'Usuário logado com sucesso (Senha).').catch(console.error);
                 return res.json({ token });
             } else {
@@ -330,8 +366,14 @@ publicApiRouter.post('/auth/google', async (req, res) => {
 
         if (result) {
             const foundUser = result.user;
+            
+            // Generate secure session token
+            const sessionToken = crypto.randomBytes(32).toString('base64');
+             // Update User in DB
+            await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, foundUser.id]);
+
             const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
-            const appToken = jwt.sign({ userId: foundUser.id, role: foundUser.role }, currentSecret, { expiresIn: '1d' });
+            const appToken = jwt.sign({ userId: foundUser.id, role: foundUser.role, sessionToken }, currentSecret, { expiresIn: '1d' });
             
             await logActivity(foundUser.id, 'Login Google', 'Usuário logado via Google.');
             return res.json({ token: appToken });
@@ -449,12 +491,32 @@ const handleSave = (tableName, fields) => async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: `Failed to save to ${tableName}`, error: error.message }); } finally { connection.release(); }
 };
 
+// Logout Route (Invalidate session in DB)
+protectedApiRouter.post('/auth/logout', async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        // Clear session token in DB
+        await db.query('UPDATE users SET sessionToken = NULL WHERE id = ?', [userId]);
+        await logActivity(userId, 'Logout', 'User logged out.');
+        res.status(200).json({ message: 'Logged out successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to logout.' });
+    }
+});
+
+
 // Session Validation
 protectedApiRouter.get('/auth/session', async (req, res) => {
     try {
         const userId = req.user.userId;
         const [users] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
-        if (users.length > 0) return res.json(users[0]);
+        
+        // Double check token validity here is implied by middleware, but fetching user details
+        if (users.length > 0) {
+            const user = users[0];
+            // Middleware already checked sessionToken, just return user data
+            return res.json(user);
+        }
         
         const [academies] = await db.query('SELECT * FROM academies WHERE id = ?', [userId]);
         if (academies.length > 0) {

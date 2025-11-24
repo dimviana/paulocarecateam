@@ -101,7 +101,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setNotification({ type: 'error', message, details });
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+        await api.logout();
+    } catch (e) {
+        // Ignore errors on logout (e.g. network fail), just clear client state
+        console.warn("Logout request failed, clearing local state anyway.");
+    }
     setUser(null);
     localStorage.removeItem('authToken');
   }, []);
@@ -128,7 +134,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setActivityLogs(activityLogsData);
       } catch (error) {
           handleApiError(error, 'refetchData');
-          if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+          if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('403'))) {
               logout();
           }
       }

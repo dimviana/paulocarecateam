@@ -1,3 +1,4 @@
+
 -- Esquema do Banco de Dados para o Jiu-Jitsu Hub SAAS (MySQL)
 
 -- -----------------------------------------------------
@@ -132,7 +133,8 @@ CREATE TABLE IF NOT EXISTS users (
     `role` VARCHAR(255) CHECK(`role` IN ('general_admin', 'academy_admin', 'student')), -- Papel do usuário. `role` é palavra reservada.
     academyId TEXT, -- FK para academies (se for admin de academia)
     studentId TEXT, -- FK para students (se for aluno)
-    birthDate DATE -- Data de nascimento (para aniversariantes do dia)
+    birthDate DATE, -- Data de nascimento (para aniversariantes do dia)
+    sessionToken TEXT -- Token de sessão único (openssl rand -base64 32)
 );
 
 -- -----------------------------------------------------
