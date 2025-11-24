@@ -51,12 +51,20 @@ async function connectToDatabase() {
   } catch (error) {
     console.error('Failed to connect to the database:', error.message);
     isDbConnected = false;
+    // We exit here because the app is useless without a DB. PM2 will handle restarts.
     process.exit(1);
   }
 }
 
-// --- Helper Functions ---
+// --- DB Connection Check Middleware ---
+const checkDbConnection = (req, res, next) => {
+    if (!isDbConnected) {
+        return res.status(503).json({ message: "Service Unavailable: Database connection is not active." });
+    }
+    next();
+};
 
+// --- Helper Functions ---
 const logActivity = async (actorId, action, details) => {
   try {
     if (!isDbConnected) return;
@@ -124,50 +132,48 @@ publicApiRouter.post('/auth/login', async (req, res) => {
     }
 
     try {
-        let user, passwordHash;
+        let user;
+        let passwordHash;
 
-        // Step 1: Find the user and their password hash
+        // Step 1: Find the user record from the 'users' table.
         if (emailOrCpf.includes('@')) {
-            // Login via Email
             const [users] = await db.query('SELECT * FROM users WHERE email = ?', [emailOrCpf]);
-            if (users.length === 0) {
-                return res.status(401).json({ message: 'Credenciais inválidas.' });
-            }
-            user = users[0];
-            
-            if (user.role === 'student') {
-                const [students] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
-                if (students.length > 0) passwordHash = students[0].password;
-            } else { // 'academy_admin' or 'general_admin'
-                const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
-                if (academies.length > 0) passwordHash = academies[0].password;
-            }
-
-        } else {
-            // Login via CPF
-            const sanitizedCpf = emailOrCpf.replace(/\D/g, '');
-            const [students] = await db.query('SELECT id, password FROM students WHERE cpf = ?', [sanitizedCpf]);
-            
-            if (students.length === 0) {
-                return res.status(401).json({ message: 'Credenciais inválidas.' });
-            }
-            passwordHash = students[0].password;
-            
-            const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [students[0].id]);
             if (users.length > 0) user = users[0];
+        } else {
+            const sanitizedCpf = emailOrCpf.replace(/\D/g, '');
+            const [students] = await db.query('SELECT id FROM students WHERE cpf = ?', [sanitizedCpf]);
+            if (students.length > 0) {
+                const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [students[0].id]);
+                if (users.length > 0) user = users[0];
+            }
         }
 
-        // Step 2: Validate credentials
-        if (!user || !passwordHash) {
+        // If no user record was found, return a generic unauthorized error.
+        if (!user) {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
+        // Step 2: Retrieve the correct password hash based on the user's role.
+        if (user.role === 'student') {
+            const [students] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
+            if (students.length > 0) passwordHash = students[0].password;
+        } else if (user.role === 'academy_admin' || user.role === 'general_admin') {
+            const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
+            if (academies.length > 0) passwordHash = academies[0].password;
+        }
+        
+        // If password hash couldn't be found for the identified user, it's an invalid credential.
+        if (!passwordHash) {
+            return res.status(401).json({ message: 'Credenciais inválidas.' });
+        }
+
+        // Step 3: Compare the provided password with the stored hash.
         const isMatch = await bcrypt.compare(pass, passwordHash);
         if (!isMatch) {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
-        // Step 3: Create session and issue token
+        // Step 4: Login successful. Generate a new session token and the JWT.
         const sessionToken = crypto.randomBytes(32).toString('base64');
         await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, user.id]);
         
@@ -542,6 +548,7 @@ protectedApiRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_r
 protectedApiRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
 
 // --- Mount API Routers ---
+app.use('/api', checkDbConnection);
 app.use('/api', publicApiRouter);
 app.use('/api', protectedApiRouter);
 
