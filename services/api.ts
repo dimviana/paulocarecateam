@@ -1,3 +1,4 @@
+
 import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog, ThemeSettings } from '../types';
 
 const API_URL = '/api'; // All requests will be proxied by Nginx to the backend.
@@ -50,6 +51,13 @@ export const api = {
     return fetchWrapper<{ token: string }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ emailOrCpf: email, pass: password }),
+    });
+  },
+
+  loginGoogle: (token: string): Promise<{ token: string }> => {
+    return fetchWrapper<{ token: string }>('/auth/google', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
     });
   },
 

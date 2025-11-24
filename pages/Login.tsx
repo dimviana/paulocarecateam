@@ -1,4 +1,4 @@
-import React, { useState, useContext, FormEvent } from 'react';
+import React, { useState, useContext, FormEvent, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
 import { IconEye, IconEyeOff } from '../constants';
@@ -6,11 +6,11 @@ import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 
-const IconGoogle = () => (
-    <svg className="w-5 h-5 mr-3" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
-        <path fill="currentColor" d="M488 261.8C488 403.3 381.5 512 244 512 110.3 512 0 401.7 0 265.8S110.3 19.6 244 19.6c70.3 0 129.8 27.8 174.2 71.9l-61.9 61.9c-23.7-22.6-58.4-36.8-95.3-36.8-83.2 0-151.4 68.2-151.4 152.1s68.2 152.1 151.4 152.1c96.4 0 132.8-68.9 137.9-105.7H244V261.8h244z"></path>
-    </svg>
-);
+declare global {
+  interface Window {
+    google: any;
+  }
+}
 
 const IconFacebook = () => (
     <svg className="w-5 h-5 mr-3" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="facebook" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -125,8 +125,46 @@ const Login: React.FC = () => {
   
   const [registerSuccessMessage, setRegisterSuccessMessage] = useState('');
 
-  const { themeSettings, login, user, registerAcademy, loading: appLoading } = useContext(AppContext);
+  const { themeSettings, login, loginGoogle, user, registerAcademy, loading: appLoading } = useContext(AppContext);
   const location = useLocation();
+
+  const handleGoogleLoginResponse = async (response: any) => {
+    setLoading(true);
+    setError('');
+    try {
+        const success = await loginGoogle(response.credential);
+        if (!success) {
+            // If success is false but no specific error thrown, it might be a generic error.
+            // Note: loginGoogle inside context will throw specific errors for 404.
+        }
+    } catch (err: any) {
+        if (err.message === 'USER_NOT_FOUND') {
+             setIsNotFoundModalOpen(true);
+        } else {
+             setError('Falha ao autenticar com Google.');
+        }
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    // Initialize Google Sign-In if enabled
+    if (window.google && themeSettings.socialLoginEnabled && themeSettings.googleClientId) {
+        try {
+            window.google.accounts.id.initialize({
+                client_id: themeSettings.googleClientId,
+                callback: handleGoogleLoginResponse
+            });
+            window.google.accounts.id.renderButton(
+                document.getElementById("googleBtn"),
+                { theme: "outline", size: "large", width: "100%" }
+            );
+        } catch (e) {
+            console.error("Google Sign-In initialization failed:", e);
+        }
+    }
+  }, [themeSettings.socialLoginEnabled, themeSettings.googleClientId]);
+
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -158,27 +196,8 @@ const Login: React.FC = () => {
     try {
         const success = await login(email, password);
         if (!success) {
-             // Note: The 'login' function in context swallows errors mostly, 
-             // but for this requirement, we need to know if it was a 404.
-             // Since we can't easily change the context signature without breaking things,
-             // we rely on the fact that AppContext calls handleApiError which sets a global notification.
-             // HOWEVER, to implement the popup flow, it's cleaner to perform a check or catch the specific error here.
-             
-             // Let's try a slightly different approach: The context 'login' returns boolean.
-             // We can't know the error type from boolean. 
-             // Re-implementing the fetch call here specifically to catch the 404 code 
-             // would duplicate logic but ensures functionality. 
-             // Ideally, `login` should return the error object or code.
-             
-             // Hack: We will check the notification state or modify context. 
-             // Actually, let's rely on the fact that we are calling the API.
-             // Let's bypass the context wrapper just for the status code check if login fails?
-             // No, better to trust the backend response if we can get it.
-             
-             // Since I cannot easily change the Context interface in this single-file update to return the error code,
-             // I will implement a shadow fetch here just to check the user existence IF login returns false.
-             // This is a robust way to handle the specific requirement without refactoring the whole context.
-             
+             // We perform a manual check just to display the specific 404 modal,
+             // effectively replicating the user check logic for UI purposes if the generic login fails silently.
              const response = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -303,15 +322,16 @@ const Login: React.FC = () => {
                                 <span className="px-2 bg-[var(--theme-card-bg)] text-[var(--theme-text-primary)]/60">Ou continue com</span>
                             </div>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <button type="button" className="w-full inline-flex items-center justify-center font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-white text-slate-700 hover:bg-slate-100 focus:ring-slate-500 border border-slate-300 px-4 py-2 text-base">
-                                <IconGoogle />
-                                Entrar com Google
-                            </button>
-                            <button type="button" className="w-full inline-flex items-center justify-center font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 px-4 py-2 text-base">
-                                <IconFacebook />
-                                Entrar com Facebook
-                            </button>
+                        <div className="grid grid-cols-1 gap-4">
+                            {themeSettings.googleClientId && (
+                                <div id="googleBtn" style={{ minHeight: '40px' }}></div>
+                            )}
+                            {themeSettings.facebookAppId && (
+                                <button type="button" className="w-full inline-flex items-center justify-center font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 px-4 py-2 text-base">
+                                    <IconFacebook />
+                                    Entrar com Facebook
+                                </button>
+                            )}
                         </div>
                     </>
                 )}
@@ -335,7 +355,7 @@ const Login: React.FC = () => {
         >
             <div className="text-center space-y-4">
                 <p className="text-[var(--theme-text-primary)]/80">
-                    Não encontramos nenhum usuário com o login <strong>{email}</strong>.
+                    Não encontramos nenhum usuário cadastrado no sistema com este login.
                 </p>
                 <p className="text-[var(--theme-text-primary)]/80">
                     Gostaria de cadastrar uma nova academia agora?

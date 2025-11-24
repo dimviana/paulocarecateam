@@ -80,6 +80,37 @@ const logActivity = async (actorId, action, details) => {
   }
 };
 
+// --- Helper to Find User by Email ---
+const findUserByEmail = async (email) => {
+    // 1. Try Admin (Academies)
+    const [academies] = await db.query('SELECT * FROM academies WHERE email = ?', [email]);
+    if (academies.length > 0) {
+        const academy = academies[0];
+        // Check if this academy has a specific user entry, otherwise construct user object
+        const [users] = await db.query('SELECT * FROM users WHERE academyId = ? AND role LIKE "%admin%"', [academy.id]);
+        if (users.length > 0) {
+            return { user: users[0], type: 'admin', authData: academy };
+        } else {
+            return { 
+                user: { id: academy.id, role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin', name: academy.name }, 
+                type: 'admin', 
+                authData: academy 
+            };
+        }
+    }
+
+    // 2. Try Student
+    const [students] = await db.query('SELECT * FROM students WHERE email = ?', [email]);
+    if (students.length > 0) {
+        const student = students[0];
+        const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
+        const user = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name, studentId: student.id, academyId: student.academyId };
+        return { user, type: 'student', authData: student };
+    }
+
+    return null;
+};
+
 // --- JWT Authentication Middleware ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -248,68 +279,84 @@ publicApiRouter.post('/auth/login', async (req, res) => {
     if (!emailOrCpf || !pass) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
 
     try {
-        let user = null;
-        let loginSuccessful = false;
-        
-        // 1. Try Admin Login
-        const [academies] = await db.query('SELECT * FROM academies WHERE email = ?', [emailOrCpf]);
-        if (academies.length > 0) {
-            const academy = academies[0];
-            if (await bcrypt.compare(pass, academy.password)) {
-                const [users] = await db.query('SELECT * FROM users WHERE academyId = ?', [academy.id]);
-                if (users.length > 0) {
-                    user = users[0];
-                } else {
-                    user = { id: academy.id, role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin', name: academy.name };
-                }
-                loginSuccessful = true;
-            }
-        }
+        // Handle CPF login logic separately as it's unique to custom login
+        const isEmail = String(emailOrCpf).includes('@');
+        let foundUser = null;
 
-        // 2. Try Student Login
-        if (!loginSuccessful) {
-            const isEmail = String(emailOrCpf).includes('@');
+        if (isEmail) {
+            // Use standard lookup for email
+            const result = await findUserByEmail(emailOrCpf);
+            if (result) {
+                if (await bcrypt.compare(pass, result.authData.password)) {
+                    foundUser = result.user;
+                } else {
+                    return res.status(401).json({ message: 'Senha incorreta.' });
+                }
+            }
+        } else {
+            // CPF Login logic (only for Students)
             const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
-            const query = isEmail ? 'SELECT * FROM students WHERE email = ?' : 'SELECT * FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?';
-            const params = isEmail ? [emailOrCpf] : [emailOrCpf, sanitizedCpf];
+            const [students] = await db.query('SELECT * FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?', [emailOrCpf, sanitizedCpf]);
             
-            const [students] = await db.query(query, params);
             if (students.length > 0) {
                 const student = students[0];
                 if (student.password && await bcrypt.compare(pass, student.password)) {
                     const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
-                    user = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name };
-                    loginSuccessful = true;
+                    foundUser = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name };
+                } else {
+                     return res.status(401).json({ message: 'Senha incorreta.' });
                 }
             }
         }
 
-        if (loginSuccessful && user) {
+        if (foundUser) {
             const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
-            const token = jwt.sign({ userId: user.id, role: user.role }, currentSecret, { expiresIn: '1d' });
-            logActivity(user.id, 'Login', 'Usuário logado com sucesso.').catch(console.error);
+            const token = jwt.sign({ userId: foundUser.id, role: foundUser.role }, currentSecret, { expiresIn: '1d' });
+            logActivity(foundUser.id, 'Login', 'Usuário logado com sucesso (Senha).').catch(console.error);
             return res.json({ token });
         }
 
-        // Check existence for better error message (404 vs 401)
-        let exists = false;
-        const [checkAcademies] = await db.query('SELECT id FROM academies WHERE email = ?', [emailOrCpf]);
-        if (checkAcademies.length > 0) exists = true;
-        if (!exists) {
-             const isEmail = String(emailOrCpf).includes('@');
-             const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
-             const query = isEmail ? 'SELECT id FROM students WHERE email = ?' : 'SELECT id FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?';
-             const params = isEmail ? [emailOrCpf] : [emailOrCpf, sanitizedCpf];
-             const [checkStudents] = await db.query(query, params);
-             if (checkStudents.length > 0) exists = true;
-        }
-
-        if (!exists) return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
-        return res.status(401).json({ message: 'Senha incorreta.' });
+        return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
 
     } catch (error) {
         console.error('Login Error:', error);
         res.status(500).json({ message: 'Erro interno no servidor.', error: error.message });
+    }
+});
+
+// Google Login Route
+publicApiRouter.post('/auth/google', async (req, res) => {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ message: 'Token do Google não fornecido.' });
+
+    try {
+        // 1. Verify Google Token
+        const googleResponse = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${token}`);
+        const googleData = await googleResponse.json();
+
+        if (googleData.error) {
+            return res.status(400).json({ message: 'Token do Google inválido.' });
+        }
+
+        const email = googleData.email;
+
+        // 2. Check if user exists in our database
+        const result = await findUserByEmail(email);
+
+        if (result) {
+            // User exists, generate system JWT
+            const foundUser = result.user;
+            const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
+            const appToken = jwt.sign({ userId: foundUser.id, role: foundUser.role }, currentSecret, { expiresIn: '1d' });
+            
+            await logActivity(foundUser.id, 'Login Google', 'Usuário logado via Google.');
+            return res.json({ token: appToken });
+        } else {
+             return res.status(404).json({ message: 'Email não cadastrado no sistema. Entre em contato com sua academia.', code: 'USER_NOT_FOUND' });
+        }
+    } catch (error) {
+        console.error('Google Login Error:', error);
+        res.status(500).json({ message: 'Erro ao processar login com Google.' });
     }
 });
 

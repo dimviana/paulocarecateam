@@ -15,6 +15,7 @@ interface AppContextType {
   setThemeSettings: (settings: ThemeSettings) => Promise<void>;
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
+  loginGoogle: (token: string) => Promise<boolean>;
   logout: () => void;
   students: Student[];
   academies: Academy[];
@@ -253,6 +254,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const loginGoogle = async (token: string) => {
+    try {
+      const response = await api.loginGoogle(token);
+      if (response.token) {
+        localStorage.setItem('authToken', response.token);
+        const validatedUser = await api.validateSession();
+        setUser(validatedUser);
+        await refetchData();
+        return true;
+      }
+      return false;
+    } catch (error: any) {
+       if (error.message && error.message.includes('404')) {
+         // Let the UI handle the 404 specifically for Google Login
+         throw new Error('USER_NOT_FOUND'); 
+       }
+       handleApiError(error, 'loginGoogle');
+       return false;
+    }
+  };
+
   const registerAcademy = async (data: { name: string; address: string; responsible: string; responsibleRegistration: string; email: string; password?: string; }): Promise<{ success: boolean; message?: string; }> => {
     try {
         await api.registerAcademy(data);
@@ -329,7 +351,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   return (
     <AppContext.Provider value={{ 
         themeSettings, setThemeSettings, 
-        user, login, logout, 
+        user, login, loginGoogle, logout, 
         students, academies, graduations, schedules, users, attendanceRecords, professors, activityLogs,
         loading, 
         updateStudentPayment, saveStudent, deleteStudent,
