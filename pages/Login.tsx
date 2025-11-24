@@ -202,7 +202,12 @@ const Login: React.FC = () => {
              const response = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ emailOrCpf: email, pass: password }),
+                body: JSON.stringify({ 
+                    emailOrCpf: email, 
+                    pass: password,
+                    username: email,
+                    password: password
+                }),
              });
              
              if (response.status === 404) {

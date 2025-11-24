@@ -99,9 +99,18 @@ type AuthResponse = {
 
 export const api = {
   login: (email: string, password: string): Promise<AuthResponse> => {
+    // FIX: Send both old and new credential keys for backward compatibility
+    // The deployed backend might expect `username` and `password`.
+    // The current server.js expects `emailOrCpf` and `pass`.
+    // Sending both ensures it works with either version.
     return fetchWrapper<AuthResponse>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ emailOrCpf: email, pass: password }),
+        body: JSON.stringify({ 
+          emailOrCpf: email, 
+          pass: password,
+          username: email,
+          password: password,
+        }),
     });
   },
 
