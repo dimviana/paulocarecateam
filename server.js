@@ -63,7 +63,7 @@ const logActivity = async (actorId, action, details) => {
     const id = uuidv4();
     const timestamp = new Date();
     await db.query(
-      'INSERT INTO activity_logs (id, actorId, action, timestamp, details) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO activity_logs (id, actorId, action, `timestamp`, details) VALUES (?, ?, ?, ?, ?)',
       [id, actorId, action, timestamp, details]
     );
   } catch (error) {
@@ -390,7 +390,7 @@ apiRouter.post('/students/:studentId/payment', async (req, res) => {
         await connection.beginTransaction();
         await connection.query('UPDATE students SET paymentStatus = ? WHERE id = ?', [status, studentId]);
         if (status === 'paid') {
-            await connection.query('INSERT INTO payment_history (id, studentId, date, amount) VALUES (?, ?, ?, ?)', [uuidv4(), studentId, new Date(), amount]);
+            await connection.query('INSERT INTO payment_history (id, studentId, `date`, amount) VALUES (?, ?, ?, ?)', [uuidv4(), studentId, new Date(), amount]);
         }
         await connection.commit();
         await logActivity(req.user.userId, 'Update Payment', `Updated payment for student ${studentId} to ${status}`);
