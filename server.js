@@ -1,4 +1,3 @@
-
 /**
  * ==============================================================================
  *           Backend Server for Jiu-Jitsu Hub SAAS (server.js)
@@ -159,7 +158,7 @@ html {
   customJs: `
 // console.log("Custom JS loaded!");
   `,
-  socialLoginEnabled: !!GOOGLE_CLIENT_ID,
+  socialLoginEnabled: true,
   googleClientId: GOOGLE_CLIENT_ID || '',
   facebookAppId: FACEBOOK_APP_ID || '',
   pixKey: '',
@@ -183,36 +182,6 @@ const logActivity = async (actorId, action, details) => {
   } catch (error) {
     console.error('Failed to log activity:', error);
   }
-};
-
-const findUserByEmail = async (email) => {
-    if (!isDbConnected) return null;
-    try {
-        const [academies] = await db.query('SELECT * FROM academies WHERE email = ?', [email]);
-        if (academies.length > 0) {
-            const academy = academies[0];
-            const [users] = await db.query('SELECT * FROM users WHERE academyId = ? AND role LIKE "%admin%"', [academy.id]);
-            if (users.length > 0) {
-                return { user: users[0], type: 'admin', authData: academy };
-            } else {
-                return { 
-                    user: { id: academy.id, role: (academy.email === 'androiddiviana@gmail.com') ? 'general_admin' : 'academy_admin', name: academy.name }, 
-                    type: 'admin', 
-                    authData: academy 
-                };
-            }
-        }
-        const [students] = await db.query('SELECT * FROM students WHERE email = ?', [email]);
-        if (students.length > 0) {
-            const student = students[0];
-            const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
-            const user = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name, studentId: student.id, academyId: student.academyId };
-            return { user, type: 'student', authData: student };
-        }
-    } catch (e) {
-        console.error("Error finding user by email:", e);
-    }
-    return null;
 };
 
 // --- JWT Authentication Middleware (Stateful) ---
@@ -279,51 +248,65 @@ publicApiRouter.post('/auth/login', async (req, res) => {
     if (!emailOrCpf || !pass) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
 
     try {
-        const isEmail = String(emailOrCpf).includes('@');
-        let foundUser = null;
-        let passwordHash = null;
+        let user, authData;
 
-        if (isEmail) {
-            const result = await findUserByEmail(emailOrCpf);
-            if (result) {
-                foundUser = result.user;
-                passwordHash = result.authData.password;
+        // Determine if login is via email or CPF
+        if (String(emailOrCpf).includes('@')) {
+            // Find user in `users` table by email
+            const [users] = await db.query('SELECT * FROM users WHERE email = ?', [emailOrCpf]);
+            if (users.length === 0) {
+                return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
+            }
+            user = users[0];
+            
+            // Get associated auth data (academy or student)
+            if (user.role.includes('admin')) {
+                const [academies] = await db.query('SELECT * FROM academies WHERE id = ?', [user.academyId]);
+                if (academies.length > 0) authData = academies[0];
+            } else if (user.role === 'student') {
+                const [students] = await db.query('SELECT * FROM students WHERE id = ?', [user.studentId]);
+                if (students.length > 0) authData = students[0];
             }
         } else {
+            // Find student by CPF
             const sanitizedCpf = String(emailOrCpf).replace(/[^\d]/g, '');
             const [students] = await db.query(
                 'SELECT * FROM students WHERE cpf = ? OR REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?', 
                 [emailOrCpf, sanitizedCpf]
             );
-            
-            if (students.length > 0) {
-                const student = students[0];
-                passwordHash = student.password;
-                const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
-                foundUser = users.length > 0 ? users[0] : { id: student.id, role: 'student', name: student.name, studentId: student.id, academyId: student.academyId };
+            if (students.length === 0) {
+                return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
             }
+            authData = students[0];
+
+            // Find associated user
+            const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [authData.id]);
+            if (users.length === 0) {
+                console.warn(`Data inconsistency: Student with CPF ${sanitizedCpf} exists but has no user entry.`);
+                return res.status(404).json({ message: 'Conta de usuário para este CPF não encontrada.', code: 'USER_NOT_FOUND' });
+            }
+            user = users[0];
         }
 
-        if (foundUser && passwordHash) {
-            const isMatch = await bcrypt.compare(pass, passwordHash);
-            if (isMatch) {
-                // Generate secure session token (openssl rand -base64 32 equivalent)
-                const sessionToken = crypto.randomBytes(32).toString('base64');
-                
-                // Update User in DB with new session token (Invalidates previous sessions)
-                await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, foundUser.id]);
-
-                const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
-                const token = jwt.sign({ userId: foundUser.id, role: foundUser.role, sessionToken }, currentSecret, { expiresIn: '1d' });
-                
-                logActivity(foundUser.id, 'Login', 'Usuário logado com sucesso.').catch(console.error);
-                return res.json({ token });
-            } else {
-                 return res.status(401).json({ message: 'Senha incorreta.' });
-            }
+        if (!user || !authData || !authData.password) {
+            return res.status(404).json({ message: 'Usuário ou dados de autenticação não encontrados.', code: 'USER_NOT_FOUND' });
         }
 
-        return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
+        // Check password
+        const isMatch = await bcrypt.compare(pass, authData.password);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Senha incorreta.' });
+        }
+
+        // Password is correct, proceed with session creation
+        const sessionToken = crypto.randomBytes(32).toString('base64');
+        await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, user.id]);
+
+        const currentSecret = process.env.JWT_SECRET || JWT_SECRET;
+        const token = jwt.sign({ userId: user.id, role: user.role, sessionToken }, currentSecret, { expiresIn: '1d' });
+        
+        await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
+        return res.json({ token });
 
     } catch (error) {
         console.error('Login Error:', error);
@@ -344,10 +327,10 @@ publicApiRouter.post('/auth/google', async (req, res) => {
         if (googleData.error) return res.status(400).json({ message: 'Token do Google inválido.' });
 
         const email = googleData.email;
-        const result = await findUserByEmail(email);
+        const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
 
-        if (result) {
-            const foundUser = result.user;
+        if (users.length > 0) {
+            const foundUser = users[0];
             
             // Generate secure session token
             const sessionToken = crypto.randomBytes(32).toString('base64');

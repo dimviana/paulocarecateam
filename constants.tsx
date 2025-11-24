@@ -91,7 +91,7 @@ html {
   customJs: `
 // console.log("Custom JS loaded!");
   `,
-  socialLoginEnabled: false,
+  socialLoginEnabled: true,
   googleClientId: '',
   facebookAppId: '',
   // PIX Payment
