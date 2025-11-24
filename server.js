@@ -28,7 +28,8 @@ const CURRENT_JWT_SECRET = process.env.JWT_SECRET || "eyJhbGciOiJIUzI1NiIsInR5cC
 
 // --- Express App Initialization ---
 const app = express();
-const apiRouter = express.Router();
+const publicApiRouter = express.Router();
+const protectedApiRouter = express.Router();
 
 
 // --- Middleware ---
@@ -50,7 +51,6 @@ async function connectToDatabase() {
   } catch (error) {
     console.error('Failed to connect to the database:', error.message);
     isDbConnected = false;
-    // Exit if we can't connect to the DB on startup.
     process.exit(1);
   }
 }
@@ -81,17 +81,12 @@ const authenticateToken = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, CURRENT_JWT_SECRET);
     
-    // --- Stateful Session Check ---
-    // Em vez de apenas confiar no JWT, verificamos se a sessão à qual ele pertence
-    // ainda está ativa em nosso banco de dados.
     const [rows] = await db.query('SELECT sessionToken FROM users WHERE id = ?', [decoded.userId]);
     
     if (rows.length === 0) {
          return res.status(401).json({ message: 'Usuário não encontrado.' });
     }
     
-    // Se o sessionToken no BD não corresponder ao do JWT,
-    // significa que o usuário fez login em outro lugar ou fez logout.
     if (rows[0].sessionToken !== decoded.sessionToken) {
          return res.status(403).json({ message: 'Sessão inválida. Você conectou em outro dispositivo ou fez logout.' });
     }
@@ -99,7 +94,6 @@ const authenticateToken = async (req, res, next) => {
     req.user = decoded;
     next();
   } catch (err) {
-      // Isso captura tokens expirados ou malformados.
       console.error('Authentication Error:', err.message);
       return res.status(403).json({ message: 'Token inválido ou expirado.' });
   }
@@ -111,11 +105,10 @@ const authenticateToken = async (req, res, next) => {
 
 // --- Public Routes ---
 
-apiRouter.get('/settings', async (req, res) => {
+publicApiRouter.get('/settings', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
         if (rows && rows.length > 0) return res.json(rows[0]);
-        // Fallback para configurações padrão se a consulta ao BD falhar ou estiver vazia
         res.status(404).json({ message: "Settings not found" });
     } catch (error) {
         console.error("Error fetching settings:", error);
@@ -123,59 +116,55 @@ apiRouter.get('/settings', async (req, res) => {
     }
 });
 
-apiRouter.post('/auth/login', async (req, res) => {
+publicApiRouter.post('/auth/login', async (req, res) => {
     const { emailOrCpf, pass } = req.body;
+
     if (!emailOrCpf || !pass) {
         return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
     }
 
+    let user = null;
+    let passwordHash = null;
+
     try {
-        let user;
-        let passwordHash;
-
         if (emailOrCpf.includes('@')) {
-            // --- Login via Email ---
             const [users] = await db.query('SELECT * FROM users WHERE email = ?', [emailOrCpf]);
-            if (users.length === 0) {
-                return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
-            }
-            user = users[0];
-
-            if (user.role === 'student') {
-                const [students] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
-                passwordHash = students.length > 0 ? students[0].password : null;
-            } else { // 'general_admin' or 'academy_admin'
-                const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
-                passwordHash = academies.length > 0 ? academies[0].password : null;
+            if (users.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
+            
+            const foundUser = users[0];
+            if (foundUser.role === 'student') {
+                const [students] = await db.query('SELECT password FROM students WHERE id = ?', [foundUser.studentId]);
+                if (students.length > 0) {
+                    passwordHash = students[0].password;
+                    user = foundUser;
+                }
+            } else {
+                const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [foundUser.academyId]);
+                if (academies.length > 0) {
+                    passwordHash = academies[0].password;
+                    user = foundUser;
+                }
             }
         } else {
-            // --- Login via CPF ---
             const sanitizedCpf = emailOrCpf.replace(/\D/g, '');
             const [students] = await db.query('SELECT * FROM students WHERE cpf = ?', [sanitizedCpf]);
-            if (students.length === 0) {
-                return res.status(404).json({ message: 'Usuário com este CPF não encontrado.', code: 'USER_NOT_FOUND' });
+            if (students.length > 0) {
+                const foundStudent = students[0];
+                passwordHash = foundStudent.password;
+                const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [foundStudent.id]);
+                if (users.length > 0) user = users[0];
             }
-            const student = students[0];
-            passwordHash = student.password;
-
-            // Find the corresponding user record for the student
-            const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [student.id]);
-            if (users.length === 0) {
-                return res.status(500).json({ message: 'Inconsistência de dados: Aluno encontrado, mas sem uma conta de usuário correspondente.' });
-            }
-            user = users[0];
         }
 
-        if (!passwordHash) {
-            return res.status(401).json({ message: 'Credenciais inválidas. Nenhuma senha associada à conta.' });
+        if (!user || !passwordHash) {
+            return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
         const isMatch = await bcrypt.compare(pass, passwordHash);
         if (!isMatch) {
-            return res.status(401).json({ message: 'Senha incorreta.' });
+            return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
-        
-        // --- Lógica de Sessão Stateful com JWT ---
+
         const sessionToken = crypto.randomBytes(32).toString('base64');
         await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, user.id]);
         
@@ -192,7 +181,7 @@ apiRouter.post('/auth/login', async (req, res) => {
 });
 
 
-apiRouter.post('/auth/register', async (req, res) => {
+publicApiRouter.post('/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
     
@@ -227,13 +216,11 @@ apiRouter.post('/auth/register', async (req, res) => {
 
 
 // --- Protected Routes ---
-// Todas as rotas abaixo desta linha exigem autenticação
-apiRouter.use(authenticateToken);
+protectedApiRouter.use(authenticateToken);
 
-apiRouter.post('/auth/logout', async (req, res) => {
+protectedApiRouter.post('/auth/logout', async (req, res) => {
     try {
         const userId = req.user.userId;
-        // Invalida a sessão limpando o token de sessão no banco de dados.
         await db.query('UPDATE users SET sessionToken = NULL WHERE id = ?', [userId]);
         await logActivity(userId, 'Logout', 'Usuário deslogado.');
         res.status(200).json({ message: 'Logout bem-sucedido.' });
@@ -243,7 +230,7 @@ apiRouter.post('/auth/logout', async (req, res) => {
     }
 });
 
-apiRouter.get('/auth/session', async (req, res) => {
+protectedApiRouter.get('/auth/session', async (req, res) => {
     try {
         const [users] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [req.user.userId]);
         if (users.length > 0) {
@@ -266,20 +253,18 @@ const genericGet = (tableName) => async (req, res) => {
     }
 };
 
-apiRouter.get('/users', genericGet('users'));
-apiRouter.get('/academies', genericGet('academies'));
-apiRouter.get('/graduations', genericGet('graduations'));
-apiRouter.get('/professors', genericGet('professors'));
-apiRouter.get('/logs', genericGet('activity_logs'));
-apiRouter.get('/attendance', genericGet('attendance_records'));
+protectedApiRouter.get('/users', genericGet('users'));
+protectedApiRouter.get('/academies', genericGet('academies'));
+protectedApiRouter.get('/graduations', genericGet('graduations'));
+protectedApiRouter.get('/professors', genericGet('professors'));
+protectedApiRouter.get('/logs', genericGet('activity_logs'));
+protectedApiRouter.get('/attendance', genericGet('attendance_records'));
 
-apiRouter.get('/students', async (req, res) => {
+protectedApiRouter.get('/students', async (req, res) => {
      try {
         const [students] = await db.query('SELECT * FROM students');
         const [payments] = await db.query('SELECT * FROM payment_history ORDER BY `date` DESC');
         
-        // OTIMIZAÇÃO DE PERFORMANCE: Cria um mapa de busca para pagamentos em vez de filtrar em cada iteração.
-        // Isso reduz a complexidade de O(n*m) para O(n+m).
         const paymentsByStudent = payments.reduce((acc, payment) => {
             if (!acc[payment.studentId]) {
                 acc[payment.studentId] = [];
@@ -303,7 +288,7 @@ apiRouter.get('/students', async (req, res) => {
     }
 });
 
-apiRouter.post('/students', async (req, res) => {
+protectedApiRouter.post('/students', async (req, res) => {
     const data = req.body;
     if (!data.password) return res.status(400).json({ message: "Password is required for new students."});
     
@@ -322,7 +307,7 @@ apiRouter.post('/students', async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to create student", error: error.message }); } finally { connection.release(); }
 });
 
-apiRouter.put('/students/:id', async (req, res) => {
+protectedApiRouter.put('/students/:id', async (req, res) => {
     const { id } = req.params;
     const data = req.body;
     const connection = await db.getConnection();
@@ -348,7 +333,7 @@ apiRouter.put('/students/:id', async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to update student", error: error.message }); } finally { connection.release(); }
 });
 
-apiRouter.delete('/students/:id', async (req, res) => {
+protectedApiRouter.delete('/students/:id', async (req, res) => {
     const { id } = req.params;
     const connection = await db.getConnection();
     try {
@@ -373,7 +358,7 @@ apiRouter.delete('/students/:id', async (req, res) => {
 });
 
 
-apiRouter.put('/settings', async (req, res) => {
+protectedApiRouter.put('/settings', async (req, res) => {
     const { id, ...settingsToUpdate } = req.body;
     try {
         const booleanFields = ['publicPageEnabled', 'useGradient', 'socialLoginEnabled'];
@@ -394,7 +379,7 @@ apiRouter.put('/settings', async (req, res) => {
     }
 });
 
-apiRouter.post('/students/:studentId/payment', async (req, res) => {
+protectedApiRouter.post('/students/:studentId/payment', async (req, res) => {
     const { studentId } = req.params;
     const { status, amount } = req.body;
     if (!['paid', 'unpaid'].includes(status)) return res.status(400).json({ message: "Invalid status." });
@@ -450,7 +435,7 @@ const simpleCrud = (tableName, fields) => {
     return router;
 }
 
-apiRouter.put('/graduations/ranks', async (req, res) => {
+protectedApiRouter.put('/graduations/ranks', async (req, res) => {
     const gradsWithNewRanks = req.body;
     if (!Array.isArray(gradsWithNewRanks)) {
         return res.status(400).json({ message: 'Expected an array of graduations.' });
@@ -477,8 +462,6 @@ apiRouter.put('/graduations/ranks', async (req, res) => {
 const scheduleRouter = express.Router();
 scheduleRouter.get('/', async (req, res) => {
     try {
-        // OTIMIZAÇÃO DE PERFORMANCE: Usa uma única consulta SQL com LEFT JOIN e GROUP_CONCAT
-        // para buscar horários e seus assistentes eficientemente, evitando filtragem em memória de tabelas grandes.
         const [schedules] = await db.query(`
             SELECT 
                 cs.*, 
@@ -492,7 +475,6 @@ scheduleRouter.get('/', async (req, res) => {
         `);
 
         for (const schedule of schedules) {
-            // GROUP_CONCAT retorna uma string separada por vírgulas ou NULL se não houver assistentes.
             schedule.assistantIds = schedule.assistantIds ? schedule.assistantIds.split(',') : [];
         }
         res.json(schedules);
@@ -550,14 +532,15 @@ scheduleRouter.delete('/:id', async (req, res) => {
         res.status(204).send();
     } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to delete schedule', error: error.message }); } finally { connection.release(); }
 });
-apiRouter.use('/schedules', scheduleRouter);
+protectedApiRouter.use('/schedules', scheduleRouter);
 
-apiRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
-apiRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
-apiRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
+protectedApiRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
+protectedApiRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
+protectedApiRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
 
-// --- Mount API Router ---
-app.use('/api', apiRouter);
+// --- Mount API Routers ---
+app.use('/api', publicApiRouter);
+app.use('/api', protectedApiRouter);
 
 // --- 404 HANDLER FOR API ---
 app.use('/api/*', (req, res) => {
