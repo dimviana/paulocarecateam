@@ -81,13 +81,17 @@ const authenticateToken = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, CURRENT_JWT_SECRET);
     
-    // Stateful Session Check: Validate sessionToken against DB
+    // --- Stateful Session Check ---
+    // Em vez de apenas confiar no JWT, verificamos se a sessão à qual ele pertence
+    // ainda está ativa em nosso banco de dados.
     const [rows] = await db.query('SELECT sessionToken FROM users WHERE id = ?', [decoded.userId]);
     
     if (rows.length === 0) {
          return res.status(401).json({ message: 'Usuário não encontrado.' });
     }
     
+    // Se o sessionToken no BD não corresponder ao do JWT,
+    // significa que o usuário fez login em outro lugar ou fez logout.
     if (rows[0].sessionToken !== decoded.sessionToken) {
          return res.status(403).json({ message: 'Sessão inválida. Você conectou em outro dispositivo ou fez logout.' });
     }
@@ -95,6 +99,7 @@ const authenticateToken = async (req, res, next) => {
     req.user = decoded;
     next();
   } catch (err) {
+      // Isso captura tokens expirados ou malformados.
       console.error('Authentication Error:', err.message);
       return res.status(403).json({ message: 'Token inválido ou expirado.' });
   }
@@ -110,7 +115,7 @@ apiRouter.get('/settings', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
         if (rows && rows.length > 0) return res.json(rows[0]);
-        // Fallback to default settings if DB query fails or is empty
+        // Fallback para configurações padrão se a consulta ao BD falhar ou estiver vazia
         res.status(404).json({ message: "Settings not found" });
     } catch (error) {
         console.error("Error fetching settings:", error);
@@ -153,10 +158,15 @@ apiRouter.post('/auth/login', async (req, res) => {
             return res.status(401).json({ message: 'Senha incorreta.' });
         }
         
+        // --- Lógica de Sessão Stateful com JWT ---
+        // 1. Gera um token de sessão único e seguro.
         const sessionToken = crypto.randomBytes(32).toString('base64');
+        // 2. Armazena este token de sessão no banco de dados para o usuário.
+        //    Isso invalida quaisquer sessões anteriores em outros dispositivos.
         await db.query('UPDATE users SET sessionToken = ? WHERE id = ?', [sessionToken, user.id]);
-
-        const token = jwt.sign({ userId: user.id, role: user.role, sessionToken }, CURRENT_JWT_SECRET, { expiresIn: '1d' });
+        // 3. Cria o payload do JWT incluindo o token de sessão.
+        const payload = { userId: user.id, role: user.role, sessionToken };
+        const token = jwt.sign(payload, CURRENT_JWT_SECRET, { expiresIn: '1d' });
         
         await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
         return res.json({ token });
@@ -203,12 +213,13 @@ apiRouter.post('/auth/register', async (req, res) => {
 
 
 // --- Protected Routes ---
-// All routes below this line require authentication
+// Todas as rotas abaixo desta linha exigem autenticação
 apiRouter.use(authenticateToken);
 
 apiRouter.post('/auth/logout', async (req, res) => {
     try {
         const userId = req.user.userId;
+        // Invalida a sessão limpando o token de sessão no banco de dados.
         await db.query('UPDATE users SET sessionToken = NULL WHERE id = ?', [userId]);
         await logActivity(userId, 'Logout', 'Usuário deslogado.');
         res.status(200).json({ message: 'Logout bem-sucedido.' });
@@ -251,10 +262,20 @@ apiRouter.get('/attendance', genericGet('attendance_records'));
 apiRouter.get('/students', async (req, res) => {
      try {
         const [students] = await db.query('SELECT * FROM students');
-        const [payments] = await db.query('SELECT * FROM payment_history');
+        const [payments] = await db.query('SELECT * FROM payment_history ORDER BY `date` DESC');
+        
+        // OTIMIZAÇÃO DE PERFORMANCE: Cria um mapa de busca para pagamentos em vez de filtrar em cada iteração.
+        // Isso reduz a complexidade de O(n*m) para O(n+m).
+        const paymentsByStudent = payments.reduce((acc, payment) => {
+            if (!acc[payment.studentId]) {
+                acc[payment.studentId] = [];
+            }
+            acc[payment.studentId].push(payment);
+            return acc;
+        }, {});
         
         for (const student of students) {
-            student.paymentHistory = payments.filter(p => p.studentId === student.id);
+            student.paymentHistory = paymentsByStudent[student.id] || [];
             if (student.medals && typeof student.medals === 'string') {
                 try { student.medals = JSON.parse(student.medals); } catch (e) { student.medals = { gold: 0, silver: 0, bronze: 0 }; }
             } else if (!student.medals) {
@@ -442,10 +463,23 @@ apiRouter.put('/graduations/ranks', async (req, res) => {
 const scheduleRouter = express.Router();
 scheduleRouter.get('/', async (req, res) => {
     try {
-        const [schedules] = await db.query('SELECT * FROM class_schedules');
-        const [assistants] = await db.query('SELECT * FROM schedule_assistants');
+        // OTIMIZAÇÃO DE PERFORMANCE: Usa uma única consulta SQL com LEFT JOIN e GROUP_CONCAT
+        // para buscar horários e seus assistentes eficientemente, evitando filtragem em memória de tabelas grandes.
+        const [schedules] = await db.query(`
+            SELECT 
+                cs.*, 
+                GROUP_CONCAT(sa.assistantId) as assistantIds 
+            FROM 
+                class_schedules cs 
+            LEFT JOIN 
+                schedule_assistants sa ON cs.id = sa.scheduleId 
+            GROUP BY 
+                cs.id
+        `);
+
         for (const schedule of schedules) {
-            schedule.assistantIds = assistants.filter(a => a.scheduleId === schedule.id).map(a => a.assistantId);
+            // GROUP_CONCAT retorna uma string separada por vírgulas ou NULL se não houver assistentes.
+            schedule.assistantIds = schedule.assistantIds ? schedule.assistantIds.split(',') : [];
         }
         res.json(schedules);
     } catch (error) {
