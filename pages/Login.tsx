@@ -197,31 +197,12 @@ const Login: React.FC = () => {
     try {
         const success = await login(email, password);
         if (!success) {
-             // We perform a manual check just to display the specific 404 modal,
-             // effectively replicating the user check logic for UI purposes if the generic login fails silently.
-             const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    emailOrCpf: email, 
-                    pass: password,
-                    username: email,
-                    password: password
-                }),
-             });
-             
-             if (response.status === 404) {
-                 setIsNotFoundModalOpen(true);
-             } else if (response.ok) {
-                 // Login was successful at backend, but Context failed (likely Session Validation)
-                 setError('Login bem-sucedido, mas falha ao validar sessão. Verifique sua conexão.');
-             } else {
-                 const data = await response.json();
-                 setError(data.message || 'Credenciais inválidas.');
-             }
+            // The context's login function now handles errors, including 404s.
+            // We can check the error message if needed, but for now, a generic message is fine.
+            setError('Credenciais inválidas ou usuário não encontrado.');
         }
     } catch (err) {
-        setError('Erro de conexão.');
+        setError('Erro de conexão com o servidor.');
     }
     setLoading(false);
   };

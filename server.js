@@ -133,7 +133,9 @@ app.get('/api/settings', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-    const { emailOrCpf, pass } = req.body;
+    // FIX: Read from both potential key sets for backward compatibility with older clients.
+    const emailOrCpf = req.body.emailOrCpf || req.body.username;
+    const pass = req.body.pass || req.body.password;
 
     if (!emailOrCpf || !pass) {
         return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
@@ -145,18 +147,16 @@ app.post('/api/auth/login', async (req, res) => {
 
         if (emailOrCpf.includes('@')) {
             const [users] = await db.query('SELECT * FROM users WHERE email = ?', [emailOrCpf]);
-            if (users.length > 0) user = users[0];
+            if (users.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
+            user = users[0];
         } else {
             const sanitizedCpf = emailOrCpf.replace(/\D/g, '');
             const [students] = await db.query('SELECT id FROM students WHERE cpf = ?', [sanitizedCpf]);
-            if (students.length > 0) {
-                const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [students[0].id]);
-                if (users.length > 0) user = users[0];
-            }
-        }
-
-        if (!user) {
-            return res.status(401).json({ message: 'Credenciais inválidas.' });
+            if (students.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
+            
+            const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [students[0].id]);
+            if (users.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
+            user = users[0];
         }
 
         if (user.role === 'student') {

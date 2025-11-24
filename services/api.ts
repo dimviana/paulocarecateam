@@ -239,7 +239,7 @@ export const api = {
     return { success: true };
   },
 
-  getThemeSettings: (): Promise<ThemeSettings> => fetchWrapper<ThemeSettings>('/settings'),
+  getThemeSettings: (): Promise<ThemeSettings> => fetchWrapper<ThemeSettings>('/settings', {}),
 
   saveThemeSettings: (settings: ThemeSettings): Promise<ThemeSettings> => {
     return fetchWrapper<ThemeSettings>('/settings', {
