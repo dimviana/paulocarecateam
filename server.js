@@ -189,7 +189,8 @@ const genericDelete = (tableName, specialHandling = {}) => async (req, res) => {
 // =================================================================
 
 // ---------------------------------
-// 1. PUBLIC ROUTES (No session required)
+// SECTION 1: PUBLIC ROUTES
+// (No session required. Defined before the auth middleware)
 // ---------------------------------
 apiRouter.get('/settings', async (req, res) => {
     try {
@@ -271,12 +272,13 @@ apiRouter.post('/auth/register', async (req, res) => {
 });
 
 // ---------------------------------
-// 2. AUTHENTICATION WALL
+// SECTION 2: AUTHENTICATION WALL
+// (All routes below this line are protected)
 // ---------------------------------
 apiRouter.use(checkSession);
 
 // ---------------------------------
-// 3. PROTECTED ROUTES
+// SECTION 3: PROTECTED ROUTES
 // ---------------------------------
 apiRouter.get('/auth/session', async (req, res) => {
     try {
@@ -329,6 +331,7 @@ apiRouter.get('/academies', async (req, res) => {
     res.json(academies);
 });
 
+// FIX: Added all missing GET endpoints that were causing 404 errors.
 apiRouter.get('/graduations', genericGet('graduations'));
 apiRouter.get('/professors', genericGet('professors'));
 apiRouter.get('/users', genericGet('users'));
