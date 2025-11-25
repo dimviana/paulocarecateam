@@ -123,7 +123,7 @@ const checkSession = (req, res, next) => {
         delete sessions[sessionId];
         return res.status(401).json({ message: 'Sessão expirada.' });
     }
-    session.expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    session.expires = new Date(Date.now() + 20 * 60 * 1000); // 20 minutes
     req.user = session.user;
     next();
 };
@@ -205,7 +205,7 @@ apiRouter.post('/auth/login', async (req, res) => {
         }
 
         const sessionId = uuidv4();
-        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const expires = new Date(Date.now() + 20 * 60 * 1000); // 20 minutes
         sessions[sessionId] = { user: { userId: user.id, role: user.role, academyId: user.academyId, studentId: user.studentId }, expires };
 
         res.cookie('sessionId', sessionId, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', expires });
@@ -244,7 +244,7 @@ apiRouter.post('/auth/register', async (req, res) => {
 
         const [[newUser]] = await connection.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [userId]);
         const sessionId = uuidv4();
-        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const expires = new Date(Date.now() + 20 * 60 * 1000); // 20 minutes
         sessions[sessionId] = { user: { userId: newUser.id, role: newUser.role, academyId: newUser.academyId }, expires };
 
         res.cookie('sessionId', sessionId, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', expires });
