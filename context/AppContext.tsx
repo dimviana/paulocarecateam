@@ -282,9 +282,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const registerAcademy = async (data: { name: string; address: string; responsible: string; responsibleRegistration: string; email: string; password?: string; }): Promise<{ success: boolean; message?: string; }> => {
     try {
-        await api.registerAcademy(data);
-        await refetchData(user);
-        return { success: true };
+        const newUser = await api.registerAcademy(data);
+        if (newUser) {
+          setUser(newUser);
+          await refetchData(newUser);
+          return { success: true };
+        }
+        return { success: false, message: 'Falha no cadastro: usuário não retornado.' };
     } catch (error: any) {
         handleApiError(error, 'registerAcademy');
         return { success: false, message: error.message };

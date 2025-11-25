@@ -235,9 +235,27 @@ publicRouter.post('/auth/register', async (req, res) => {
         await connection.query('INSERT INTO users (id, name, email, role, academyId) VALUES (?, ?, ?, ?, ?)', [userId, responsible, email, 'academy_admin', academyId]);
         
         await connection.commit();
-        await logActivity(userId, 'Academy Registration', `Academia "${name}" registrada.`);
-        const [[newAcademy]] = await db.query('SELECT * FROM academies WHERE id = ?', [academyId]);
-        res.status(201).json(newAcademy);
+
+        // Automatically log the user in after registration
+        const sessionId = uuidv4();
+        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        
+        const [[newUser]] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [userId]);
+
+        const sessionUser = { userId: newUser.id, role: newUser.role };
+        sessions[sessionId] = { user: sessionUser, expires };
+
+        res.cookie('sessionId', sessionId, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            expires: expires
+        });
+
+        await logActivity(userId, 'Academy Registration & Login', `Academia "${name}" registrada. Usuário logado automaticamente.`);
+        
+        res.status(201).json(newUser);
+
     } catch (error) {
         await connection.rollback();
         console.error("Registration Error:", error);

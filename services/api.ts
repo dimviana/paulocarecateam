@@ -80,9 +80,9 @@ export const api = {
     responsibleRegistration: string;
     email: string; 
     password?: string; 
-  }): Promise<Academy> => {
-    // This is a public route, so fetchWrapper works fine.
-    return fetchWrapper<Academy>('/auth/register', {
+  }): Promise<User> => {
+    // This public route now logs the user in and returns the user object.
+    return fetchWrapper<User>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),
     });

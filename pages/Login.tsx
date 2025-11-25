@@ -124,8 +124,6 @@ const Login: React.FC = () => {
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isNotFoundModalOpen, setIsNotFoundModalOpen] = useState(false);
   
-  const [registerSuccessMessage, setRegisterSuccessMessage] = useState('');
-
   const { themeSettings, login, loginGoogle, user, registerAcademy, loading: appLoading } = useContext(AppContext);
   const location = useLocation();
 
@@ -212,8 +210,8 @@ const Login: React.FC = () => {
   const handleRegisterSave = async (data: any) => {
     const result = await registerAcademy(data);
     if (result.success) {
-        setRegisterSuccessMessage('Cadastro realizado com sucesso! Faça login para continuar.');
         setIsRegisterModalOpen(false);
+        // The user is now logged in via context, navigation will happen automatically.
     }
     return result;
   };
@@ -244,8 +242,6 @@ const Login: React.FC = () => {
                     <h1 className="text-3xl font-bold text-[var(--theme-text-primary)] tracking-tight">{themeSettings.systemName}</h1>
                     <p className="mt-2 text-[var(--theme-text-primary)]/70">Acesse sua conta para continuar</p>
                 </div>
-
-                {registerSuccessMessage && <p className="text-sm text-center text-green-600 bg-green-100 p-3 rounded-md mt-6">{registerSuccessMessage}</p>}
 
                 <form className="mt-8 space-y-6" onSubmit={handleLogin}>
                     <div>
@@ -294,10 +290,7 @@ const Login: React.FC = () => {
                     <span className="text-[var(--theme-text-primary)]/70">Não tem uma conta? </span>
                     <button
                         type="button"
-                        onClick={() => {
-                        setRegisterSuccessMessage('');
-                        setIsRegisterModalOpen(true);
-                        }}
+                        onClick={() => setIsRegisterModalOpen(true)}
                         className="font-semibold text-[var(--theme-accent)] hover:underline"
                     >
                         Cadastre-se
