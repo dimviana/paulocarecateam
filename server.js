@@ -11,12 +11,22 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 
-// --- Environment Variables ---
+// --- Environment Variables & Validation ---
 const {
   DATABASE_URL,
   PORT = 3001,
   FRONTEND_URL,
 } = process.env;
+
+if (!FRONTEND_URL) {
+    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    console.error('!!!           FATAL: FRONTEND_URL is not set           !!!');
+    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    console.error('The FRONTEND_URL environment variable must be set in your .env file.');
+    console.error('It should be the full URL of your frontend application (e.g., https://yourapp.com).');
+    console.error('CORS will fail without this, causing 401 Unauthorized errors on the frontend.');
+    process.exit(1);
+}
 
 // --- Express App Initialization ---
 const app = express();
@@ -26,6 +36,9 @@ const apiRouter = express.Router();
 const sessions = {}; // { sessionId: { user: { userId, role }, expires: Date } }
 
 // --- Middleware ---
+// FIX: Correctly set up CORS options. For credentialed requests (like those
+// with session cookies), the 'origin' must be explicitly set to the exact
+// frontend URL. A wildcard '*' is not allowed by browsers in this case.
 const corsOptions = {
   origin: FRONTEND_URL,
   credentials: true,
