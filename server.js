@@ -1,7 +1,7 @@
 /**
  * ==============================================================================
  *           Backend Server for Jiu-Jitsu Hub SAAS (server.js)
- *           Refatorado para Sessões Persistentes, Cookies Compatíveis e Roteamento Seguro
+ *           FLATTENED ROUTES & MANUAL SESSION MANAGEMENT
  * ==============================================================================
  */
 
@@ -61,6 +61,9 @@ const checkDbConnection = (req, res, next) => {
     next();
 };
 
+// Apply DB Check globally to all API routes
+app.use('/api', checkDbConnection);
+
 // --- Helper Functions ---
 const logActivity = async (actorId, action, details) => {
   try {
@@ -76,20 +79,22 @@ const logActivity = async (actorId, action, details) => {
   }
 };
 
-// Robust Cookie Parser using Regex
+// Robust Cookie Parser (Manual Implementation to avoid dependencies)
 const parseCookies = (req) => {
     const list = {};
     const cookieHeader = req.headers?.cookie;
     if (!cookieHeader) return list;
 
-    cookieHeader.replace(/\s+/g, '').split(';').forEach((cookie) => {
-        const [name, ...rest] = cookie.split('=');
-        list[name] = decodeURIComponent(rest.join('='));
+    cookieHeader.split(';').forEach(function(cookie) {
+        const parts = cookie.split('=');
+        const name = parts.shift().trim();
+        const value = decodeURIComponent(parts.join('='));
+        list[name] = value;
     });
     return list;
 }
 
-// --- Session Management (Persistent via DB) ---
+// --- Session Management (Manual MySQL Persistence) ---
 
 const createSession = async (user) => {
     const sessionId = uuidv4();
@@ -133,14 +138,13 @@ const destroySession = async (sessionId) => {
     }
 };
 
-// --- Auth Middleware ---
-const checkSession = async (req, res, next) => {
+// --- Auth Middleware (Explicitly applied to protected routes) ---
+const requireAuth = async (req, res, next) => {
     try {
         const cookies = parseCookies(req);
         const sessionId = cookies.sessionId;
         
         if (!sessionId) {
-            // Explicit error for debugging frontend issues
             return res.status(401).json({ message: 'Não autenticado (sem cookie).' });
         }
 
@@ -159,20 +163,12 @@ const checkSession = async (req, res, next) => {
 };
 
 // =================================================================
-// --- ROUTING ARCHITECTURE
+// --- FLATTENED ROUTES (Directly on app)
 // =================================================================
 
-const publicRouter = express.Router();
-const protectedRouter = express.Router();
+// --- 1. PUBLIC ROUTES ---
 
-// Apply DB Check globally to API routes
-app.use('/api', checkDbConnection);
-
-// -----------------------------------------------------------------
-// 1. PUBLIC ROUTES (No Auth Required)
-// -----------------------------------------------------------------
-
-publicRouter.get('/settings', async (req, res) => {
+app.get('/api/settings', async (req, res) => {
     try {
         const publicFields = 'logoUrl, systemName, primaryColor, secondaryColor, backgroundColor, cardBackgroundColor, buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2, useGradient, theme, publicPageEnabled, heroHtml, aboutHtml, branchesHtml, footerHtml, customCss, customJs, socialLoginEnabled, googleClientId, facebookAppId, copyrightText, systemVersion, reminderDaysBeforeDue, overdueDaysAfterDue, monthlyFeeAmount';
         const [rows] = await db.query(`SELECT ${publicFields} FROM theme_settings WHERE id = 1`);
@@ -192,7 +188,29 @@ publicRouter.get('/settings', async (req, res) => {
     }
 });
 
-publicRouter.post('/auth/login', async (req, res) => {
+app.get('/api/auth/session', async (req, res) => {
+    try {
+        const cookies = parseCookies(req);
+        const sessionId = cookies.sessionId;
+        
+        if (!sessionId) {
+            return res.status(401).json({ message: 'Sem sessão.' });
+        }
+
+        const user = await validateSession(sessionId);
+        if (user) {
+            res.json(user);
+        } else {
+            res.clearCookie('sessionId');
+            res.status(401).json({ message: 'Sessão inválida.' });
+        }
+    } catch (error) {
+        console.error("Auth session error:", error);
+        res.status(500).json({ message: 'Erro ao validar sessão.' });
+    }
+});
+
+app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
     
@@ -214,13 +232,10 @@ publicRouter.post('/auth/login', async (req, res) => {
 
         const { sessionId, expires } = await createSession(user);
 
-        // IMPORTANT: Cookie Settings
         res.cookie('sessionId', sessionId, {
             httpOnly: true,
-            // Only set secure to true if we are SURE we are on HTTPS in production.
-            // Setting it to true on HTTP will cause the browser to reject the cookie.
             secure: process.env.NODE_ENV === 'production', 
-            sameSite: 'Lax', // 'Lax' is safer than 'Strict' for navigation/redirects
+            sameSite: 'Lax',
             expires
         });
         
@@ -234,7 +249,7 @@ publicRouter.post('/auth/login', async (req, res) => {
     }
 });
 
-publicRouter.post('/auth/register', async (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Dados incompletos.' });
     
@@ -275,29 +290,7 @@ publicRouter.post('/auth/register', async (req, res) => {
     }
 });
 
-publicRouter.get('/auth/session', async (req, res) => {
-    try {
-        const cookies = parseCookies(req);
-        const sessionId = cookies.sessionId;
-        
-        if (!sessionId) {
-            return res.status(401).json({ message: 'Sem sessão.' });
-        }
-
-        const user = await validateSession(sessionId);
-        if (user) {
-            res.json(user);
-        } else {
-            res.clearCookie('sessionId');
-            res.status(401).json({ message: 'Sessão inválida.' });
-        }
-    } catch (error) {
-        console.error("Auth session error:", error);
-        res.status(500).json({ message: 'Erro ao validar sessão.' });
-    }
-});
-
-publicRouter.post('/auth/logout', async (req, res) => {
+app.post('/api/auth/logout', async (req, res) => {
     const cookies = parseCookies(req);
     const sessionId = cookies.sessionId;
     if (sessionId) {
@@ -306,16 +299,9 @@ publicRouter.post('/auth/logout', async (req, res) => {
     res.clearCookie('sessionId').json({ message: 'Logout realizado.' });
 });
 
-// -----------------------------------------------------------------
-// 2. PROTECTED ROUTES (Auth Required)
-// -----------------------------------------------------------------
+// --- 2. PROTECTED ROUTES (Require Auth) ---
 
-// Apply Authentication Middleware ONLY to protected router
-protectedRouter.use(checkSession);
-
-// --- GET Routes (Data Fetching) ---
-
-protectedRouter.get('/students', async (req, res) => {
+app.get('/api/students', requireAuth, async (req, res) => {
     try {
         const [students] = await db.query('SELECT * FROM students');
         const [payments] = await db.query('SELECT * FROM payment_history ORDER BY `date` DESC');
@@ -331,14 +317,14 @@ protectedRouter.get('/students', async (req, res) => {
     } catch (e) { console.error(e); res.status(500).json({ message: 'Erro ao buscar alunos' }); }
 });
 
-protectedRouter.get('/academies', async (req, res) => {
+app.get('/api/academies', requireAuth, async (req, res) => {
     try {
         const [academies] = await db.query('SELECT * FROM academies WHERE id != ?', ['master_admin_academy_01']);
         res.json(academies);
     } catch (e) { console.error(e); res.status(500).json({ message: 'Erro ao buscar academias' }); }
 });
 
-protectedRouter.get('/schedules', async (req, res) => {
+app.get('/api/schedules', requireAuth, async (req, res) => {
     try {
         const [schedules] = await db.query('SELECT cs.*, GROUP_CONCAT(sa.assistantId) as assistantIds FROM class_schedules cs LEFT JOIN schedule_assistants sa ON cs.id = sa.scheduleId GROUP BY cs.id');
         schedules.forEach(s => s.assistantIds = s.assistantIds ? s.assistantIds.split(',') : []);
@@ -346,49 +332,49 @@ protectedRouter.get('/schedules', async (req, res) => {
     } catch (e) { console.error(e); res.status(500).json({ message: 'Erro ao buscar horários' }); }
 });
 
-protectedRouter.get('/graduations', async (req, res) => {
+app.get('/api/graduations', requireAuth, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM graduations');
         res.json(rows);
     } catch (e) { console.error(e); res.status(500).json({ message: 'Erro ao buscar graduações' }); }
 });
 
-protectedRouter.get('/professors', async (req, res) => {
+app.get('/api/professors', requireAuth, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM professors');
         res.json(rows);
     } catch (e) { console.error(e); res.status(500).json({ message: 'Erro ao buscar professores' }); }
 });
 
-protectedRouter.get('/users', async (req, res) => {
+app.get('/api/users', requireAuth, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users');
         res.json(rows);
     } catch (e) { console.error(e); res.status(500).json({ message: 'Erro ao buscar usuários' }); }
 });
 
-protectedRouter.get('/attendance', async (req, res) => {
+app.get('/api/attendance', requireAuth, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM attendance_records');
         res.json(rows);
     } catch (e) { console.error(e); res.status(500).json({ message: 'Erro ao buscar frequência' }); }
 });
 
-protectedRouter.get('/logs', async (req, res) => {
+app.get('/api/logs', requireAuth, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM activity_logs ORDER BY `timestamp` DESC LIMIT 100');
         res.json(rows);
     } catch (e) { console.error(e); res.status(500).json({ message: 'Erro ao buscar logs' }); }
 });
 
-protectedRouter.get('/news', async (req, res) => {
+app.get('/api/news', requireAuth, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM news_articles ORDER BY `date` DESC');
         res.json(rows);
     } catch (e) { console.error(e); res.status(500).json({ message: 'Erro ao buscar notícias' }); }
 });
 
-protectedRouter.get('/settings/all', async (req, res) => {
+app.get('/api/settings/all', requireAuth, async (req, res) => {
     try {
         if (req.user.role !== 'general_admin') return res.status(403).json({ message: "Acesso negado." });
         const [[settings]] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
@@ -396,31 +382,9 @@ protectedRouter.get('/settings/all', async (req, res) => {
     } catch (e) { console.error(e); res.status(500).json({ message: "Erro ao buscar configurações completas." }); }
 });
 
-// --- Data Modification (CRUD) Helper ---
+// --- Write Operations Handlers (Defined explicitly) ---
 
-const genericDelete = (tableName, beforeDelete) => async (req, res) => {
-    const { id } = req.params;
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-        if (beforeDelete) await beforeDelete(id, connection);
-        const [result] = await connection.query(`DELETE FROM \`${tableName}\` WHERE id = ?`, [id]);
-        await connection.commit();
-        if (result.affectedRows === 0) return res.status(404).json({ message: 'Item not found.' });
-        await logActivity(req.user.userId, `Delete ${tableName}`, `ID: ${id}`);
-        res.status(204).send();
-    } catch (error) {
-        await connection.rollback();
-        console.error(`Delete error ${tableName}:`, error);
-        res.status(500).json({ message: "Erro ao deletar." });
-    } finally {
-        connection.release();
-    }
-};
-
-// --- Specific POST/PUT Handlers ---
-
-protectedRouter.put('/settings', async (req, res) => {
+app.put('/api/settings', requireAuth, async (req, res) => {
     if (req.user.role !== 'general_admin') return res.status(403).json({ message: "Acesso negado." });
     try {
         const { id, ...settings } = req.body;
@@ -460,15 +424,10 @@ const saveStudent = async (req, res) => {
         res.json(saved);
     } catch (e) { await connection.rollback(); console.error(e); res.status(500).json({message: 'Erro ao salvar aluno'}); } finally { connection.release(); }
 };
-protectedRouter.post('/students', saveStudent);
-protectedRouter.put('/students/:id', saveStudent);
-protectedRouter.delete('/students/:id', genericDelete('students', async(id, conn) => {
-    await conn.query('DELETE FROM payment_history WHERE studentId = ?', [id]);
-    await conn.query('DELETE FROM attendance_records WHERE studentId = ?', [id]);
-    await conn.query('DELETE FROM users WHERE studentId = ?', [id]);
-}));
 
-protectedRouter.post('/students/:studentId/payment', async (req, res) => {
+app.post('/api/students', requireAuth, saveStudent);
+app.put('/api/students/:id', requireAuth, saveStudent);
+app.post('/api/students/:studentId/payment', requireAuth, async (req, res) => {
     const { status, amount } = req.body;
     await db.query('UPDATE students SET paymentStatus = ? WHERE id = ?', [status, req.params.studentId]);
     if (status === 'paid') await db.query('INSERT INTO payment_history (id, studentId, `date`, amount) VALUES (?, ?, ?, ?)', [uuidv4(), req.params.studentId, new Date(), amount]);
@@ -499,9 +458,8 @@ const saveAcademy = async (req, res) => {
         res.json({id, ...data});
     } catch (e) { await connection.rollback(); console.error(e); res.status(500).json({message: 'Erro ao salvar academia'}); } finally { connection.release(); }
 };
-protectedRouter.post('/academies', saveAcademy);
-protectedRouter.put('/academies/:id', saveAcademy);
-protectedRouter.delete('/academies/:id', genericDelete('academies'));
+app.post('/api/academies', requireAuth, saveAcademy);
+app.put('/api/academies/:id', requireAuth, saveAcademy);
 
 const saveProfessor = async (req, res) => {
     const d = req.body;
@@ -516,9 +474,8 @@ const saveProfessor = async (req, res) => {
         res.json(saved);
     } catch(e) { console.error(e); res.status(500).json({message: 'Erro ao salvar professor'}); }
 };
-protectedRouter.post('/professors', saveProfessor);
-protectedRouter.put('/professors/:id', saveProfessor);
-protectedRouter.delete('/professors/:id', genericDelete('professors'));
+app.post('/api/professors', requireAuth, saveProfessor);
+app.put('/api/professors/:id', requireAuth, saveProfessor);
 
 const saveSchedule = async (req, res) => {
     const d = req.body;
@@ -542,9 +499,8 @@ const saveSchedule = async (req, res) => {
         res.json(s || d);
     } catch (e) { await conn.rollback(); console.error(e); res.status(500).json({message: 'Erro ao salvar horário'}); } finally { conn.release(); }
 };
-protectedRouter.post('/schedules', saveSchedule);
-protectedRouter.put('/schedules/:id', saveSchedule);
-protectedRouter.delete('/schedules/:id', genericDelete('class_schedules', async(id, conn)=> await conn.query('DELETE FROM schedule_assistants WHERE scheduleId=?', [id])));
+app.post('/api/schedules', requireAuth, saveSchedule);
+app.put('/api/schedules/:id', requireAuth, saveSchedule);
 
 const saveGraduation = async (req, res) => {
     const d = req.body;
@@ -558,17 +514,16 @@ const saveGraduation = async (req, res) => {
         res.json(saved);
     } catch(e) { console.error(e); res.status(500).json({message: 'Erro ao salvar graduação'}); }
 };
-protectedRouter.post('/graduations', saveGraduation);
-protectedRouter.put('/graduations/:id', saveGraduation);
-protectedRouter.delete('/graduations/:id', genericDelete('graduations'));
-protectedRouter.put('/graduations/ranks', async (req, res) => {
+app.post('/api/graduations', requireAuth, saveGraduation);
+app.put('/api/graduations/:id', requireAuth, saveGraduation);
+app.put('/api/graduations/ranks', requireAuth, async (req, res) => {
     try {
         await Promise.all(req.body.map(g => db.query('UPDATE graduations SET `rank`=? WHERE id=?', [g.rank, g.id])));
         res.json({success: true});
     } catch(e) { res.status(500).json({message: 'Erro ao atualizar ranks'}); }
 });
 
-protectedRouter.post('/attendance', async (req, res) => {
+app.post('/api/attendance', requireAuth, async (req, res) => {
     const { studentId, scheduleId, date, status } = req.body;
     const id = uuidv4();
     try {
@@ -576,23 +531,47 @@ protectedRouter.post('/attendance', async (req, res) => {
         res.json({id, studentId, scheduleId, date, status});
     } catch(e) { res.status(500).json({message: 'Erro ao salvar presença'}); }
 });
-protectedRouter.delete('/attendance/:id', genericDelete('attendance_records'));
+
+// --- Delete Handlers (Explicit) ---
+
+const genericDelete = (tableName, beforeDelete) => async (req, res) => {
+    const { id } = req.params;
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        if (beforeDelete) await beforeDelete(id, connection);
+        const [result] = await connection.query(`DELETE FROM \`${tableName}\` WHERE id = ?`, [id]);
+        await connection.commit();
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Item not found.' });
+        await logActivity(req.user.userId, `Delete ${tableName}`, `ID: ${id}`);
+        res.status(204).send();
+    } catch (error) {
+        await connection.rollback();
+        console.error(`Delete error ${tableName}:`, error);
+        res.status(500).json({ message: "Erro ao deletar." });
+    } finally {
+        connection.release();
+    }
+};
+
+app.delete('/api/students/:id', requireAuth, genericDelete('students', async(id, conn) => {
+    await conn.query('DELETE FROM payment_history WHERE studentId = ?', [id]);
+    await conn.query('DELETE FROM attendance_records WHERE studentId = ?', [id]);
+    await conn.query('DELETE FROM users WHERE studentId = ?', [id]);
+}));
+app.delete('/api/academies/:id', requireAuth, genericDelete('academies'));
+app.delete('/api/professors/:id', requireAuth, genericDelete('professors'));
+app.delete('/api/schedules/:id', requireAuth, genericDelete('class_schedules', async(id, conn)=> await conn.query('DELETE FROM schedule_assistants WHERE scheduleId=?', [id])));
+app.delete('/api/graduations/:id', requireAuth, genericDelete('graduations'));
+app.delete('/api/attendance/:id', requireAuth, genericDelete('attendance_records'));
 
 
-// =================================================================
-// --- APP ASSEMBLY
-// =================================================================
-
-// Mount Routers
-app.use('/api', publicRouter);
-app.use('/api', protectedRouter);
-
-// 404 Handler
+// --- 404 Fallback ---
 app.use((req, res) => {
     res.status(404).json({ message: `Endpoint not found: ${req.method} ${req.originalUrl}` });
 });
 
-// Start Server
+// --- Server Start ---
 (async () => {
   await connectToDatabase();
   if (isDbConnected) {
