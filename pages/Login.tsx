@@ -200,9 +200,11 @@ const Login: React.FC = () => {
             // The context's login function now handles errors, including 404s.
             // We can check the error message if needed, but for now, a generic message is fine.
             setError('Credenciais inválidas ou usuário não encontrado.');
+            setPassword(''); // Clear password on failure
         }
     } catch (err) {
         setError('Erro de conexão com o servidor.');
+        setPassword(''); // Clear password on failure
     }
     setLoading(false);
   };
