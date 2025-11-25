@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, FormEvent, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
@@ -126,7 +125,7 @@ const Login: React.FC = () => {
   
   const [registerSuccessMessage, setRegisterSuccessMessage] = useState('');
 
-  const { themeSettings, login, loginGoogle, user, registerAcademy, loading: appLoading } = useContext(AppContext);
+  const { themeSettings, login, loginGoogle, user, registerAcademy } = useContext(AppContext);
   const location = useLocation();
 
   const handleGoogleLoginResponse = async (response: any) => {
@@ -216,18 +215,6 @@ const Login: React.FC = () => {
     return result;
   };
   
-  // If app is initializing (validating token), show loading instead of login form
-  if (appLoading) {
-      return (
-          <div className="min-h-screen flex items-center justify-center bg-[var(--theme-bg)]">
-              <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--theme-accent)] mx-auto mb-4"></div>
-                  <p className="text-[var(--theme-text-primary)]">Validando sessão...</p>
-              </div>
-          </div>
-      );
-  }
-
   if (user) {
     const from = location.state?.from?.pathname || '/dashboard';
     return <Navigate to={from} replace />;

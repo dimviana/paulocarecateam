@@ -284,18 +284,12 @@ const ProtectedRoute: React.FC = () => {
 };
 
 const PublicPageWrapper: React.FC = () => {
-    const { themeSettings, loading, user } = useContext(AppContext);
-
-    if (loading) {
-        return <div className="h-screen w-screen flex items-center justify-center bg-[var(--theme-bg)] text-[var(--theme-text-primary)]">Carregando...</div>;
-    }
+    const { themeSettings, user } = useContext(AppContext);
     
-    // If user is logged in, always go to dashboard
     if(user) {
         return <Navigate to="/dashboard" replace />;
     }
 
-    // If not logged in, show public page or redirect to login
     return themeSettings.publicPageEnabled ? <PublicPage /> : <Navigate to="/login" replace />;
 }
 
@@ -323,7 +317,31 @@ const AppRoutes: React.FC = () => {
 };
 
 const AppContent: React.FC = () => {
-  const { notification, hideNotification } = useContext(AppContext);
+  const { notification, hideNotification, loading, initError } = useContext(AppContext);
+
+  if (loading) {
+     return (
+        <div className="h-screen w-screen flex items-center justify-center bg-slate-100">
+            <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto mb-4"></div>
+                <p className="text-slate-600">Carregando sistema...</p>
+            </div>
+        </div>
+     );
+  }
+
+  if (initError) {
+    return (
+        <div className="h-screen w-screen flex items-center justify-center bg-slate-100 p-4">
+            <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md text-center">
+                <h1 className="text-2xl font-bold text-red-600">Erro Crítico</h1>
+                <p className="text-slate-700 mt-2">{initError}</p>
+                {notification && <div className="mt-4 text-left bg-red-50 p-3 rounded-lg border border-red-200 text-sm text-red-700"><strong>Detalhes:</strong> {notification.details}</div>}
+                <Button onClick={() => window.location.reload()} className="mt-6">Tentar Novamente</Button>
+            </div>
+        </div>
+    );
+  }
 
   return (
     <>

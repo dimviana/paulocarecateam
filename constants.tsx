@@ -2,103 +2,40 @@ import React from 'react';
 import { ThemeSettings } from './types';
 
 export const initialThemeSettings: ThemeSettings = {
-  logoUrl: 'https://tailwindui.com/img/logos/mark.svg?color=amber&shade=500',
-  systemName: 'Jiu-Jitsu Hub',
-  primaryColor: '#f59e0b', // amber-500 -> Accent
-  secondaryColor: '#111827', // gray-900 -> Text
+  logoUrl: '',
+  systemName: 'Carregando...',
+  primaryColor: '#f59e0b',
+  secondaryColor: '#111827',
   
   // New granular color controls defaults
-  backgroundColor: '#f8fafc', // slate-50
-  cardBackgroundColor: '#ffffff', // white
-  buttonColor: '#f59e0b', // same as primary
-  buttonTextColor: '#ffffff', // white
-  iconColor: '#64748b', // slate-500
-  chartColor1: '#f9a825', // amber-600
-  chartColor2: '#475569', // slate-600
+  backgroundColor: '#f8fafc',
+  cardBackgroundColor: '#ffffff',
+  buttonColor: '#f59e0b',
+  buttonTextColor: '#ffffff',
+  iconColor: '#64748b',
+  chartColor1: '#f9a825',
+  chartColor2: '#475569',
 
-  useGradient: true,
+  useGradient: false,
   reminderDaysBeforeDue: 5,
   overdueDaysAfterDue: 5,
   theme: 'light',
-  monthlyFeeAmount: 150,
-  publicPageEnabled: true,
-  heroHtml: `
-<div class="relative bg-white text-slate-800 text-center py-20 px-4 overflow-hidden" style="background-image: url('https://images.unsplash.com/photo-1581009137052-c40971b51c69?q=80&w=2070&auto=format&fit=crop'); background-size: cover; background-position: center;">
-    <div class="absolute inset-0 bg-white/50 backdrop-blur-sm"></div>
-    <div class="relative z-10 container mx-auto">
-        <h1 class="text-5xl font-bold mb-4 animate-fade-in-down">Jiu-Jitsu: Arte, Disciplina, Respeito</h1>
-        <p class="text-xl text-slate-600 animate-fade-in-up">Transforme sua vida dentro e fora do tatame. Junte-se à nossa família.</p>
-        <a href="#filiais" class="mt-8 inline-block bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-8 rounded-lg transition duration-300">Encontre uma Academia</a>
-    </div>
-</div>
-  `,
-  aboutHtml: `
-<div id="quem-somos" class="py-16 bg-slate-50 px-4">
-    <div class="container mx-auto text-center">
-        <h2 class="text-4xl font-bold text-amber-600 mb-6">Quem Somos</h2>
-        <p class="text-lg text-slate-600 max-w-3xl mx-auto">
-            Somos mais do que uma academia, somos uma comunidade unida pela paixão pelo Jiu-Jitsu. Com instrutores de classe mundial e um ambiente acolhedor, nossa missão é capacitar cada aluno a atingir seu potencial máximo, promovendo saúde, autoconfiança e respeito mútuo.
-        </p>
-    </div>
-</div>
-  `,
-  branchesHtml: `
-<div id="filiais" class="py-16 bg-white px-4">
-    <div class="container mx-auto text-center">
-        <h2 class="text-4xl font-bold text-amber-600 mb-10">Nossas Filiais</h2>
-        <p class="text-slate-600">Aqui você pode listar suas academias. Este conteúdo é totalmente personalizável na área de configurações!</p>
-        <!-- Exemplo: <div class="mt-4 p-4 bg-slate-100 rounded"><h3>Nome da Academia</h3><p>Endereço</p></div> -->
-    </div>
-</div>
-  `,
-  footerHtml: `
-<div class="py-8 bg-slate-100 text-center text-slate-500">
-    <p>{{{copyright_line}}}</p>
-    <p>Desenvolvido com a Arte Suave em mente.</p>
-</div>
-  `,
-  customCss: `
-@keyframes fade-in-down {
-    0% {
-        opacity: 0;
-        transform: translateY(-20px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-@keyframes fade-in-up {
-    0% {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-.animate-fade-in-down {
-    animation: fade-in-down 1s ease-out forwards;
-}
-.animate-fade-in-up {
-    animation: fade-in-up 1s ease-out 0.5s forwards;
-}
-html {
-    scroll-behavior: smooth;
-}
-  `,
-  customJs: `
-// console.log("Custom JS loaded!");
-  `,
-  socialLoginEnabled: true,
+  monthlyFeeAmount: 0,
+  publicPageEnabled: false,
+  heroHtml: '',
+  aboutHtml: '',
+  branchesHtml: '',
+  footerHtml: '',
+  customCss: '',
+  customJs: '',
+  socialLoginEnabled: false,
   googleClientId: '',
   facebookAppId: '',
   // PIX Payment
   pixKey: '',
   pixHolderName: '',
-  copyrightText: 'ABILDEVELOPER',
-  systemVersion: '1.0.0',
+  copyrightText: '',
+  systemVersion: '',
 };
 
 
