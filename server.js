@@ -15,6 +15,7 @@ const { v4: uuidv4 } = require('uuid');
 const {
   DATABASE_URL,
   PORT = 3001,
+  FRONTEND_URL,
 } = process.env;
 
 // --- Express App Initialization ---
@@ -24,7 +25,14 @@ const app = express();
 const sessions = {}; // { sessionId: { user: { userId, role }, expires: Date } }
 
 // --- Middleware ---
-app.use(cors());
+// FIX: Configure CORS to properly handle credentialed requests from the frontend.
+// When the frontend sends `credentials: 'include'`, the server must respond
+// with a specific origin, not a wildcard ('*').
+const corsOptions = {
+  origin: FRONTEND_URL,
+  credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 
 // --- Database Connection ---
