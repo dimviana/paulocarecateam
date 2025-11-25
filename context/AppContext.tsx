@@ -206,9 +206,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                   logout();
                 }
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Critical application initialization failed:", error);
-            const errorMessage = "Não foi possível carregar as configurações do sistema. Verifique a conexão com o servidor e se o backend está online.";
+            
+            let errorMessage = "Não foi possível carregar as configurações do sistema. Verifique a conexão com o servidor e se o backend está online.";
+            
+            // Check for the specific 503 database error from our backend
+            if (error?.message?.includes('Database connection is not active')) {
+                errorMessage = "Falha na conexão com o banco de dados. O servidor está online, mas não consegue acessar os dados. Verifique as credenciais no .env do backend e o status do serviço MySQL.";
+            }
+
             setInitError(errorMessage);
             handleApiError(error, 'initializeApp');
         } finally {

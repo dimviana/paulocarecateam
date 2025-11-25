@@ -67,7 +67,6 @@ async function connectToDatabase() {
     console.error('2. The database server is not running or is inaccessible from the app server.');
     console.error('3. The database user, password, or database name are incorrect.');
     isDbConnected = false;
-    process.exit(1);
   }
 }
 
@@ -178,7 +177,7 @@ apiRouter.post('/auth/login', async (req, res) => {
 
         const isMatch = await bcrypt.compare(pass, passwordHash);
         if (!isMatch) {
-            return res.status(401).json({ message: 'Credenciais inválidas.' });
+            return res.status(500).json({ message: 'Erro no servidor durante o login.' });
         }
 
         const accessToken = jwt.sign({ userId: user.id, role: user.role }, CURRENT_JWT_SECRET, { expiresIn: '15m' });
