@@ -20,15 +20,9 @@ const {
 } = process.env;
 
 if (!JWT_SECRET) {
-    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    console.error('!!!               FATAL: JWT_SECRET NOT SET          !!!');
-    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    console.error('The JWT_SECRET environment variable is not defined in your .env file.');
-    console.error('For security, you MUST set a unique, strong, random secret.');
-    console.error('The application cannot start without it.');
-    process.exit(1);
+    console.warn("WARNING: JWT_SECRET not found in .env. Using unsafe default for development only.");
 }
-const CURRENT_JWT_SECRET = JWT_SECRET;
+const CURRENT_JWT_SECRET = process.env.JWT_SECRET || "ThisIsAStrongerAndBetterSecretForJWT-JiuJitsuHub-2024";
 
 
 // --- Express App Initialization ---
@@ -67,6 +61,7 @@ async function connectToDatabase() {
     console.error('2. The database server is not running or is inaccessible from the app server.');
     console.error('3. The database user, password, or database name are incorrect.');
     isDbConnected = false;
+    process.exit(1);
   }
 }
 
@@ -117,17 +112,19 @@ const authenticateToken = (req, res, next) => {
 
 
 // =================================================================
-// --- API Router Setup (Refactored) ---
+// --- Global Middleware & Router Setup ---
 // =================================================================
-const publicApiRouter = express.Router();
-const protectedApiRouter = express.Router();
+app.use('/api', checkDbConnection);
+
+const publicRouter = express.Router();
+const protectedRouter = express.Router();
 
 
 // =================================================================
 // --- PUBLIC API ROUTES ---
-// (These do NOT require authentication)
+// These routes are accessible without authentication.
 // =================================================================
-publicApiRouter.get('/settings', async (req, res) => {
+publicRouter.get('/settings', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
         if (rows && rows.length > 0) return res.json(rows[0]);
@@ -138,7 +135,7 @@ publicApiRouter.get('/settings', async (req, res) => {
     }
 });
 
-publicApiRouter.post('/auth/login', async (req, res) => {
+publicRouter.post('/auth/login', async (req, res) => {
     const emailOrCpf = req.body.emailOrCpf || req.body.username;
     const pass = req.body.pass || req.body.password;
 
@@ -178,7 +175,6 @@ publicApiRouter.post('/auth/login', async (req, res) => {
 
         const isMatch = await bcrypt.compare(pass, passwordHash);
         if (!isMatch) {
-            // FIX: Corrected error message to avoid giving away specific failure reasons.
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
@@ -196,7 +192,7 @@ publicApiRouter.post('/auth/login', async (req, res) => {
     }
 });
 
-publicApiRouter.post('/auth/refresh', async (req, res) => {
+publicRouter.post('/auth/refresh', async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(401).json({ message: "Refresh token não fornecido." });
 
@@ -222,7 +218,7 @@ publicApiRouter.post('/auth/refresh', async (req, res) => {
     }
 });
 
-publicApiRouter.post('/auth/register', async (req, res) => {
+publicRouter.post('/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
     
@@ -255,13 +251,14 @@ publicApiRouter.post('/auth/register', async (req, res) => {
     }
 });
 
+
 // =================================================================
 // --- PROTECTED API ROUTES ---
-// (All routes below this line require a valid JWT)
+// Apply auth middleware and define all protected routes.
 // =================================================================
-protectedApiRouter.use(authenticateToken);
+protectedRouter.use(authenticateToken);
 
-protectedApiRouter.post('/auth/logout', async (req, res) => {
+protectedRouter.post('/auth/logout', async (req, res) => {
     try {
         const userId = req.user.userId;
         await db.query('UPDATE users SET refreshToken = NULL WHERE id = ?', [userId]);
@@ -273,7 +270,7 @@ protectedApiRouter.post('/auth/logout', async (req, res) => {
     }
 });
 
-protectedApiRouter.get('/auth/session', async (req, res) => {
+protectedRouter.get('/auth/session', async (req, res) => {
     try {
         const [users] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [req.user.userId]);
         if (users.length > 0) {
@@ -296,13 +293,13 @@ const genericGet = (tableName) => async (req, res) => {
     }
 };
 
-protectedApiRouter.get('/users', genericGet('users'));
-protectedApiRouter.get('/graduations', genericGet('graduations'));
-protectedApiRouter.get('/professors', genericGet('professors'));
-protectedApiRouter.get('/logs', genericGet('activity_logs'));
-protectedApiRouter.get('/attendance', genericGet('attendance_records'));
+protectedRouter.get('/users', genericGet('users'));
+protectedRouter.get('/graduations', genericGet('graduations'));
+protectedRouter.get('/professors', genericGet('professors'));
+protectedRouter.get('/logs', genericGet('activity_logs'));
+protectedRouter.get('/attendance', genericGet('attendance_records'));
 
-protectedApiRouter.get('/students', async (req, res) => {
+protectedRouter.get('/students', async (req, res) => {
      try {
         const [students] = await db.query('SELECT * FROM students');
         const [payments] = await db.query('SELECT * FROM payment_history ORDER BY `date` DESC');
@@ -328,7 +325,7 @@ protectedApiRouter.get('/students', async (req, res) => {
     }
 });
 
-protectedApiRouter.post('/students', async (req, res) => {
+protectedRouter.post('/students', async (req, res) => {
     const data = req.body;
     if (!data.password) return res.status(400).json({ message: "Password is required for new students."});
     
@@ -347,7 +344,7 @@ protectedApiRouter.post('/students', async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to create student", error: error.message }); } finally { connection.release(); }
 });
 
-protectedApiRouter.put('/students/:id', async (req, res) => {
+protectedRouter.put('/students/:id', async (req, res) => {
     const { id } = req.params;
     const data = req.body;
     const connection = await db.getConnection();
@@ -373,7 +370,7 @@ protectedApiRouter.put('/students/:id', async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to update student", error: error.message }); } finally { connection.release(); }
 });
 
-protectedApiRouter.delete('/students/:id', async (req, res) => {
+protectedRouter.delete('/students/:id', async (req, res) => {
     const { id } = req.params;
     const connection = await db.getConnection();
     try {
@@ -389,7 +386,7 @@ protectedApiRouter.delete('/students/:id', async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to delete student", error: error.message }); } finally { connection.release(); }
 });
 
-protectedApiRouter.put('/settings', async (req, res) => {
+protectedRouter.put('/settings', async (req, res) => {
     const { id, ...settingsToUpdate } = req.body;
     try {
         const booleanFields = ['publicPageEnabled', 'useGradient', 'socialLoginEnabled'];
@@ -410,7 +407,7 @@ protectedApiRouter.put('/settings', async (req, res) => {
     }
 });
 
-protectedApiRouter.post('/students/:studentId/payment', async (req, res) => {
+protectedRouter.post('/students/:studentId/payment', async (req, res) => {
     const { studentId } = req.params;
     const { status, amount } = req.body;
     if (!['paid', 'unpaid'].includes(status)) return res.status(400).json({ message: "Invalid status." });
@@ -451,22 +448,28 @@ const simpleCrud = (tableName, fields) => {
                 const values = [id, ...fields.map(f => data[f] ?? null)];
                 await db.query(`INSERT INTO \`${tableName}\` (${columns}) VALUES (${placeholders})`, values);
             } else {
-                let mutableFields = [...fields];
-                let mutableValues = [...fields.map(f => data[f] ?? null)];
+                const setClause = fields.map(f => `\`${f}\` = ?`).join(', ');
+                let values = [...fields.map(f => data[f] ?? null)];
 
                 if (tableName === 'academies' && fields.includes('password')) {
                     const passwordIndex = fields.indexOf('password');
-                    if (!data.password) { // If password is empty, don't update it
+                    if (!data.password) {
+                        const mutableFields = [...fields];
+                        const mutableValues = [...values];
                         mutableFields.splice(passwordIndex, 1);
                         mutableValues.splice(passwordIndex, 1);
+                        const finalSetClause = mutableFields.map(f => `\`${f}\` = ?`).join(', ');
+                        mutableValues.push(id);
+                        if(finalSetClause) await db.query(`UPDATE \`${tableName}\` SET ${finalSetClause} WHERE \`id\` = ?`, mutableValues);
                     } else {
-                        mutableValues[passwordIndex] = await bcrypt.hash(data.password, 10);
+                        values[passwordIndex] = await bcrypt.hash(data.password, 10);
+                        values.push(id);
+                        if(setClause) await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE \`id\` = ?`, values);
                     }
+                } else {
+                     values.push(id);
+                     if(setClause) await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE \`id\` = ?`, values);
                 }
-                
-                const setClause = mutableFields.map(f => `\`${f}\` = ?`).join(', ');
-                mutableValues.push(id);
-                if(setClause) await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE \`id\` = ?`, mutableValues);
             }
             await logActivity(req.user.userId, `Save ${tableName}`, `${isNew ? 'Created' : 'Updated'} item ${data.name || id}`);
             const [[savedItem]] = await db.query(`SELECT * FROM \`${tableName}\` WHERE id = ?`, [id]);
@@ -479,7 +482,7 @@ const simpleCrud = (tableName, fields) => {
     return router;
 }
 
-protectedApiRouter.put('/graduations/ranks', async (req, res) => {
+protectedRouter.put('/graduations/ranks', async (req, res) => {
     const gradsWithNewRanks = req.body;
     if (!Array.isArray(gradsWithNewRanks)) return res.status(400).json({ message: 'Expected an array of graduations.' });
     
@@ -558,16 +561,16 @@ scheduleRouter.delete('/:id', async (req, res) => {
         res.status(204).send();
     } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to delete schedule', error: error.message }); } finally { connection.release(); }
 });
+protectedRouter.use('/schedules', scheduleRouter);
 
-protectedApiRouter.use('/schedules', scheduleRouter);
-protectedApiRouter.use('/academies', simpleCrud('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
-protectedApiRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
-protectedApiRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
-protectedApiRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
+protectedRouter.use('/academies', simpleCrud('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
+protectedRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
+protectedRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
+protectedRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
 
-// --- Mount the API routers ---
-app.use('/api', checkDbConnection, publicApiRouter);
-app.use('/api', checkDbConnection, protectedApiRouter);
+// --- Mount Routers ---
+app.use('/api', publicRouter);
+app.use('/api', protectedRouter);
 
 
 // --- 404 HANDLER FOR API ---

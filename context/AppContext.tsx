@@ -206,19 +206,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                   logout();
                 }
             }
-        } catch (error: any) {
+        } catch (error) {
             console.error("Critical application initialization failed:", error);
-            
-            let errorMessage = "Não foi possível carregar as configurações do sistema. Verifique a conexão com o servidor e se o backend está online.";
-
-            if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
-                errorMessage = "Erro de Conexão: Não foi possível se comunicar com o servidor. Verifique se o processo do backend (PM2) está online e se a porta 3001 não está bloqueada por um firewall. Consulte a seção 'Troubleshooting' no `INSTALL_GUIDE.md` para mais detalhes.";
-            } else if (error?.message?.includes('Database connection is not active')) {
-                errorMessage = "Falha na conexão com o banco de dados. O servidor está online, mas não consegue acessar os dados. Verifique as credenciais no .env do backend e o status do serviço MySQL.";
-            } else if (error?.message) {
-                errorMessage = `Ocorreu um erro inesperado: ${error.message}`;
-            }
-
+            const errorMessage = "Não foi possível carregar as configurações do sistema. Verifique a conexão com o servidor e se o backend está online.";
             setInitError(errorMessage);
             handleApiError(error, 'initializeApp');
         } finally {
