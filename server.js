@@ -131,7 +131,8 @@ const publicRouter = express.Router();
 
 publicRouter.get('/settings', async (req, res) => {
     try {
-        const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
+        const publicFields = 'logoUrl, systemName, primaryColor, secondaryColor, backgroundColor, cardBackgroundColor, buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2, useGradient, theme, publicPageEnabled, heroHtml, aboutHtml, branchesHtml, footerHtml, customCss, customJs, socialLoginEnabled, googleClientId, facebookAppId, copyrightText, systemVersion, reminderDaysBeforeDue, overdueDaysAfterDue, monthlyFeeAmount';
+        const [rows] = await db.query(`SELECT ${publicFields} FROM theme_settings WHERE id = 1`);
         if (rows && rows.length > 0) return res.json(rows[0]);
         res.status(404).json({ message: "Settings not found" });
     } catch (error) {
@@ -139,6 +140,7 @@ publicRouter.get('/settings', async (req, res) => {
         res.status(500).json({ message: "Failed to fetch settings." });
     }
 });
+
 
 publicRouter.post('/auth/login', async (req, res) => {
     const { username, password } = req.body;
@@ -206,6 +208,12 @@ publicRouter.post('/auth/login', async (req, res) => {
     }
 });
 
+publicRouter.post('/auth/google', async (req, res) => {
+    const { token } = req.body;
+    console.log(`Google login attempt with token: ${token ? token.substring(0, 30) : 'none'}...`);
+    return res.status(404).json({ message: 'Usuário Google não encontrado no sistema.', code: 'USER_NOT_FOUND' });
+});
+
 publicRouter.post('/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
@@ -267,6 +275,22 @@ protectedRouter.get('/auth/session', async (req, res) => {
     }
 });
 
+protectedRouter.get('/settings/all', async (req, res) => {
+    try {
+        const [[user]] = await db.query('SELECT role FROM users WHERE id = ?', [req.user.userId]);
+        if (user.role !== 'general_admin') {
+           return res.status(403).json({ message: "Acesso negado. Apenas administradores gerais." });
+        }
+        const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
+        if (rows && rows.length > 0) return res.json(rows[0]);
+        res.status(404).json({ message: "Settings not found" });
+    } catch (error) {
+        console.error("Error fetching all settings:", error);
+        res.status(500).json({ message: "Failed to fetch all settings." });
+    }
+});
+
+
 const genericGet = (tableName) => async (req, res) => {
     try {
         const [rows] = await db.query(`SELECT * FROM \`${tableName}\``);
@@ -282,6 +306,7 @@ protectedRouter.get('/graduations', genericGet('graduations'));
 protectedRouter.get('/professors', genericGet('professors'));
 protectedRouter.get('/logs', genericGet('activity_logs'));
 protectedRouter.get('/attendance', genericGet('attendance_records'));
+protectedRouter.get('/news', genericGet('news_articles'));
 
 protectedRouter.get('/students', async (req, res) => {
      try {

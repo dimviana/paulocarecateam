@@ -1,6 +1,6 @@
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog } from '../types';
+import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog, NewsArticle } from '../types';
 import { initialThemeSettings } from '../constants';
 import { api } from '../services/api';
 
@@ -22,6 +22,7 @@ interface AppContextType {
   graduations: Graduation[];
   schedules: ClassSchedule[];
   users: User[];
+  news: NewsArticle[];
   attendanceRecords: AttendanceRecord[];
   professors: Professor[];
   activityLogs: ActivityLog[];
@@ -67,6 +68,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [graduations, setGraduations] = useState<Graduation[]>([]);
   const [schedules, setSchedules] = useState<ClassSchedule[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [news, setNews] = useState<NewsArticle[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [professors, setProfessors] = useState<Professor[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
@@ -115,9 +117,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setUser(null);
   }, []);
 
-  const refetchData = useCallback(async () => {
+  const refetchData = useCallback(async (loggedInUser: User | null) => {
       try {
-        const [studentsData, academiesData, graduationsData, schedulesData, usersData, attendanceData, professorsData, activityLogsData] = await Promise.all([
+        const dataPromises: Promise<any>[] = [
             api.getStudents(),
             api.getAcademies(),
             api.getGraduations(),
@@ -126,15 +128,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             api.getAttendanceRecords(),
             api.getProfessors(),
             api.getActivityLogs(),
-        ]);
-        setStudents(studentsData);
-        setAcademies(academiesData);
-        setGraduations(graduationsData);
-        setSchedules(schedulesData);
-        setUsers(usersData);
-        setAttendanceRecords(attendanceData);
-        setProfessors(professorsData);
-        setActivityLogs(activityLogsData);
+            api.getNews(),
+        ];
+
+        if (loggedInUser?.role === 'general_admin') {
+            dataPromises.push(api.getAllThemeSettings());
+        }
+
+        const results = await Promise.all(dataPromises);
+
+        setStudents(results[0]);
+        setAcademies(results[1]);
+        setGraduations(results[2]);
+        setSchedules(results[3]);
+        setUsers(results[4]);
+        setAttendanceRecords(results[5]);
+        setProfessors(results[6]);
+        setActivityLogs(results[7]);
+        setNews(results[8]);
+
+        if (loggedInUser?.role === 'general_admin' && results.length > 9) {
+             setThemeSettingsState(results[9] as ThemeSettings);
+        }
+
       } catch (error) {
           handleApiError(error, 'refetchData');
       }
@@ -182,17 +198,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setLoading(true);
         try {
             try {
+                // Fetch public settings for initial styling (login page, etc.)
                 const settings = await api.getThemeSettings();
                 setThemeSettingsState(settings);
             } catch (error) {
                 console.error("Failed to load settings, using defaults:", error);
             }
             
-            // Validate session via cookie instead of localStorage token
+            // Validate session via cookie
             try {
               const validatedUser = await api.validateSession();
               setUser(validatedUser);
-              await refetchData();
+              await refetchData(validatedUser);
             } catch (validationError) {
               console.log("No active session found during app init.");
               // This is an expected outcome if the user is not logged in.
@@ -211,10 +228,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   
   const login = async (email: string, password: string) => {
     try {
-      const user = await api.login(email, password);
-      if (user) {
-        setUser(user);
-        await refetchData();
+      const loggedInUser = await api.login(email, password);
+      if (loggedInUser) {
+        setUser(loggedInUser);
+        await refetchData(loggedInUser);
         return true;
       }
       return false;
@@ -242,10 +259,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const loginGoogle = async (token: string) => {
     try {
-      const user = await api.loginGoogle(token);
-      if (user) {
-        setUser(user);
-        await refetchData();
+      const loggedInUser = await api.loginGoogle(token);
+      if (loggedInUser) {
+        setUser(loggedInUser);
+        await refetchData(loggedInUser);
         return true;
       }
       return false;
@@ -261,7 +278,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const registerAcademy = async (data: { name: string; address: string; responsible: string; responsibleRegistration: string; email: string; password?: string; }): Promise<{ success: boolean; message?: string; }> => {
     try {
         await api.registerAcademy(data);
-        await refetchData();
+        await refetchData(user);
         return { success: true };
     } catch (error: any) {
         handleApiError(error, 'registerAcademy');
@@ -272,7 +289,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const wrapApiCall = async (apiCall: Promise<any>, context: string) => {
       try {
           await apiCall;
-          await refetchData();
+          await refetchData(user);
       } catch (error) {
           handleApiError(error, context);
       }
@@ -335,7 +352,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     <AppContext.Provider value={{ 
         themeSettings, setThemeSettings, 
         user, login, loginGoogle, logout, 
-        students, academies, graduations, schedules, users, attendanceRecords, professors, activityLogs,
+        students, academies, graduations, schedules, users, attendanceRecords, professors, activityLogs, news,
         loading, 
         updateStudentPayment, saveStudent, deleteStudent,
         saveAcademy, deleteAcademy,

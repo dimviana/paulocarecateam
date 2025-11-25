@@ -186,6 +186,8 @@ export const api = {
   },
 
   getThemeSettings: (): Promise<ThemeSettings> => fetchWrapper<ThemeSettings>('/settings', {}),
+  
+  getAllThemeSettings: (): Promise<ThemeSettings> => fetchWrapper<ThemeSettings>('/settings/all'),
 
   saveThemeSettings: (settings: ThemeSettings): Promise<ThemeSettings> => {
     return fetchWrapper<ThemeSettings>('/settings', {
