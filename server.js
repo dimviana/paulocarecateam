@@ -1,4 +1,3 @@
-
 /**
  * ==============================================================================
  *           Backend Server for Jiu-Jitsu Hub SAAS (server.js)
@@ -540,6 +539,16 @@ scheduleRouter.delete('/:id', async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to delete schedule', error: error.message }); } finally { connection.release(); }
 });
 protectedRouter.use('/schedules', scheduleRouter);
+
+protectedRouter.get('/academies', async (req, res) => {
+    try {
+        const [academies] = await db.query('SELECT * FROM academies WHERE id != ?', ['master_admin_academy_01']);
+        res.json(academies);
+    } catch (error) {
+        console.error('Error fetching academies:', error);
+        res.status(500).json({ message: 'Failed to fetch academies.' });
+    }
+});
 
 protectedRouter.use('/academies', simpleCrud('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
 protectedRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
