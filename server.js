@@ -20,9 +20,15 @@ const {
 } = process.env;
 
 if (!JWT_SECRET) {
-    console.warn("WARNING: JWT_SECRET not found in .env. Using unsafe default for development only.");
+    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    console.error('!!!               FATAL: JWT_SECRET NOT SET          !!!');
+    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    console.error('The JWT_SECRET environment variable is not defined in your .env file.');
+    console.error('For security, you MUST set a unique, strong, random secret.');
+    console.error('The application cannot start without it.');
+    process.exit(1);
 }
-const CURRENT_JWT_SECRET = process.env.JWT_SECRET || "ThisIsAStrongerAndBetterSecretForJWT-JiuJitsuHub-2024";
+const CURRENT_JWT_SECRET = JWT_SECRET;
 
 
 // --- Express App Initialization ---
