@@ -133,7 +133,18 @@ CREATE TABLE IF NOT EXISTS users (
     academyId TEXT, -- FK para academies (se for admin de academia)
     studentId TEXT, -- FK para students (se for aluno)
     birthDate DATE, -- Data de nascimento (para aniversariantes do dia)
-    refreshToken TEXT -- Armazena o refresh token para manter a sessão ativa
+    refreshToken TEXT -- Armazena o refresh token (legado, mantido por compatibilidade)
+);
+
+-- -----------------------------------------------------
+-- Tabela: sessions
+-- Armazena as sessões ativas dos usuários para persistência.
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS sessions (
+    sessionId VARCHAR(255) PRIMARY KEY, -- ID do cookie de sessão
+    userId VARCHAR(255) NOT NULL, -- ID do usuário logado
+    expires DATETIME NOT NULL, -- Data de expiração da sessão
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------
@@ -200,7 +211,6 @@ CREATE TABLE IF NOT EXISTS theme_settings (
 );
 
 -- Insere uma linha de configurações padrão para garantir que a aplicação sempre encontre os dados.
--- O comando REPLACE INTO deleta a linha antiga se ela existir e insere a nova.
 REPLACE INTO theme_settings (id, logoUrl, systemName, primaryColor, secondaryColor, backgroundColor, cardBackgroundColor, buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2, useGradient, reminderDaysBeforeDue, overdueDaysAfterDue, theme, monthlyFeeAmount, publicPageEnabled, heroHtml, aboutHtml, branchesHtml, footerHtml, customCss, customJs, socialLoginEnabled, googleClientId, facebookAppId, pixKey, pixHolderName, copyrightText, systemVersion) VALUES
 (1,
 'https://tailwindui.com/img/logos/mark.svg?color=amber&shade=500',
@@ -292,12 +302,9 @@ html {
 -- Cria um usuário 'general_admin' para o sistema.
 -- Senha: dvsviana154
 -- -----------------------------------------------------
--- Deleta registros existentes para garantir que o script possa ser executado novamente
 DELETE FROM users WHERE email = 'androiddiviana@gmail.com';
 DELETE FROM academies WHERE email = 'androiddiviana@gmail.com';
 
--- Insere uma academia "Master" para associar ao administrador geral.
--- A senha já está criptografada com bcrypt.
 INSERT INTO academies (id, name, email, password, responsible, responsibleRegistration)
 VALUES (
     'master_admin_academy_01', 
@@ -308,7 +315,6 @@ VALUES (
     '000.000.000-00'
 );
 
--- Insere o usuário na tabela 'users' com a role 'general_admin'.
 INSERT INTO users (id, name, email, role, academyId)
 VALUES (
     'master_admin_user_01', 
