@@ -30,7 +30,9 @@ if (!FRONTEND_URL) {
 
 // --- Express App Initialization ---
 const app = express();
-const apiRouter = express.Router();
+const publicApiRouter = express.Router();
+const privateApiRouter = express.Router();
+
 
 // --- In-memory Session Store ---
 const sessions = {}; // { sessionId: { user: { userId, role }, expires: Date } }
@@ -180,7 +182,7 @@ const genericDelete = (tableName, specialHandling = {}) => async (req, res) => {
 // -----------------------------------------------------------------
 // SECTION 1: PUBLIC ROUTES (No session required)
 // -----------------------------------------------------------------
-apiRouter.get('/settings', async (req, res) => {
+publicApiRouter.get('/settings', async (req, res) => {
     try {
         const publicFields = 'logoUrl, systemName, primaryColor, secondaryColor, backgroundColor, cardBackgroundColor, buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2, useGradient, theme, publicPageEnabled, heroHtml, aboutHtml, branchesHtml, footerHtml, customCss, customJs, socialLoginEnabled, googleClientId, facebookAppId, copyrightText, systemVersion, reminderDaysBeforeDue, overdueDaysAfterDue, monthlyFeeAmount';
         const [rows] = await db.query(`SELECT ${publicFields} FROM theme_settings WHERE id = 1`);
@@ -192,7 +194,7 @@ apiRouter.get('/settings', async (req, res) => {
     }
 });
 
-apiRouter.post('/auth/login', async (req, res) => {
+publicApiRouter.post('/auth/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ message: 'Please provide username and password' });
     try {
@@ -218,9 +220,9 @@ apiRouter.post('/auth/login', async (req, res) => {
     }
 });
 
-apiRouter.post('/auth/google', (req, res) => res.status(404).json({ message: 'Usuário Google não encontrado no sistema.', code: 'USER_NOT_FOUND' }));
+publicApiRouter.post('/auth/google', (req, res) => res.status(404).json({ message: 'Usuário Google não encontrado no sistema.', code: 'USER_NOT_FOUND' }));
 
-apiRouter.post('/auth/register', async (req, res) => {
+publicApiRouter.post('/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
     
@@ -259,7 +261,7 @@ apiRouter.post('/auth/register', async (req, res) => {
     }
 });
 
-apiRouter.get('/auth/session', async (req, res) => {
+publicApiRouter.get('/auth/session', async (req, res) => {
     const cookies = parseCookies(req);
     const sessionId = cookies.sessionId;
     if (!sessionId || !sessions[sessionId]) {
@@ -287,17 +289,8 @@ apiRouter.get('/auth/session', async (req, res) => {
     }
 });
 
-
-// -----------------------------------------------------------------
-// SECTION 2: AUTHENTICATION WALL
-// All routes defined below this line are protected by checkSession.
-// -----------------------------------------------------------------
-apiRouter.use(checkSession);
-
-// -----------------------------------------------------------------
-// SECTION 3: PROTECTED ROUTES (Session required)
-// -----------------------------------------------------------------
-apiRouter.post('/auth/logout', (req, res) => {
+// Logout is safe to be public as it just clears the cookie from the request.
+publicApiRouter.post('/auth/logout', (req, res) => {
     const cookies = parseCookies(req);
     const sessionId = cookies.sessionId;
     if (sessionId && sessions[sessionId]) {
@@ -307,8 +300,19 @@ apiRouter.post('/auth/logout', (req, res) => {
     res.clearCookie('sessionId').status(200).json({ message: 'Logout bem-sucedido.' });
 });
 
+
+// -----------------------------------------------------------------
+// SECTION 2: AUTHENTICATION WALL
+// The checkSession middleware is now applied ONLY to the private router.
+// -----------------------------------------------------------------
+privateApiRouter.use(checkSession);
+
+// -----------------------------------------------------------------
+// SECTION 3: PROTECTED ROUTES (Session required)
+// -----------------------------------------------------------------
+
 // --- Data Fetching (GET) ---
-apiRouter.get('/students', async (req, res) => {
+privateApiRouter.get('/students', async (req, res) => {
      try {
         const [students] = await db.query('SELECT * FROM students');
         const [payments] = await db.query('SELECT * FROM payment_history ORDER BY `date` DESC');
@@ -324,7 +328,7 @@ apiRouter.get('/students', async (req, res) => {
     } catch (error) { console.error("Error fetching students:", error); res.status(500).json({ message: 'Failed to fetch students.' }); }
 });
 
-apiRouter.get('/academies', async (req, res) => {
+privateApiRouter.get('/academies', async (req, res) => {
     try {
         const [academies] = await db.query('SELECT * FROM academies WHERE id != ?', ['master_admin_academy_01']);
         res.json(academies);
@@ -334,7 +338,7 @@ apiRouter.get('/academies', async (req, res) => {
     }
 });
 
-apiRouter.get('/schedules', async (req, res) => {
+privateApiRouter.get('/schedules', async (req, res) => {
     try {
         const [schedules] = await db.query('SELECT cs.*, GROUP_CONCAT(sa.assistantId) as assistantIds FROM class_schedules cs LEFT JOIN schedule_assistants sa ON cs.id = sa.scheduleId GROUP BY cs.id');
         schedules.forEach(s => s.assistantIds = s.assistantIds ? s.assistantIds.split(',') : []);
@@ -342,7 +346,7 @@ apiRouter.get('/schedules', async (req, res) => {
     } catch (error) { console.error("Error fetching schedules:", error); res.status(500).json({ message: 'Failed to fetch schedules.' }); }
 });
 
-apiRouter.get('/graduations', async (req, res) => {
+privateApiRouter.get('/graduations', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM graduations');
         res.json(rows);
@@ -352,7 +356,7 @@ apiRouter.get('/graduations', async (req, res) => {
     }
 });
 
-apiRouter.get('/professors', async (req, res) => {
+privateApiRouter.get('/professors', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM professors');
         res.json(rows);
@@ -362,7 +366,7 @@ apiRouter.get('/professors', async (req, res) => {
     }
 });
 
-apiRouter.get('/users', async (req, res) => {
+privateApiRouter.get('/users', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM users');
         res.json(rows);
@@ -372,7 +376,7 @@ apiRouter.get('/users', async (req, res) => {
     }
 });
 
-apiRouter.get('/attendance', async (req, res) => {
+privateApiRouter.get('/attendance', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM attendance_records');
         res.json(rows);
@@ -382,7 +386,7 @@ apiRouter.get('/attendance', async (req, res) => {
     }
 });
 
-apiRouter.get('/logs', async (req, res) => {
+privateApiRouter.get('/logs', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM activity_logs');
         res.json(rows);
@@ -392,7 +396,7 @@ apiRouter.get('/logs', async (req, res) => {
     }
 });
 
-apiRouter.get('/news', async (req, res) => {
+privateApiRouter.get('/news', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM news_articles');
         res.json(rows);
@@ -403,7 +407,7 @@ apiRouter.get('/news', async (req, res) => {
 });
 
 // --- Settings (Protected) ---
-apiRouter.get('/settings/all', async (req, res) => {
+privateApiRouter.get('/settings/all', async (req, res) => {
     try {
         const [[user]] = await db.query('SELECT role FROM users WHERE id = ?', [req.user.userId]);
         if (user.role !== 'general_admin') return res.status(403).json({ message: "Acesso negado." });
@@ -412,7 +416,7 @@ apiRouter.get('/settings/all', async (req, res) => {
     } catch (error) { console.error("Error fetching all settings:", error); res.status(500).json({ message: "Failed to fetch all settings." }); }
 });
 
-apiRouter.put('/settings', async (req, res) => {
+privateApiRouter.put('/settings', async (req, res) => {
     const { id, ...settings } = req.body;
     const booleanFields = ['publicPageEnabled', 'useGradient', 'socialLoginEnabled'];
     booleanFields.forEach(field => {
@@ -462,9 +466,9 @@ const studentSaveHandler = async (req, res) => {
         connection.release();
     }
 }
-apiRouter.post('/students', studentSaveHandler);
-apiRouter.put('/students/:id', studentSaveHandler);
-apiRouter.delete('/students/:id', genericDelete('students', {
+privateApiRouter.post('/students', studentSaveHandler);
+privateApiRouter.put('/students/:id', studentSaveHandler);
+privateApiRouter.delete('/students/:id', genericDelete('students', {
     beforeDelete: async (id, { connection }) => {
         await connection.query('DELETE FROM payment_history WHERE studentId = ?', [id]);
         await connection.query('DELETE FROM attendance_records WHERE studentId = ?', [id]);
@@ -472,7 +476,7 @@ apiRouter.delete('/students/:id', genericDelete('students', {
     }
 }));
 
-apiRouter.post('/students/:studentId/payment', async (req, res) => {
+privateApiRouter.post('/students/:studentId/payment', async (req, res) => {
     const { studentId } = req.params;
     const { status, amount } = req.body;
     await db.query('UPDATE students SET paymentStatus = ? WHERE id = ?', [status, studentId]);
@@ -509,14 +513,14 @@ const academySaveHandler = async (req, res) => {
         res.status(isNew ? 201 : 200).json({ id: academyId, ...data });
     } catch (e) { await connection.rollback(); console.error("Error saving academy:", e); res.status(500).json({ message: e.message }); } finally { connection.release(); }
 };
-apiRouter.post('/academies', academySaveHandler);
-apiRouter.put('/academies/:id', academySaveHandler);
-apiRouter.delete('/academies/:id', genericDelete('academies'));
+privateApiRouter.post('/academies', academySaveHandler);
+privateApiRouter.put('/academies/:id', academySaveHandler);
+privateApiRouter.delete('/academies/:id', genericDelete('academies'));
 
 const profFields = ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate'];
-apiRouter.post('/professors', async(req,res)=>genericSave('professors', profFields)(req, res));
-apiRouter.put('/professors/:id', async(req,res)=>genericSave('professors', profFields)(req, res));
-apiRouter.delete('/professors/:id', genericDelete('professors'));
+privateApiRouter.post('/professors', async(req,res)=>genericSave('professors', profFields)(req, res));
+privateApiRouter.put('/professors/:id', async(req,res)=>genericSave('professors', profFields)(req, res));
+privateApiRouter.delete('/professors/:id', genericDelete('professors'));
 
 const scheduleSaveHandler = async (req, res) => {
     const isNew = !req.params.id;
@@ -542,18 +546,18 @@ const scheduleSaveHandler = async (req, res) => {
         res.status(isNew ? 201 : 200).json(schedule);
     } catch (error) { await connection.rollback(); console.error("Error saving schedule:", error); res.status(500).json({ message: 'Failed to save schedule', error: error.message }); } finally { connection.release(); }
 };
-apiRouter.post('/schedules', scheduleSaveHandler);
-apiRouter.put('/schedules/:id', scheduleSaveHandler);
-apiRouter.delete('/schedules/:id', genericDelete('class_schedules', {
+privateApiRouter.post('/schedules', scheduleSaveHandler);
+privateApiRouter.put('/schedules/:id', scheduleSaveHandler);
+privateApiRouter.delete('/schedules/:id', genericDelete('class_schedules', {
     beforeDelete: async(id, { connection }) => await connection.query('DELETE FROM schedule_assistants WHERE scheduleId = ?', [id])
 }));
 
 const gradFields = ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge'];
-apiRouter.post('/graduations', async(req,res)=>genericSave('graduations', gradFields)(req, res));
-apiRouter.put('/graduations/:id', async(req,res)=>genericSave('graduations', gradFields)(req, res));
-apiRouter.delete('/graduations/:id', genericDelete('graduations'));
+privateApiRouter.post('/graduations', async(req,res)=>genericSave('graduations', gradFields)(req, res));
+privateApiRouter.put('/graduations/:id', async(req,res)=>genericSave('graduations', gradFields)(req, res));
+privateApiRouter.delete('/graduations/:id', genericDelete('graduations'));
 
-apiRouter.put('/graduations/ranks', async (req, res) => {
+privateApiRouter.put('/graduations/ranks', async (req, res) => {
     const gradsWithNewRanks = req.body;
     const connection = await db.getConnection();
     try {
@@ -565,13 +569,15 @@ apiRouter.put('/graduations/ranks', async (req, res) => {
 });
 
 const attendanceFields = ['studentId', 'scheduleId', 'date', 'status'];
-apiRouter.post('/attendance', async(req,res)=>genericSave('attendance_records', attendanceFields)(req, res));
-apiRouter.delete('/attendance/:id', genericDelete('attendance_records'));
+privateApiRouter.post('/attendance', async(req,res)=>genericSave('attendance_records', attendanceFields)(req, res));
+privateApiRouter.delete('/attendance/:id', genericDelete('attendance_records'));
 
 // =================================================================
 // --- MOUNT ROUTER & 404 HANDLER ---
 // =================================================================
-app.use('/api', checkDbConnection, apiRouter);
+app.use('/api', checkDbConnection, publicApiRouter);
+app.use('/api', checkDbConnection, privateApiRouter);
+
 
 app.use('/api/*', (req, res) => {
     res.status(404).json({ message: `API endpoint not found: ${req.method} ${req.originalUrl}` });
