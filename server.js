@@ -183,15 +183,13 @@ const genericDelete = (tableName, specialHandling = {}) => async (req, res) => {
     }
 };
 
-
 // =================================================================
-// --- API ROUTER DEFINITION (Public -> Auth Wall -> Protected)
+// --- API ROUTER DEFINITION (REFACTORED for clarity and correctness)
 // =================================================================
 
-// ---------------------------------
-// SECTION 1: PUBLIC ROUTES
-// (No session required. Defined before the auth middleware)
-// ---------------------------------
+// -----------------------------------------------------------------
+// SECTION 1: PUBLIC ROUTES (No session required)
+// -----------------------------------------------------------------
 apiRouter.get('/settings', async (req, res) => {
     try {
         const publicFields = 'logoUrl, systemName, primaryColor, secondaryColor, backgroundColor, cardBackgroundColor, buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2, useGradient, theme, publicPageEnabled, heroHtml, aboutHtml, branchesHtml, footerHtml, customCss, customJs, socialLoginEnabled, googleClientId, facebookAppId, copyrightText, systemVersion, reminderDaysBeforeDue, overdueDaysAfterDue, monthlyFeeAmount';
@@ -271,15 +269,15 @@ apiRouter.post('/auth/register', async (req, res) => {
     }
 });
 
-// ---------------------------------
+// -----------------------------------------------------------------
 // SECTION 2: AUTHENTICATION WALL
-// (All routes below this line are protected)
-// ---------------------------------
+// All routes defined below this line are protected by checkSession.
+// -----------------------------------------------------------------
 apiRouter.use(checkSession);
 
-// ---------------------------------
-// SECTION 3: PROTECTED ROUTES
-// ---------------------------------
+// -----------------------------------------------------------------
+// SECTION 3: PROTECTED ROUTES (Session required)
+// -----------------------------------------------------------------
 apiRouter.get('/auth/session', async (req, res) => {
     try {
         const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [req.user.userId]);
@@ -318,14 +316,6 @@ apiRouter.get('/students', async (req, res) => {
     } catch (error) { console.error("Error fetching students:", error); res.status(500).json({ message: 'Failed to fetch students.' }); }
 });
 
-apiRouter.get('/schedules', async (req, res) => {
-    try {
-        const [schedules] = await db.query('SELECT cs.*, GROUP_CONCAT(sa.assistantId) as assistantIds FROM class_schedules cs LEFT JOIN schedule_assistants sa ON cs.id = sa.scheduleId GROUP BY cs.id');
-        schedules.forEach(s => s.assistantIds = s.assistantIds ? s.assistantIds.split(',') : []);
-        res.json(schedules);
-    } catch (error) { console.error("Error fetching schedules:", error); res.status(500).json({ message: 'Failed to fetch schedules.' }); }
-});
-
 apiRouter.get('/academies', async (req, res) => {
     try {
         const [academies] = await db.query('SELECT * FROM academies WHERE id != ?', ['master_admin_academy_01']);
@@ -336,7 +326,14 @@ apiRouter.get('/academies', async (req, res) => {
     }
 });
 
-// FIX: Added all missing GET endpoints that were causing 404 errors.
+apiRouter.get('/schedules', async (req, res) => {
+    try {
+        const [schedules] = await db.query('SELECT cs.*, GROUP_CONCAT(sa.assistantId) as assistantIds FROM class_schedules cs LEFT JOIN schedule_assistants sa ON cs.id = sa.scheduleId GROUP BY cs.id');
+        schedules.forEach(s => s.assistantIds = s.assistantIds ? s.assistantIds.split(',') : []);
+        res.json(schedules);
+    } catch (error) { console.error("Error fetching schedules:", error); res.status(500).json({ message: 'Failed to fetch schedules.' }); }
+});
+
 apiRouter.get('/graduations', genericGet('graduations'));
 apiRouter.get('/professors', genericGet('professors'));
 apiRouter.get('/users', genericGet('users'));
@@ -353,6 +350,7 @@ apiRouter.get('/settings/all', async (req, res) => {
         res.json(settings);
     } catch (error) { console.error("Error fetching all settings:", error); res.status(500).json({ message: "Failed to fetch all settings." }); }
 });
+
 apiRouter.put('/settings', async (req, res) => {
     const { id, ...settings } = req.body;
     const booleanFields = ['publicPageEnabled', 'useGradient', 'socialLoginEnabled'];
