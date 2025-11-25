@@ -259,6 +259,35 @@ apiRouter.post('/auth/register', async (req, res) => {
     }
 });
 
+apiRouter.get('/auth/session', async (req, res) => {
+    const cookies = parseCookies(req);
+    const sessionId = cookies.sessionId;
+    if (!sessionId || !sessions[sessionId]) {
+        return res.status(401).json({ message: 'Nenhuma sessão ativa encontrada.' });
+    }
+    const session = sessions[sessionId];
+    if (new Date() > session.expires) {
+        delete sessions[sessionId];
+        return res.status(401).json({ message: 'Sessão expirada.' });
+    }
+    
+    try {
+        session.expires = new Date(Date.now() + 20 * 60 * 1000); // Refresh session
+        const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [session.user.userId]);
+        if (user) {
+            return res.json(user);
+        } else {
+            delete sessions[sessionId];
+            res.clearCookie('sessionId');
+            return res.status(404).json({ message: 'Usuário da sessão não encontrado na base de dados.' });
+        }
+    } catch (error) {
+        console.error("Error validating session:", error);
+        return res.status(500).json({ message: 'Falha ao validar sessão.' });
+    }
+});
+
+
 // -----------------------------------------------------------------
 // SECTION 2: AUTHENTICATION WALL
 // All routes defined below this line are protected by checkSession.
@@ -268,17 +297,6 @@ apiRouter.use(checkSession);
 // -----------------------------------------------------------------
 // SECTION 3: PROTECTED ROUTES (Session required)
 // -----------------------------------------------------------------
-apiRouter.get('/auth/session', async (req, res) => {
-    try {
-        const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [req.user.userId]);
-        if (user) return res.json(user);
-        res.status(404).json({ message: 'Usuário da sessão não encontrado.' });
-    } catch (error) {
-        console.error("Error validating session:", error);
-        res.status(500).json({ message: 'Falha ao validar sessão.' });
-    }
-});
-
 apiRouter.post('/auth/logout', (req, res) => {
     const cookies = parseCookies(req);
     const sessionId = cookies.sessionId;
