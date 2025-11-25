@@ -134,9 +134,34 @@ const genericGet = (tableName) => async (req, res) => {
         const [rows] = await db.query(`SELECT * FROM \`${tableName}\``);
         res.json(rows);
     } catch (error) {
+        console.error(`Error fetching from ${tableName}:`, error);
         res.status(500).json({ message: `Failed to fetch from ${tableName}.` });
     }
 };
+
+const genericSave = (tableName, fields) => async (req, res) => {
+    const data = req.body;
+    const isNew = !req.params.id;
+    const id = isNew ? uuidv4() : req.params.id;
+
+    try {
+        if (isNew) {
+            const values = fields.map(field => data[field]);
+            await db.query(`INSERT INTO \`${tableName}\` (id, \`${fields.join('`,`')}\`) VALUES (?, ?)`, [id, values]);
+        } else {
+            const setClause = fields.map(field => `\`${field}\` = ?`).join(', ');
+            const values = fields.map(field => data[field]);
+            await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE id = ?`, [...values, id]);
+        }
+        const [[savedItem]] = await db.query(`SELECT * FROM \`${tableName}\` WHERE id = ?`, [id]);
+        await logActivity(req.user.userId, isNew ? `Create ${tableName}` : `Update ${tableName}`, `Item ${id}`);
+        res.status(isNew ? 201 : 200).json(savedItem);
+    } catch (error) {
+        console.error(`Error saving to ${tableName}:`, error);
+        res.status(500).json({ message: `Failed to save item in ${tableName}`, error: error.message });
+    }
+};
+
 
 const genericDelete = (tableName, specialHandling = {}) => async (req, res) => {
     const { id } = req.params;
@@ -151,6 +176,7 @@ const genericDelete = (tableName, specialHandling = {}) => async (req, res) => {
         res.status(204).send();
     } catch (error) {
         await connection.rollback();
+        console.error(`Error deleting from ${tableName}:`, error);
         res.status(500).json({ message: `Failed to delete from ${tableName}`, error: error.message });
     } finally {
         connection.release();
@@ -172,6 +198,7 @@ apiRouter.get('/settings', async (req, res) => {
         if (rows && rows.length > 0) return res.json(rows[0]);
         res.status(404).json({ message: "Settings not found" });
     } catch (error) {
+        console.error("Error fetching public settings:", error);
         res.status(500).json({ message: "Failed to fetch settings." });
     }
 });
@@ -190,13 +217,14 @@ apiRouter.post('/auth/login', async (req, res) => {
 
         const sessionId = uuidv4();
         const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        sessions[sessionId] = { user: { userId: user.id, role: user.role }, expires };
+        sessions[sessionId] = { user: { userId: user.id, role: user.role, academyId: user.academyId, studentId: user.studentId }, expires };
 
         res.cookie('sessionId', sessionId, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', expires });
         await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
         const { academy_password, student_password, ...userResponse } = user;
         res.json(userResponse);
     } catch (error) {
+        console.error("Error during login:", error);
         res.status(500).json({ message: 'Erro interno no servidor durante o login.', error: error.message });
     }
 });
@@ -228,13 +256,14 @@ apiRouter.post('/auth/register', async (req, res) => {
         const [[newUser]] = await connection.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [userId]);
         const sessionId = uuidv4();
         const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        sessions[sessionId] = { user: { userId: newUser.id, role: newUser.role }, expires };
+        sessions[sessionId] = { user: { userId: newUser.id, role: newUser.role, academyId: newUser.academyId }, expires };
 
         res.cookie('sessionId', sessionId, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', expires });
         await logActivity(userId, 'Academy Registration', `Academia "${name}" registrada.`);
         res.status(201).json(newUser);
     } catch (error) {
         await connection.rollback();
+        console.error("Error registering academy:", error);
         res.status(500).json({ message: 'Falha ao registrar academia.' });
     } finally {
         connection.release();
@@ -255,6 +284,7 @@ apiRouter.get('/auth/session', async (req, res) => {
         if (user) return res.json(user);
         res.status(404).json({ message: 'Usuário da sessão não encontrado.' });
     } catch (error) {
+        console.error("Error validating session:", error);
         res.status(500).json({ message: 'Falha ao validar sessão.' });
     }
 });
@@ -262,8 +292,10 @@ apiRouter.get('/auth/session', async (req, res) => {
 apiRouter.post('/auth/logout', (req, res) => {
     const cookies = parseCookies(req);
     const sessionId = cookies.sessionId;
-    if (sessionId && sessions[sessionId]) delete sessions[sessionId];
-    logActivity(req.user.userId, 'Logout', 'Usuário deslogado.');
+    if (sessionId && sessions[sessionId]) {
+        logActivity(sessions[sessionId].user.userId, 'Logout', 'Usuário deslogado.');
+        delete sessions[sessionId];
+    }
     res.clearCookie('sessionId').status(200).json({ message: 'Logout bem-sucedido.' });
 });
 
@@ -281,7 +313,7 @@ apiRouter.get('/students', async (req, res) => {
             try { s.medals = JSON.parse(s.medals); } catch (e) { s.medals = { gold: 0, silver: 0, bronze: 0 }; }
         });
         res.json(students);
-    } catch (error) { res.status(500).json({ message: 'Failed to fetch students.' }); }
+    } catch (error) { console.error("Error fetching students:", error); res.status(500).json({ message: 'Failed to fetch students.' }); }
 });
 
 apiRouter.get('/schedules', async (req, res) => {
@@ -289,7 +321,7 @@ apiRouter.get('/schedules', async (req, res) => {
         const [schedules] = await db.query('SELECT cs.*, GROUP_CONCAT(sa.assistantId) as assistantIds FROM class_schedules cs LEFT JOIN schedule_assistants sa ON cs.id = sa.scheduleId GROUP BY cs.id');
         schedules.forEach(s => s.assistantIds = s.assistantIds ? s.assistantIds.split(',') : []);
         res.json(schedules);
-    } catch (error) { res.status(500).json({ message: 'Failed to fetch schedules.' }); }
+    } catch (error) { console.error("Error fetching schedules:", error); res.status(500).json({ message: 'Failed to fetch schedules.' }); }
 });
 
 apiRouter.get('/academies', async (req, res) => {
@@ -311,7 +343,7 @@ apiRouter.get('/settings/all', async (req, res) => {
         if (user.role !== 'general_admin') return res.status(403).json({ message: "Acesso negado." });
         const [[settings]] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
         res.json(settings);
-    } catch (error) { res.status(500).json({ message: "Failed to fetch all settings." }); }
+    } catch (error) { console.error("Error fetching all settings:", error); res.status(500).json({ message: "Failed to fetch all settings." }); }
 });
 apiRouter.put('/settings', async (req, res) => {
     const { id, ...settings } = req.body;
@@ -357,6 +389,7 @@ const studentSaveHandler = async (req, res) => {
         res.status(isNew ? 201 : 200).json(student);
     } catch (error) {
         await connection.rollback();
+        console.error("Error saving student:", error);
         res.status(500).json({ message: `Failed to ${isNew ? 'create' : 'update'} student`, error: error.message });
     } finally {
         connection.release();
@@ -396,7 +429,9 @@ const academySaveHandler = async (req, res) => {
         if (data.password) academyFields.password = await bcrypt.hash(data.password, 10);
         
         if (isNew) {
-            await connection.query('INSERT INTO academies (id, ??) VALUES (?, ?)', [Object.keys(academyFields), academyId, Object.values(academyFields)]);
+            const fieldNames = Object.keys(academyFields);
+            const placeholders = fieldNames.map(() => '?').join(',');
+            await connection.query(`INSERT INTO academies (id, \`${fieldNames.join('`,`')}\`) VALUES (?, ${placeholders})`, [academyId, ...Object.values(academyFields)]);
             await connection.query('INSERT INTO users (id, name, email, role, academyId) VALUES (?, ?, ?, ?, ?)', [uuidv4(), data.responsible, data.email, 'academy_admin', academyId]);
         } else {
             const setClause = Object.keys(academyFields).map(k => `\`${k}\` = ?`).join(', ');
@@ -405,7 +440,7 @@ const academySaveHandler = async (req, res) => {
         }
         await connection.commit();
         res.status(isNew ? 201 : 200).json({ id: academyId, ...data });
-    } catch (e) { await connection.rollback(); res.status(500).json({ message: e.message }); } finally { connection.release(); }
+    } catch (e) { await connection.rollback(); console.error("Error saving academy:", e); res.status(500).json({ message: e.message }); } finally { connection.release(); }
 };
 apiRouter.post('/academies', academySaveHandler);
 apiRouter.put('/academies/:id', academySaveHandler);
@@ -438,7 +473,7 @@ const scheduleSaveHandler = async (req, res) => {
         const [[schedule]] = await db.query('SELECT cs.*, GROUP_CONCAT(sa.assistantId) as assistantIds FROM class_schedules cs LEFT JOIN schedule_assistants sa ON cs.id = sa.scheduleId WHERE cs.id = ? GROUP BY cs.id', [scheduleId]);
         schedule.assistantIds = schedule.assistantIds ? schedule.assistantIds.split(',') : [];
         res.status(isNew ? 201 : 200).json(schedule);
-    } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to save schedule', error: error.message }); } finally { connection.release(); }
+    } catch (error) { await connection.rollback(); console.error("Error saving schedule:", error); res.status(500).json({ message: 'Failed to save schedule', error: error.message }); } finally { connection.release(); }
 };
 apiRouter.post('/schedules', scheduleSaveHandler);
 apiRouter.put('/schedules/:id', scheduleSaveHandler);
@@ -459,7 +494,7 @@ apiRouter.put('/graduations/ranks', async (req, res) => {
         await Promise.all(gradsWithNewRanks.map(grad => connection.query('UPDATE graduations SET `rank` = ? WHERE id = ?', [grad.rank, grad.id])));
         await connection.commit();
         res.status(200).json({ success: true });
-    } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to update ranks', error: error.message }); } finally { connection.release(); }
+    } catch (error) { await connection.rollback(); console.error("Error updating ranks:", error); res.status(500).json({ message: 'Failed to update ranks', error: error.message }); } finally { connection.release(); }
 });
 
 const attendanceFields = ['studentId', 'scheduleId', 'date', 'status'];
