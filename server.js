@@ -327,8 +327,13 @@ apiRouter.get('/schedules', async (req, res) => {
 });
 
 apiRouter.get('/academies', async (req, res) => {
-    const [academies] = await db.query('SELECT * FROM academies WHERE id != ?', ['master_admin_academy_01']);
-    res.json(academies);
+    try {
+        const [academies] = await db.query('SELECT * FROM academies WHERE id != ?', ['master_admin_academy_01']);
+        res.json(academies);
+    } catch (error) {
+        console.error("Error fetching academies:", error);
+        res.status(500).json({ message: 'Failed to fetch academies.' });
+    }
 });
 
 // FIX: Added all missing GET endpoints that were causing 404 errors.
