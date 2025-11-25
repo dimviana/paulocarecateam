@@ -1,5 +1,5 @@
 import React, { useContext, useState, FormEvent, useRef } from 'react';
-import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
 import { Academy, Student } from './types';
 import Layout from './components/layout/Layout';
@@ -273,8 +273,9 @@ const AcademiesPage: React.FC = () => {
 
 const ProtectedRoute: React.FC = () => {
     const { user } = useContext(AppContext);
+    const location = useLocation();
     if (!user) {
-        return <Navigate to="/" replace />;
+        return <Navigate to="/login" state={{ from: location }} replace />;
     }
     return (
         <Layout>
