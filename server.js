@@ -129,16 +129,6 @@ const checkSession = (req, res, next) => {
 };
 
 // --- Generic CRUD Handlers ---
-const genericGet = (tableName) => async (req, res) => {
-    try {
-        const [rows] = await db.query(`SELECT * FROM \`${tableName}\``);
-        res.json(rows);
-    } catch (error) {
-        console.error(`Error fetching from ${tableName}:`, error);
-        res.status(500).json({ message: `Failed to fetch from ${tableName}.` });
-    }
-};
-
 const genericSave = (tableName, fields) => async (req, res) => {
     const data = req.body;
     const isNew = !req.params.id;
@@ -334,12 +324,65 @@ apiRouter.get('/schedules', async (req, res) => {
     } catch (error) { console.error("Error fetching schedules:", error); res.status(500).json({ message: 'Failed to fetch schedules.' }); }
 });
 
-apiRouter.get('/graduations', genericGet('graduations'));
-apiRouter.get('/professors', genericGet('professors'));
-apiRouter.get('/users', genericGet('users'));
-apiRouter.get('/attendance', genericGet('attendance_records'));
-apiRouter.get('/logs', genericGet('activity_logs'));
-apiRouter.get('/news', genericGet('news_articles'));
+apiRouter.get('/graduations', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM graduations');
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching from graduations:', error);
+        res.status(500).json({ message: 'Failed to fetch from graduations.' });
+    }
+});
+
+apiRouter.get('/professors', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM professors');
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching from professors:', error);
+        res.status(500).json({ message: 'Failed to fetch from professors.' });
+    }
+});
+
+apiRouter.get('/users', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM users');
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching from users:', error);
+        res.status(500).json({ message: 'Failed to fetch from users.' });
+    }
+});
+
+apiRouter.get('/attendance', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM attendance_records');
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching from attendance_records:', error);
+        res.status(500).json({ message: 'Failed to fetch from attendance_records.' });
+    }
+});
+
+apiRouter.get('/logs', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM activity_logs');
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching from activity_logs:', error);
+        res.status(500).json({ message: 'Failed to fetch from activity_logs.' });
+    }
+});
+
+apiRouter.get('/news', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM news_articles');
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching from news_articles:', error);
+        res.status(500).json({ message: 'Failed to fetch from news_articles.' });
+    }
+});
 
 // --- Settings (Protected) ---
 apiRouter.get('/settings/all', async (req, res) => {
