@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog } from '../types';
 import { initialThemeSettings } from '../constants';
@@ -25,7 +26,6 @@ interface AppContextType {
   professors: Professor[];
   activityLogs: ActivityLog[];
   loading: boolean;
-  initError: string | null;
   updateStudentPayment: (studentId: string, status: 'paid' | 'unpaid') => Promise<void>;
   saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }) => Promise<void>;
   deleteStudent: (studentId: string) => Promise<void>;
@@ -71,7 +71,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [professors, setProfessors] = useState<Professor[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [initError, setInitError] = useState<string | null>(null);
   const [showcasedComponents, setShowcasedComponents] = useState<string[]>(() => {
     const saved = localStorage.getItem('showcasedComponents');
     return saved ? JSON.parse(saved) : ['StatCard', 'PaymentsChart', 'AttendanceChart'];
@@ -189,10 +188,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     const initializeApp = async () => {
         setLoading(true);
-        setInitError(null);
         try {
-            const settings = await api.getThemeSettings();
-            setThemeSettingsState(settings);
+            const envToken = process.env.REACT_APP_AUTH_TOKEN;
+            if (envToken) {
+                if (localStorage.getItem('accessToken') !== envToken) {
+                    localStorage.setItem('accessToken', envToken);
+                    console.log("Auto-authenticating via ENV token.");
+                }
+            }
+
+            try {
+                const settings = await api.getThemeSettings();
+                setThemeSettingsState(settings);
+            } catch (error) {
+                console.error("Failed to load settings, using defaults:", error);
+            }
 
             const token = localStorage.getItem('accessToken');
             const refreshToken = localStorage.getItem('refreshToken');
@@ -207,9 +217,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
             }
         } catch (error) {
-            console.error("Critical application initialization failed:", error);
-            const errorMessage = "Não foi possível carregar as configurações do sistema. Verifique a conexão com o servidor e se o backend está online.";
-            setInitError(errorMessage);
             handleApiError(error, 'initializeApp');
         } finally {
             setLoading(false);
@@ -355,7 +362,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         themeSettings, setThemeSettings, 
         user, login, loginGoogle, logout, 
         students, academies, graduations, schedules, users, attendanceRecords, professors, activityLogs,
-        loading, initError,
+        loading, 
         updateStudentPayment, saveStudent, deleteStudent,
         saveAcademy, deleteAcademy,
         saveGraduation, updateGraduationRanks, deleteGraduation,

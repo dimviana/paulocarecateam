@@ -88,7 +88,7 @@ const logActivity = async (actorId, action, details) => {
   }
 };
 
-// --- JWT Authentication Middleware ---
+// --- JWT Authentication Middleware (Stateless) ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -112,19 +112,16 @@ const authenticateToken = (req, res, next) => {
 
 
 // =================================================================
-// --- Global Middleware & Router Setup ---
+// --- Global Middleware Setup ---
 // =================================================================
 app.use('/api', checkDbConnection);
-
-const publicRouter = express.Router();
-const protectedRouter = express.Router();
 
 
 // =================================================================
 // --- PUBLIC API ROUTES ---
 // These routes are accessible without authentication.
 // =================================================================
-publicRouter.get('/settings', async (req, res) => {
+app.get('/api/settings', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
         if (rows && rows.length > 0) return res.json(rows[0]);
@@ -135,7 +132,8 @@ publicRouter.get('/settings', async (req, res) => {
     }
 });
 
-publicRouter.post('/auth/login', async (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
+    // FIX: Read from both potential key sets for backward compatibility with older clients.
     const emailOrCpf = req.body.emailOrCpf || req.body.username;
     const pass = req.body.pass || req.body.password;
 
@@ -192,7 +190,7 @@ publicRouter.post('/auth/login', async (req, res) => {
     }
 });
 
-publicRouter.post('/auth/refresh', async (req, res) => {
+app.post('/api/auth/refresh', async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(401).json({ message: "Refresh token não fornecido." });
 
@@ -218,7 +216,7 @@ publicRouter.post('/auth/refresh', async (req, res) => {
     }
 });
 
-publicRouter.post('/auth/register', async (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
     
@@ -253,10 +251,17 @@ publicRouter.post('/auth/register', async (req, res) => {
 
 
 // =================================================================
-// --- PROTECTED API ROUTES ---
-// Apply auth middleware and define all protected routes.
+// --- AUTHENTICATION GATEWAY ---
+// All subsequent /api routes defined below this line are protected.
 // =================================================================
-protectedRouter.use(authenticateToken);
+app.use('/api', authenticateToken);
+
+
+// =================================================================
+// --- PROTECTED API ROUTES ---
+// Organized in a router for clarity.
+// =================================================================
+const protectedRouter = express.Router();
 
 protectedRouter.post('/auth/logout', async (req, res) => {
     try {
@@ -451,25 +456,20 @@ const simpleCrud = (tableName, fields) => {
                 const setClause = fields.map(f => `\`${f}\` = ?`).join(', ');
                 let values = [...fields.map(f => data[f] ?? null)];
 
+                // Special handling for academy password to prevent overwriting with null
                 if (tableName === 'academies' && fields.includes('password')) {
                     const passwordIndex = fields.indexOf('password');
                     if (!data.password) {
-                        const mutableFields = [...fields];
-                        const mutableValues = [...values];
-                        mutableFields.splice(passwordIndex, 1);
-                        mutableValues.splice(passwordIndex, 1);
-                        const finalSetClause = mutableFields.map(f => `\`${f}\` = ?`).join(', ');
-                        mutableValues.push(id);
-                        if(finalSetClause) await db.query(`UPDATE \`${tableName}\` SET ${finalSetClause} WHERE \`id\` = ?`, mutableValues);
+                        // If password is not provided, remove it from update
+                        fields.splice(passwordIndex, 1);
+                        values.splice(passwordIndex, 1);
                     } else {
                         values[passwordIndex] = await bcrypt.hash(data.password, 10);
-                        values.push(id);
-                        if(setClause) await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE \`id\` = ?`, values);
                     }
-                } else {
-                     values.push(id);
-                     if(setClause) await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE \`id\` = ?`, values);
                 }
+                values.push(id);
+                const finalSetClause = fields.map(f => `\`${f}\` = ?`).join(', ');
+                if(finalSetClause) await db.query(`UPDATE \`${tableName}\` SET ${finalSetClause} WHERE \`id\` = ?`, values);
             }
             await logActivity(req.user.userId, `Save ${tableName}`, `${isNew ? 'Created' : 'Updated'} item ${data.name || id}`);
             const [[savedItem]] = await db.query(`SELECT * FROM \`${tableName}\` WHERE id = ?`, [id]);
@@ -568,8 +568,7 @@ protectedRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 
 protectedRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
 protectedRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
 
-// --- Mount Routers ---
-app.use('/api', publicRouter);
+// Mount the protected router under the /api path
 app.use('/api', protectedRouter);
 
 
