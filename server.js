@@ -20,14 +20,12 @@ const {
 
 // --- Express App Initialization ---
 const app = express();
+const apiRouter = express.Router();
 
 // --- In-memory Session Store ---
 const sessions = {}; // { sessionId: { user: { userId, role }, expires: Date } }
 
 // --- Middleware ---
-// FIX: Configure CORS to properly handle credentialed requests from the frontend.
-// When the frontend sends `credentials: 'include'`, the server must respond
-// with a specific origin, not a wildcard ('*').
 const corsOptions = {
   origin: FRONTEND_URL,
   credentials: true,
@@ -131,13 +129,81 @@ const checkSession = (req, res, next) => {
 };
 
 // =================================================================
-// --- ROUTERS SETUP ---
+// --- GENERIC CRUD HANDLERS ---
 // =================================================================
 
-// --- Public Router (No Authentication Required) ---
-const publicRouter = express.Router();
+const genericGet = (tableName) => async (req, res) => {
+    try {
+        const [rows] = await db.query(`SELECT * FROM \`${tableName}\``);
+        res.json(rows);
+    } catch (error) {
+        console.error(`Error fetching from ${tableName}:`, error);
+        res.status(500).json({ message: `Failed to fetch from ${tableName}.` });
+    }
+};
 
-publicRouter.get('/settings', async (req, res) => {
+const genericSave = (tableName, fields, specialHandling = {}) => async (req, res) => {
+    const data = req.body;
+    const isNew = !req.params.id && !data.id;
+    const id = isNew ? uuidv4() : (req.params.id || data.id);
+
+    try {
+        if (isNew) {
+            if(specialHandling.beforeInsert) await specialHandling.beforeInsert(data, { db, req });
+            const columns = ['`id`', ...fields.map(f => `\`${f}\``)].join(', ');
+            const placeholders = ['?', ...fields.map(() => '?')].join(', ');
+            const values = [id, ...fields.map(f => data[f] ?? null)];
+            await db.query(`INSERT INTO \`${tableName}\` (${columns}) VALUES (${placeholders})`, values);
+             if(specialHandling.afterInsert) await specialHandling.afterInsert({ ...data, id }, { db, req });
+        } else {
+             if(specialHandling.beforeUpdate) await specialHandling.beforeUpdate(data, { db, req });
+            const mutableFields = [...fields];
+            const values = mutableFields.map(f => data[f] ?? null);
+            const setClause = mutableFields.map(f => `\`${f}\` = ?`).join(', ');
+            values.push(id);
+            if(setClause) await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE \`id\` = ?`, values);
+             if(specialHandling.afterUpdate) await specialHandling.afterUpdate(data, { db, req });
+        }
+        await logActivity(req.user?.userId || 'system', `Save ${tableName}`, `${isNew ? 'Created' : 'Updated'} item ${data.name || id}`);
+        const [[savedItem]] = await db.query(`SELECT * FROM \`${tableName}\` WHERE id = ?`, [id]);
+        if(specialHandling.transformResponse) {
+            const transformed = await specialHandling.transformResponse(savedItem, { db });
+            return res.status(isNew ? 201 : 200).json(transformed);
+        }
+        res.status(isNew ? 201 : 200).json(savedItem);
+    } catch (error) {
+        console.error(`Error saving to ${tableName}:`, error);
+        res.status(500).json({ message: `Failed to save to ${tableName}`, error: error.message });
+    }
+};
+
+const genericDelete = (tableName, specialHandling = {}) => async (req, res) => {
+    const { id } = req.params;
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        if(specialHandling.beforeDelete) await specialHandling.beforeDelete(id, { connection, req });
+        const [result] = await connection.query(`DELETE FROM \`${tableName}\` WHERE id = ?`, [id]);
+        await connection.commit();
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Item not found.' });
+        await logActivity(req.user.userId, `Delete ${tableName}`, `Deleted item with id ${id}`);
+        res.status(204).send();
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ message: `Failed to delete from ${tableName}`, error: error.message });
+    } finally {
+        connection.release();
+    }
+};
+
+
+// =================================================================
+// --- ROUTE DEFINITIONS ---
+// =================================================================
+
+// --- Public Routes (No Authentication Required) ---
+
+apiRouter.get('/settings', async (req, res) => {
     try {
         const publicFields = 'logoUrl, systemName, primaryColor, secondaryColor, backgroundColor, cardBackgroundColor, buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2, useGradient, theme, publicPageEnabled, heroHtml, aboutHtml, branchesHtml, footerHtml, customCss, customJs, socialLoginEnabled, googleClientId, facebookAppId, copyrightText, systemVersion, reminderDaysBeforeDue, overdueDaysAfterDue, monthlyFeeAmount';
         const [rows] = await db.query(`SELECT ${publicFields} FROM theme_settings WHERE id = 1`);
@@ -149,27 +215,20 @@ publicRouter.get('/settings', async (req, res) => {
     }
 });
 
-
-publicRouter.post('/auth/login', async (req, res) => {
+apiRouter.post('/auth/login', async (req, res) => {
     const { username, password } = req.body;
-
-    if (!username || !password) {
-        return res.status(400).json({ message: 'Please provide username and password' });
-    }
+    if (!username || !password) return res.status(400).json({ message: 'Please provide username and password' });
 
     try {
         let user;
         let passwordHash;
         
-        const emailOrCpf = username;
-
-        if (emailOrCpf.includes('@')) {
-            const [users] = await db.query('SELECT * FROM users WHERE email = ?', [emailOrCpf]);
+        if (username.includes('@')) {
+            const [users] = await db.query('SELECT * FROM users WHERE email = ?', [username]);
             if (users.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
             user = users[0];
         } else {
-            const sanitizedCpf = emailOrCpf.replace(/\D/g, '');
-            const [students] = await db.query('SELECT id FROM students WHERE cpf = ?', [sanitizedCpf]);
+            const [students] = await db.query('SELECT id FROM students WHERE cpf = ?', [username.replace(/\D/g, '')]);
             if (students.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.', code: 'USER_NOT_FOUND' });
             
             const [users] = await db.query('SELECT * FROM users WHERE studentId = ?', [students[0].id]);
@@ -178,33 +237,22 @@ publicRouter.post('/auth/login', async (req, res) => {
         }
 
         if (user.role === 'student') {
-            const [students] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
-            if (students.length > 0) passwordHash = students[0].password;
-        } else if (user.role === 'academy_admin' || user.role === 'general_admin') {
-            const [academies] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
-            if (academies.length > 0) passwordHash = academies[0].password;
+            const [[student]] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
+            passwordHash = student?.password;
+        } else {
+            const [[academy]] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
+            passwordHash = academy?.password;
         }
         
-        if (!passwordHash) {
-            return res.status(401).json({ message: 'Credenciais inválidas.' });
-        }
-
-        const isMatch = await bcrypt.compare(password, passwordHash);
-        if (!isMatch) {
+        if (!passwordHash || !(await bcrypt.compare(password, passwordHash))) {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
         const sessionId = uuidv4();
-        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-        const sessionUser = { userId: user.id, role: user.role };
-        sessions[sessionId] = { user: sessionUser, expires };
+        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        sessions[sessionId] = { user: { userId: user.id, role: user.role }, expires };
 
-        res.cookie('sessionId', sessionId, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            expires: expires
-        });
+        res.cookie('sessionId', sessionId, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', expires });
         
         await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
         const [[fullUserData]] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [user.id]);
@@ -216,13 +264,13 @@ publicRouter.post('/auth/login', async (req, res) => {
     }
 });
 
-publicRouter.post('/auth/google', async (req, res) => {
+apiRouter.post('/auth/google', async (req, res) => {
     const { token } = req.body;
     console.log(`Google login attempt with token: ${token ? token.substring(0, 30) : 'none'}...`);
     return res.status(404).json({ message: 'Usuário Google não encontrado no sistema.', code: 'USER_NOT_FOUND' });
 });
 
-publicRouter.post('/auth/register', async (req, res) => {
+apiRouter.post('/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
     
@@ -239,29 +287,19 @@ publicRouter.post('/auth/register', async (req, res) => {
         const userId = uuidv4();
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        await connection.query('INSERT INTO academies (id, name, address, responsible, responsibleRegistration, email, password, professorId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [academyId, name, address, responsible, responsibleRegistration, email, hashedPassword, null]);
+        await connection.query('INSERT INTO academies (id, name, address, responsible, responsibleRegistration, email, password) VALUES (?, ?, ?, ?, ?, ?, ?)', [academyId, name, address, responsible, responsibleRegistration, email, hashedPassword]);
         await connection.query('INSERT INTO users (id, name, email, role, academyId) VALUES (?, ?, ?, ?, ?)', [userId, responsible, email, 'academy_admin', academyId]);
         
         await connection.commit();
 
-        // Automatically log the user in after registration
         const sessionId = uuidv4();
-        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-        
-        const [[newUser]] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [userId]);
+        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const [[newUser]] = await connection.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [userId]);
+        sessions[sessionId] = { user: { userId: newUser.id, role: newUser.role }, expires };
 
-        const sessionUser = { userId: newUser.id, role: newUser.role };
-        sessions[sessionId] = { user: sessionUser, expires };
+        res.cookie('sessionId', sessionId, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', expires });
 
-        res.cookie('sessionId', sessionId, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            expires: expires
-        });
-
-        await logActivity(userId, 'Academy Registration & Login', `Academia "${name}" registrada. Usuário logado automaticamente.`);
-        
+        await logActivity(userId, 'Academy Registration', `Academia "${name}" registrada e logada.`);
         res.status(201).json(newUser);
 
     } catch (error) {
@@ -273,27 +311,24 @@ publicRouter.post('/auth/register', async (req, res) => {
     }
 });
 
-// --- Protected Router (Session Authentication Required) ---
-const protectedRouter = express.Router();
-protectedRouter.use(checkSession);
+// --- Authentication Wall ---
+// All routes defined after this point will require a valid session.
+apiRouter.use(checkSession);
 
-protectedRouter.post('/auth/logout', async (req, res) => {
+// --- Protected Routes ---
+
+apiRouter.post('/auth/logout', async (req, res) => {
     const cookies = parseCookies(req);
     const sessionId = cookies.sessionId;
-    if (sessionId && sessions[sessionId]) {
-        delete sessions[sessionId];
-    }
+    if (sessionId && sessions[sessionId]) delete sessions[sessionId];
     await logActivity(req.user.userId, 'Logout', 'Usuário deslogado.');
-    res.clearCookie('sessionId');
-    res.status(200).json({ message: 'Logout bem-sucedido.' });
+    res.clearCookie('sessionId').status(200).json({ message: 'Logout bem-sucedido.' });
 });
 
-protectedRouter.get('/auth/session', async (req, res) => {
+apiRouter.get('/auth/session', async (req, res) => {
     try {
-        const [users] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [req.user.userId]);
-        if (users.length > 0) {
-            return res.json(users[0]);
-        }
+        const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [req.user.userId]);
+        if (user) return res.json(user);
         res.status(404).json({ message: 'Usuário da sessão não encontrado.' });
     } catch (error) {
         console.error("Session validation error:", error);
@@ -301,152 +336,93 @@ protectedRouter.get('/auth/session', async (req, res) => {
     }
 });
 
-protectedRouter.get('/settings/all', async (req, res) => {
+// Settings
+apiRouter.get('/settings/all', async (req, res) => {
     try {
         const [[user]] = await db.query('SELECT role FROM users WHERE id = ?', [req.user.userId]);
-        if (user.role !== 'general_admin') {
-           return res.status(403).json({ message: "Acesso negado. Apenas administradores gerais." });
-        }
-        const [rows] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
-        if (rows && rows.length > 0) return res.json(rows[0]);
-        res.status(404).json({ message: "Settings not found" });
-    } catch (error) {
-        console.error("Error fetching all settings:", error);
-        res.status(500).json({ message: "Failed to fetch all settings." });
-    }
+        if (user.role !== 'general_admin') return res.status(403).json({ message: "Acesso negado." });
+        const [[settings]] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
+        res.json(settings);
+    } catch (error) { res.status(500).json({ message: "Failed to fetch all settings." }); }
+});
+apiRouter.put('/settings', async (req, res) => {
+    const { id, ...settings } = req.body;
+    const booleanFields = ['publicPageEnabled', 'useGradient', 'socialLoginEnabled'];
+    booleanFields.forEach(field => {
+        if (field in settings) settings[field] = settings[field] ? 1 : 0;
+    });
+    const setClause = Object.keys(settings).map(field => `\`${field}\` = ?`).join(', ');
+    await db.query(`UPDATE theme_settings SET ${setClause} WHERE id = 1`, Object.values(settings));
+    await logActivity(req.user.userId, 'Update Settings', 'System settings updated.');
+    const [[updatedSettings]] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
+    res.json(updatedSettings);
 });
 
 
-const genericGet = (tableName) => async (req, res) => {
-    try {
-        const [rows] = await db.query(`SELECT * FROM \`${tableName}\``);
-        res.json(rows);
-    } catch (error) {
-        console.error(`Error fetching from ${tableName}:`, error);
-        res.status(500).json({ message: `Failed to fetch from ${tableName}.` });
-    }
-};
-
-protectedRouter.get('/users', genericGet('users'));
-protectedRouter.get('/graduations', genericGet('graduations'));
-protectedRouter.get('/professors', genericGet('professors'));
-protectedRouter.get('/logs', genericGet('activity_logs'));
-protectedRouter.get('/attendance', genericGet('attendance_records'));
-protectedRouter.get('/news', genericGet('news_articles'));
-
-protectedRouter.get('/students', async (req, res) => {
+// Students
+apiRouter.get('/students', async (req, res) => {
      try {
         const [students] = await db.query('SELECT * FROM students');
         const [payments] = await db.query('SELECT * FROM payment_history ORDER BY `date` DESC');
-        
-        const paymentsByStudent = payments.reduce((acc, payment) => {
-            if (!acc[payment.studentId]) acc[payment.studentId] = [];
-            acc[payment.studentId].push(payment);
+        const paymentsByStudent = payments.reduce((acc, p) => {
+            (acc[p.studentId] = acc[p.studentId] || []).push(p);
             return acc;
         }, {});
-        
-        for (const student of students) {
-            student.paymentHistory = paymentsByStudent[student.id] || [];
-            if (student.medals && typeof student.medals === 'string') {
-                try { student.medals = JSON.parse(student.medals); } catch (e) { student.medals = { gold: 0, silver: 0, bronze: 0 }; }
-            } else if (!student.medals) {
-                 student.medals = { gold: 0, silver: 0, bronze: 0 };
-            }
-        }
+        students.forEach(s => {
+            s.paymentHistory = paymentsByStudent[s.id] || [];
+            try { s.medals = JSON.parse(s.medals); } catch (e) { s.medals = { gold: 0, silver: 0, bronze: 0 }; }
+        });
         res.json(students);
-    } catch (error) {
-        console.error('Error fetching students:', error);
-        res.status(500).json({ message: 'Failed to fetch students.' });
-    }
+    } catch (error) { res.status(500).json({ message: 'Failed to fetch students.' }); }
 });
 
-protectedRouter.post('/students', async (req, res) => {
+const studentSaveHandler = async (req, res) => {
     const data = req.body;
-    if (!data.password) return res.status(400).json({ message: "Password is required for new students."});
-    
-    const studentId = uuidv4();
-    const userId = uuidv4();
-    const hashedPassword = await bcrypt.hash(data.password, 10);
+    const isNew = !req.params.id;
+    const studentId = isNew ? uuidv4() : req.params.id;
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-        await connection.query('INSERT INTO students (id, name, email, password, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentStatus, paymentDueDateDay, stripes, isCompetitor, lastCompetition, medals, imageUrl) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [studentId, data.name, data.email, hashedPassword, data.birthDate, data.cpf, data.fjjpe_registration, data.phone, data.address, data.beltId, data.academyId, data.firstGraduationDate, 'unpaid', data.paymentDueDateDay, data.stripes || 0, data.isCompetitor || false, data.lastCompetition || null, JSON.stringify(data.medals || {}), data.imageUrl || null]);
-        await connection.query('INSERT INTO users (id, name, email, role, studentId, birthDate) VALUES (?,?,?,?,?,?)', [userId, data.name, data.email, 'student', studentId, data.birthDate]);
-        await connection.commit();
-        await logActivity(req.user.userId, 'Create Student', `Created student ${data.name}`);
-        const [[newStudent]] = await db.query('SELECT * FROM students WHERE id = ?', [studentId]);
-        res.status(201).json(newStudent);
-    } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to create student", error: error.message }); } finally { connection.release(); }
-});
-
-protectedRouter.put('/students/:id', async (req, res) => {
-    const { id } = req.params;
-    const data = req.body;
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-        
-        let queryParams = [data.name, data.email, data.birthDate, data.cpf, data.fjjpe_registration, data.phone, data.address, data.beltId, data.academyId, data.firstGraduationDate, data.lastPromotionDate, data.paymentDueDateDay, data.stripes, data.isCompetitor, data.lastCompetition, JSON.stringify(data.medals || {}), data.imageUrl];
-        let setClauses = 'name=?, email=?, birthDate=?, cpf=?, fjjpe_registration=?, phone=?, address=?, beltId=?, academyId=?, firstGraduationDate=?, lastPromotionDate=?, paymentDueDateDay=?, stripes=?, isCompetitor=?, lastCompetition=?, medals=?, imageUrl=?';
-        
-        if (data.password) {
-            setClauses += ', password=?';
-            queryParams.push(await bcrypt.hash(data.password, 10));
+        if (isNew) {
+            if (!data.password) throw new Error("Password is required for new students.");
+            const userId = uuidv4();
+            const hashedPassword = await bcrypt.hash(data.password, 10);
+            await connection.query('INSERT INTO students (id, name, email, password, birthDate, cpf, fjjpe_registration, phone, address, beltId, academyId, firstGraduationDate, paymentStatus, paymentDueDateDay, stripes, isCompetitor, lastCompetition, medals, imageUrl) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [studentId, data.name, data.email, hashedPassword, data.birthDate, data.cpf, data.fjjpe_registration, data.phone, data.address, data.beltId, data.academyId, data.firstGraduationDate, 'unpaid', data.paymentDueDateDay, data.stripes || 0, data.isCompetitor || false, data.lastCompetition || null, JSON.stringify(data.medals || {}), data.imageUrl || null]);
+            await connection.query('INSERT INTO users (id, name, email, role, studentId, birthDate) VALUES (?,?,?,?,?,?)', [userId, data.name, data.email, 'student', studentId, data.birthDate]);
+        } else {
+            const queryParams = [data.name, data.email, data.birthDate, data.cpf, data.fjjpe_registration, data.phone, data.address, data.beltId, data.academyId, data.firstGraduationDate, data.lastPromotionDate, data.paymentDueDateDay, data.stripes, data.isCompetitor, data.lastCompetition, JSON.stringify(data.medals || {}), data.imageUrl];
+            let setClauses = 'name=?, email=?, birthDate=?, cpf=?, fjjpe_registration=?, phone=?, address=?, beltId=?, academyId=?, firstGraduationDate=?, lastPromotionDate=?, paymentDueDateDay=?, stripes=?, isCompetitor=?, lastCompetition=?, medals=?, imageUrl=?';
+            if (data.password) {
+                setClauses += ', password=?';
+                queryParams.push(await bcrypt.hash(data.password, 10));
+            }
+            queryParams.push(studentId);
+            await connection.query(`UPDATE students SET ${setClauses} WHERE id=?`, queryParams);
+            await connection.query('UPDATE users SET name=?, email=?, birthDate=? WHERE studentId=?', [data.name, data.email, data.birthDate, studentId]);
         }
-        queryParams.push(id);
-
-        await connection.query(`UPDATE students SET ${setClauses} WHERE id=?`, queryParams);
-        await connection.query('UPDATE users SET name=?, email=?, birthDate=? WHERE studentId=?', [data.name, data.email, data.birthDate, id]);
-        
         await connection.commit();
-        await logActivity(req.user.userId, 'Update Student', `Updated student ${data.name}`);
-        const [[updatedStudent]] = await db.query('SELECT * FROM students WHERE id = ?', [id]);
-        res.status(200).json(updatedStudent);
-    } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to update student", error: error.message }); } finally { connection.release(); }
-});
-
-protectedRouter.delete('/students/:id', async (req, res) => {
-    const { id } = req.params;
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
+        await logActivity(req.user.userId, isNew ? 'Create Student' : 'Update Student', `Student ${data.name}`);
+        const [[student]] = await db.query('SELECT * FROM students WHERE id = ?', [studentId]);
+        res.status(isNew ? 201 : 200).json(student);
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ message: `Failed to ${isNew ? 'create' : 'update'} student`, error: error.message });
+    } finally {
+        connection.release();
+    }
+}
+apiRouter.post('/students', studentSaveHandler);
+apiRouter.put('/students/:id', studentSaveHandler);
+apiRouter.delete('/students/:id', genericDelete('students', {
+    beforeDelete: async (id, { connection }) => {
         await connection.query('DELETE FROM payment_history WHERE studentId = ?', [id]);
         await connection.query('DELETE FROM attendance_records WHERE studentId = ?', [id]);
         await connection.query('DELETE FROM users WHERE studentId = ?', [id]);
-        const [result] = await connection.query('DELETE FROM students WHERE id = ?', [id]);
-        await connection.commit();
-        if (result.affectedRows === 0) return res.status(404).json({ message: 'Student not found.' });
-        await logActivity(req.user.userId, 'Delete Student', `Deleted student with id ${id}`);
-        res.status(204).send();
-    } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to delete student", error: error.message }); } finally { connection.release(); }
-});
-
-protectedRouter.put('/settings', async (req, res) => {
-    const { id, ...settingsToUpdate } = req.body;
-    try {
-        const booleanFields = ['publicPageEnabled', 'useGradient', 'socialLoginEnabled'];
-        booleanFields.forEach(field => {
-            if (field in settingsToUpdate) settingsToUpdate[field] = settingsToUpdate[field] ? 1 : 0;
-        });
-        const fields = Object.keys(settingsToUpdate);
-        const values = Object.values(settingsToUpdate);
-        const setClause = fields.map(field => `\`${field}\` = ?`).join(', ');
-        
-        await db.query(`UPDATE theme_settings SET ${setClause} WHERE id = 1`, values);
-        await logActivity(req.user.userId, 'Update Settings', 'System settings updated.');
-        const [[updatedSettings]] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
-        res.json(updatedSettings);
-    } catch (error) {
-        console.error("Error updating settings:", error);
-        res.status(500).json({ message: 'Failed to update settings.' });
     }
-});
-
-protectedRouter.post('/students/:studentId/payment', async (req, res) => {
+}));
+apiRouter.post('/students/:studentId/payment', async (req, res) => {
     const { studentId } = req.params;
     const { status, amount } = req.body;
-    if (!['paid', 'unpaid'].includes(status)) return res.status(400).json({ message: "Invalid status." });
-
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -461,158 +437,103 @@ protectedRouter.post('/students/:studentId/payment', async (req, res) => {
     } catch (error) { await connection.rollback(); res.status(500).json({ message: "Failed to update payment status", error: error.message }); } finally { connection.release(); }
 });
 
-const simpleCrud = (tableName, fields) => {
-    const router = express.Router();
-    
-    router.delete('/:id', async (req, res) => {
-        try {
-            await db.query(`DELETE FROM \`${tableName}\` WHERE \`id\` = ?`, [req.params.id]);
-            await logActivity(req.user.userId, `Delete ${tableName}`, `Deleted item with id ${req.params.id}`);
-            res.status(204).send();
-        } catch (error) { res.status(500).json({ message: `Failed to delete from ${tableName}.`, error: error.message }); }
-    });
-
-    const handleSave = async (req, res) => {
-        const data = req.body;
-        const isNew = !data.id;
-        const id = isNew ? uuidv4() : data.id;
-        try {
-            if (isNew) {
-                const columns = ['`id`', ...fields.map(f => `\`${f}\``)].join(', ');
-                const placeholders = ['?', ...fields.map(() => '?')].join(', ');
-                const values = [id, ...fields.map(f => data[f] ?? null)];
-                await db.query(`INSERT INTO \`${tableName}\` (${columns}) VALUES (${placeholders})`, values);
-            } else {
-                let mutableFields = [...fields];
-                let values = [...mutableFields.map(f => data[f] ?? null)];
-
-                if (tableName === 'academies' && mutableFields.includes('password')) {
-                    const passwordIndex = mutableFields.indexOf('password');
-                    if (!data.password) {
-                        mutableFields.splice(passwordIndex, 1);
-                        values.splice(passwordIndex, 1);
-                    } else {
-                        values[passwordIndex] = await bcrypt.hash(data.password, 10);
-                    }
-                }
-                const setClause = mutableFields.map(f => `\`${f}\` = ?`).join(', ');
-                values.push(id);
-                if(setClause) await db.query(`UPDATE \`${tableName}\` SET ${setClause} WHERE \`id\` = ?`, values);
-            }
-            await logActivity(req.user.userId, `Save ${tableName}`, `${isNew ? 'Created' : 'Updated'} item ${data.name || id}`);
-            const [[savedItem]] = await db.query(`SELECT * FROM \`${tableName}\` WHERE id = ?`, [id]);
-            res.status(isNew ? 201 : 200).json(savedItem);
-        } catch (error) { res.status(500).json({ message: `Failed to save to ${tableName}`, error: error.message }); }
-    };
-    router.post('/', handleSave);
-    router.put('/:id', handleSave);
-
-    return router;
-}
-
-protectedRouter.put('/graduations/ranks', async (req, res) => {
-    const gradsWithNewRanks = req.body;
-    if (!Array.isArray(gradsWithNewRanks)) return res.status(400).json({ message: 'Expected an array of graduations.' });
-    
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-        const promises = gradsWithNewRanks.map(grad => connection.query('UPDATE graduations SET `rank` = ? WHERE id = ?', [grad.rank, grad.id]));
-        await Promise.all(promises);
-        await connection.commit();
-        await logActivity(req.user.userId, 'Update Graduation Ranks', `Reordered ${gradsWithNewRanks.length} graduations.`);
-        res.status(200).json({ success: true });
-    } catch (error) {
-        await connection.rollback();
-        res.status(500).json({ message: 'Failed to update graduation ranks.', error: error.message });
-    } finally {
-        connection.release();
-    }
-});
-
-const scheduleRouter = express.Router();
-scheduleRouter.get('/', async (req, res) => {
+// Schedules
+apiRouter.get('/schedules', async (req, res) => {
     try {
         const [schedules] = await db.query('SELECT cs.*, GROUP_CONCAT(sa.assistantId) as assistantIds FROM class_schedules cs LEFT JOIN schedule_assistants sa ON cs.id = sa.scheduleId GROUP BY cs.id');
-        for (const schedule of schedules) {
-            schedule.assistantIds = schedule.assistantIds ? schedule.assistantIds.split(',') : [];
-        }
+        schedules.forEach(s => s.assistantIds = s.assistantIds ? s.assistantIds.split(',') : []);
         res.json(schedules);
     } catch (error) { res.status(500).json({ message: 'Failed to fetch schedules.' }); }
 });
-scheduleRouter.post('/', async (req, res) => {
+const scheduleSaveHandler = async (req, res) => {
+    const isNew = !req.params.id;
+    const scheduleId = isNew ? uuidv4() : req.params.id;
     const { assistantIds = [], ...data } = req.body;
-    const scheduleId = uuidv4();
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-        await connection.query('INSERT INTO class_schedules (id, className, dayOfWeek, startTime, endTime, professorId, academyId, requiredGraduationId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [scheduleId, data.className, data.dayOfWeek, data.startTime, data.endTime, data.professorId, data.academyId, data.requiredGraduationId]);
+        const scheduleFields = [data.className, data.dayOfWeek, data.startTime, data.endTime, data.professorId, data.academyId, data.requiredGraduationId];
+        if (isNew) {
+            await connection.query('INSERT INTO class_schedules (id, className, dayOfWeek, startTime, endTime, professorId, academyId, requiredGraduationId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [scheduleId, ...scheduleFields]);
+        } else {
+            await connection.query('UPDATE class_schedules SET className=?, dayOfWeek=?, startTime=?, endTime=?, professorId=?, academyId=?, requiredGraduationId=? WHERE id=?', [...scheduleFields, scheduleId]);
+        }
+        await connection.query('DELETE FROM schedule_assistants WHERE scheduleId = ?', [scheduleId]);
         if (assistantIds.length > 0) {
             const assistantValues = assistantIds.map(assistId => [scheduleId, assistId]);
             await connection.query('INSERT INTO schedule_assistants (scheduleId, assistantId) VALUES ?', [assistantValues]);
         }
         await connection.commit();
-        await logActivity(req.user.userId, 'Create Schedule', `Created schedule ${data.className}`);
-        const [[newSchedule]] = await db.query('SELECT * FROM class_schedules WHERE id = ?', [scheduleId]);
-        newSchedule.assistantIds = assistantIds;
-        res.status(201).json(newSchedule);
-    } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to create schedule', error: error.message }); } finally { connection.release(); }
-});
-scheduleRouter.put('/:id', async (req, res) => {
-    const { id } = req.params;
-    const { assistantIds = [], ...data } = req.body;
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-        await connection.query('UPDATE class_schedules SET className=?, dayOfWeek=?, startTime=?, endTime=?, professorId=?, academyId=?, requiredGraduationId=? WHERE id=?', [data.className, data.dayOfWeek, data.startTime, data.endTime, data.professorId, data.academyId, data.requiredGraduationId, id]);
-        await connection.query('DELETE FROM schedule_assistants WHERE scheduleId = ?', [id]);
-        if (assistantIds.length > 0) {
-            const assistantValues = assistantIds.map(assistId => [id, assistId]);
-            await connection.query('INSERT INTO schedule_assistants (scheduleId, assistantId) VALUES ?', [assistantValues]);
-        }
-        await connection.commit();
-        await logActivity(req.user.userId, 'Update Schedule', `Updated schedule ${data.className}`);
-        const [[updatedSchedule]] = await db.query('SELECT * FROM class_schedules WHERE id = ?', [id]);
-        updatedSchedule.assistantIds = assistantIds;
-        res.status(200).json(updatedSchedule);
-    } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to update schedule', error: error.message }); } finally { connection.release(); }
-});
-scheduleRouter.delete('/:id', async (req, res) => {
-    const { id } = req.params;
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-        await connection.query('DELETE FROM schedule_assistants WHERE scheduleId = ?', [id]);
-        await connection.query('DELETE FROM class_schedules WHERE id = ?', [id]);
-        await connection.commit();
-        await logActivity(req.user.userId, 'Delete Schedule', `Deleted schedule with id ${id}`);
-        res.status(204).send();
-    } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to delete schedule', error: error.message }); } finally { connection.release(); }
-});
-protectedRouter.use('/schedules', scheduleRouter);
-
-protectedRouter.get('/academies', async (req, res) => {
-    try {
-        const [academies] = await db.query('SELECT * FROM academies WHERE id != ?', ['master_admin_academy_01']);
-        res.json(academies);
+        const [[schedule]] = await db.query('SELECT * FROM class_schedules WHERE id = ?', [scheduleId]);
+        schedule.assistantIds = assistantIds;
+        res.status(isNew ? 201 : 200).json(schedule);
     } catch (error) {
-        console.error('Error fetching academies:', error);
-        res.status(500).json({ message: 'Failed to fetch academies.' });
+        await connection.rollback();
+        res.status(500).json({ message: 'Failed to save schedule', error: error.message });
+    } finally {
+        connection.release();
     }
+};
+apiRouter.post('/schedules', scheduleSaveHandler);
+apiRouter.put('/schedules/:id', scheduleSaveHandler);
+apiRouter.delete('/schedules/:id', genericDelete('class_schedules', {
+    beforeDelete: async(id, { connection }) => await connection.query('DELETE FROM schedule_assistants WHERE scheduleId = ?', [id])
+}));
+
+// Graduations
+apiRouter.get('/graduations', genericGet('graduations'));
+apiRouter.post('/graduations', genericSave('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
+apiRouter.put('/graduations/:id', genericSave('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
+apiRouter.delete('/graduations/:id', genericDelete('graduations'));
+apiRouter.put('/graduations/ranks', async (req, res) => {
+    const gradsWithNewRanks = req.body;
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        await Promise.all(gradsWithNewRanks.map(grad => connection.query('UPDATE graduations SET `rank` = ? WHERE id = ?', [grad.rank, grad.id])));
+        await connection.commit();
+        await logActivity(req.user.userId, 'Update Graduation Ranks', `Reordered ${gradsWithNewRanks.length} graduations.`);
+        res.status(200).json({ success: true });
+    } catch (error) { await connection.rollback(); res.status(500).json({ message: 'Failed to update ranks', error: error.message }); } finally { connection.release(); }
 });
 
-protectedRouter.use('/academies', simpleCrud('academies', ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password']));
-protectedRouter.use('/graduations', simpleCrud('graduations', ['name', 'color', 'minTimeInMonths', 'rank', 'type', 'minAge', 'maxAge']));
-protectedRouter.use('/professors', simpleCrud('professors', ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate']));
-protectedRouter.use('/attendance', simpleCrud('attendance_records', ['studentId', 'scheduleId', 'date', 'status']));
+// Academies
+apiRouter.get('/academies', async (req, res) => {
+    const [academies] = await db.query('SELECT * FROM academies WHERE id != ?', ['master_admin_academy_01']);
+    res.json(academies);
+});
+const academySaveHandler = async (req, res) => {
+    const data = req.body;
+    if (data.password) data.password = await bcrypt.hash(data.password, 10);
+    else delete data.password;
+    const fields = ['name', 'address', 'responsible', 'responsibleRegistration', 'professorId', 'imageUrl', 'email', 'password'].filter(f => f in data);
+    await genericSave('academies', fields)(req, res);
+};
+apiRouter.post('/academies', academySaveHandler);
+apiRouter.put('/academies/:id', academySaveHandler);
+apiRouter.delete('/academies/:id', genericDelete('academies'));
+
+// Other Generic Routes
+apiRouter.get('/users', genericGet('users'));
+apiRouter.get('/professors', genericGet('professors'));
+apiRouter.get('/logs', genericGet('activity_logs'));
+apiRouter.get('/attendance', genericGet('attendance_records'));
+apiRouter.get('/news', genericGet('news_articles'));
+
+const profFields = ['name', 'fjjpe_registration', 'cpf', 'academyId', 'graduationId', 'imageUrl', 'blackBeltDate'];
+apiRouter.post('/professors', genericSave('professors', profFields));
+apiRouter.put('/professors/:id', genericSave('professors', profFields));
+apiRouter.delete('/professors/:id', genericDelete('professors'));
+
+const attendanceFields = ['studentId', 'scheduleId', 'date', 'status'];
+apiRouter.post('/attendance', genericSave('attendance_records', attendanceFields));
+apiRouter.delete('/attendance/:id', genericDelete('attendance_records'));
 
 
 // =================================================================
-// --- MOUNT ROUTERS & 404 HANDLER ---
+// --- MOUNT ROUTER & 404 HANDLER ---
 // =================================================================
-app.use('/api', checkDbConnection);
-app.use('/api', publicRouter);
-app.use('/api', protectedRouter);
+app.use('/api', checkDbConnection, apiRouter);
 
 app.use('/api/*', (req, res) => {
     res.status(404).json({ message: `API endpoint not found: ${req.method} ${req.originalUrl}` });
