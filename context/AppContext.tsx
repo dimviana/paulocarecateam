@@ -82,8 +82,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const handleApiError = useCallback((error: any, context: string) => {
     console.error(`API Error in ${context}:`, error);
 
-    // Don't show notification for session expired, as it will trigger a logout.
-    if (error?.message?.includes('Sua sessão expirou')) {
+    // Don't show notification for 401, as it will trigger a logout via event listener.
+    if (error?.message?.includes('401') || error?.message?.includes('Não autenticado')) {
       return;
     }
 
@@ -107,17 +107,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const logout = useCallback(async () => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-        try {
-            await api.logout(); // Invalidate session on server
-        } catch (e) {
-            console.warn("Logout request failed, clearing local state anyway.", e);
-        }
+    try {
+        await api.logout(); // Invalidate session on server
+    } catch (e) {
+        console.warn("Logout request failed, clearing local state anyway.", e);
     }
     setUser(null);
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
   }, []);
 
   const refetchData = useCallback(async () => {
@@ -142,23 +137,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setActivityLogs(activityLogsData);
       } catch (error) {
           handleApiError(error, 'refetchData');
-          if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('403'))) {
-              logout();
-          }
       }
-  }, [logout, handleApiError]);
+  }, [handleApiError]);
 
   useEffect(() => {
-    // Global listener to handle logout when refresh token fails anywhere.
+    // Global listener to handle logout when any API call returns 401.
     const handleSessionExpired = () => {
-        console.warn("Session expired. Logging out.");
-        logout();
+        console.warn("Session expired or invalid. Clearing user state.");
+        setUser(null);
     };
     window.addEventListener('session-expired', handleSessionExpired);
     return () => {
         window.removeEventListener('session-expired', handleSessionExpired);
     };
-  }, [logout]);
+  }, []);
 
 
   useEffect(() => {
@@ -189,32 +181,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const initializeApp = async () => {
         setLoading(true);
         try {
-            const envToken = process.env.REACT_APP_AUTH_TOKEN;
-            if (envToken) {
-                if (localStorage.getItem('accessToken') !== envToken) {
-                    localStorage.setItem('accessToken', envToken);
-                    console.log("Auto-authenticating via ENV token.");
-                }
-            }
-
             try {
                 const settings = await api.getThemeSettings();
                 setThemeSettingsState(settings);
             } catch (error) {
                 console.error("Failed to load settings, using defaults:", error);
             }
-
-            const token = localStorage.getItem('accessToken');
-            const refreshToken = localStorage.getItem('refreshToken');
-            if (token && refreshToken) {
-                try {
-                  const validatedUser = await api.validateSession();
-                  setUser(validatedUser);
-                  await refetchData();
-                } catch (validationError) {
-                  console.warn("Session validation failed during app init:", validationError);
-                  logout();
-                }
+            
+            // Validate session via cookie instead of localStorage token
+            try {
+              const validatedUser = await api.validateSession();
+              setUser(validatedUser);
+              await refetchData();
+            } catch (validationError) {
+              console.log("No active session found during app init.");
+              // This is an expected outcome if the user is not logged in.
             }
         } catch (error) {
             handleApiError(error, 'initializeApp');
@@ -223,19 +204,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
     initializeApp();
-  }, [logout, refetchData, handleApiError]);
+  }, [refetchData, handleApiError]);
 
   useEffect(() => { localStorage.setItem('showcasedComponents', JSON.stringify(showcasedComponents)); }, [showcasedComponents]);
   useEffect(() => { document.documentElement.classList.remove('dark'); }, []);
   
   const login = async (email: string, password: string) => {
     try {
-      const { accessToken, refreshToken } = await api.login(email, password);
-      if (accessToken && refreshToken) {
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', refreshToken);
-        const validatedUser = await api.validateSession();
-        setUser(validatedUser);
+      const user = await api.login(email, password);
+      if (user) {
+        setUser(user);
         await refetchData();
         return true;
       }
@@ -258,19 +236,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else {
         handleApiError(error, 'login');
       }
-      logout();
       return false;
     }
   };
 
   const loginGoogle = async (token: string) => {
     try {
-      const response = await api.loginGoogle(token);
-      if (response.accessToken && response.refreshToken) {
-        localStorage.setItem('accessToken', response.accessToken);
-        localStorage.setItem('refreshToken', response.refreshToken);
-        const validatedUser = await api.validateSession();
-        setUser(validatedUser);
+      const user = await api.loginGoogle(token);
+      if (user) {
+        setUser(user);
         await refetchData();
         return true;
       }

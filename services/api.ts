@@ -3,76 +3,23 @@ import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Attenda
 
 const API_URL = '/api';
 
-// --- Token Refresh Logic ---
-let refreshTokenPromise: Promise<any> | null = null;
-
-const refreshToken = async () => {
-  const currentRefreshToken = localStorage.getItem('refreshToken');
-  if (!currentRefreshToken) {
-    throw new Error("No refresh token available");
-  }
-  const response = await fetch(`${API_URL}/auth/refresh`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: currentRefreshToken }),
-  });
-  if (!response.ok) {
-    throw new Error("Failed to refresh token");
-  }
-  const data = await response.json();
-  localStorage.setItem('accessToken', data.accessToken);
-  localStorage.setItem('refreshToken', data.refreshToken); // Token rotation
-  return data.accessToken;
-};
-
 /**
- * A generic wrapper around the Fetch API with automatic token refresh.
+ * A generic wrapper around the Fetch API that includes credentials (cookies)
+ * for session-based authentication.
  * @param endpoint The API endpoint to call (e.g., '/students').
  * @param options The standard `fetch` options object.
  * @returns A promise that resolves with the JSON response.
  */
 async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const makeRequest = async (): Promise<Response> => {
-        const url = `${API_URL}${endpoint}`;
-        const token = localStorage.getItem('accessToken');
-        const headers: HeadersInit = {
-            'Content-Type': 'application/json',
-            ...options.headers,
-        };
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-        return fetch(url, { ...options, headers });
+    const url = `${API_URL}${endpoint}`;
+    
+    const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...options.headers,
     };
-
-    let response = await makeRequest();
-
-    if (response.status === 401) {
-        // Potential token expiry, try to parse error code
-        let errorBody;
-        try {
-            errorBody = await response.json();
-        } catch (e) {
-            // Not a JSON response, throw a standard error
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        if (errorBody.code === 'TOKEN_EXPIRED') {
-            try {
-                if (!refreshTokenPromise) {
-                    refreshTokenPromise = refreshToken();
-                }
-                await refreshTokenPromise;
-                refreshTokenPromise = null;
-                // Retry the original request with the new token
-                response = await makeRequest();
-            } catch (refreshError) {
-                 // Dispatch a global event for the app to handle logout
-                 window.dispatchEvent(new Event('session-expired'));
-                 throw new Error("Sua sessão expirou. Por favor, faça login novamente.");
-            }
-        }
-    }
+    
+    // 'credentials: include' tells the browser to send cookies with the request.
+    const response = await fetch(url, { ...options, headers, credentials: 'include' });
 
     if (!response.ok) {
         let errorMessage = `HTTP error! status: ${response.status}`;
@@ -82,6 +29,13 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         } catch (e) {
             errorMessage = response.statusText;
         }
+        
+        // If the session is invalid, the server will respond with 401.
+        // We can dispatch a global event for the app to handle logout.
+        if (response.status === 401) {
+            window.dispatchEvent(new Event('session-expired'));
+        }
+        
         throw new Error(errorMessage);
     }
     
@@ -92,37 +46,28 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
     return response.json() as Promise<T>;
 }
 
-type AuthResponse = {
-  accessToken: string;
-  refreshToken: string;
-};
-
 export const api = {
-  login: (email: string, password: string): Promise<AuthResponse> => {
-    // FIX: Send both old and new credential keys for backward compatibility
-    // The deployed backend might expect `username` and `password`.
-    // The current server.js expects `emailOrCpf` and `pass`.
-    // Sending both ensures it works with either version.
-    return fetchWrapper<AuthResponse>('/auth/login', {
+  login: (email: string, password: string): Promise<User> => {
+    // The backend now returns the user object directly and sets a session cookie.
+    return fetchWrapper<User>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ 
           emailOrCpf: email, 
-          pass: password,
-          username: email,
-          password: password,
+          pass: password
         }),
     });
   },
 
-  loginGoogle: (token: string): Promise<AuthResponse> => {
-    return fetchWrapper<AuthResponse>('/auth/google', {
+  loginGoogle: (token: string): Promise<User> => {
+    // Assuming the Google login endpoint would also return a user and set a cookie.
+    return fetchWrapper<User>('/auth/google', {
         method: 'POST',
         body: JSON.stringify({ token }),
     });
   },
   
   logout: (): Promise<void> => {
-      // The fetchWrapper will automatically add the access token
+      // The server will clear the session cookie.
       return fetchWrapper('/auth/logout', { method: 'POST' });
   },
 
@@ -136,6 +81,7 @@ export const api = {
     email: string; 
     password?: string; 
   }): Promise<Academy> => {
+    // This is a public route, so fetchWrapper works fine.
     return fetchWrapper<Academy>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),

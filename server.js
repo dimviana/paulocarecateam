@@ -8,26 +8,20 @@ require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 
 // --- Environment Variables ---
 const {
   DATABASE_URL,
-  JWT_SECRET,
   PORT = 3001,
 } = process.env;
-
-if (!JWT_SECRET) {
-    console.warn("WARNING: JWT_SECRET not found in .env. Using unsafe default for development only.");
-}
-const CURRENT_JWT_SECRET = process.env.JWT_SECRET || "ThisIsAStrongerAndBetterSecretForJWT-JiuJitsuHub-2024";
-
 
 // --- Express App Initialization ---
 const app = express();
 
+// --- In-memory Session Store ---
+const sessions = {}; // { sessionId: { user: { userId, role }, expires: Date } }
 
 // --- Middleware ---
 app.use(cors());
@@ -88,26 +82,44 @@ const logActivity = async (actorId, action, details) => {
   }
 };
 
-// --- JWT Authentication Middleware (Stateless) ---
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+const parseCookies = (req) => {
+    const list = {};
+    const cookieHeader = req.headers?.cookie;
+    if (!cookieHeader) return list;
 
-  if (token == null) {
-      return res.status(401).json({ message: 'Token de autenticação não fornecido.' });
-  }
+    cookieHeader.split(`;`).forEach(function(cookie) {
+        let [ name, ...rest] = cookie.split(`=`);
+        name = name?.trim();
+        if (!name) return;
+        const value = rest.join(`=`).trim();
+        if (!value) return;
+        list[name] = decodeURIComponent(value);
+    });
 
-  jwt.verify(token, CURRENT_JWT_SECRET, (err, user) => {
-      if (err) {
-          const isExpired = err.name === 'TokenExpiredError';
-          return res.status(401).json({
-              message: isExpired ? 'Sua sessão expirou.' : 'Token inválido.',
-              code: isExpired ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID'
-          });
-      }
-      req.user = user;
-      next();
-  });
+    return list;
+}
+
+// --- Session Authentication Middleware ---
+const checkSession = (req, res, next) => {
+    const cookies = parseCookies(req);
+    const sessionId = cookies.sessionId;
+
+    if (!sessionId || !sessions[sessionId]) {
+        return res.status(401).json({ message: 'Não autenticado.' });
+    }
+    
+    const session = sessions[sessionId];
+
+    if (new Date() > session.expires) {
+        delete sessions[sessionId];
+        return res.status(401).json({ message: 'Sessão expirada.' });
+    }
+
+    // Extend session validity on use
+    session.expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+
+    req.user = session.user;
+    next();
 };
 
 
@@ -133,7 +145,6 @@ app.get('/api/settings', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-    // FIX: Read from both potential key sets for backward compatibility with older clients.
     const emailOrCpf = req.body.emailOrCpf || req.body.username;
     const pass = req.body.pass || req.body.password;
 
@@ -176,43 +187,26 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
-        const accessToken = jwt.sign({ userId: user.id, role: user.role }, CURRENT_JWT_SECRET, { expiresIn: '15m' });
-        const refreshToken = jwt.sign({ userId: user.id }, CURRENT_JWT_SECRET, { expiresIn: '7d' });
-        
-        await db.query('UPDATE users SET refreshToken = ? WHERE id = ?', [refreshToken, user.id]);
+        const sessionId = uuidv4();
+        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        const sessionUser = { userId: user.id, role: user.role };
+        sessions[sessionId] = { user: sessionUser, expires };
+
+        res.cookie('sessionId', sessionId, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            expires: expires
+        });
         
         await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
-        res.json({ accessToken, refreshToken });
+        // Return full user object on successful login
+        const [[fullUserData]] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users WHERE id = ?', [user.id]);
+        res.json(fullUserData[0]);
 
     } catch (error) {
         console.error('Login Error:', error);
         res.status(500).json({ message: 'Erro interno no servidor durante o login.', error: error.message });
-    }
-});
-
-app.post('/api/auth/refresh', async (req, res) => {
-    const { token } = req.body;
-    if (!token) return res.status(401).json({ message: "Refresh token não fornecido." });
-
-    try {
-        const decoded = jwt.verify(token, CURRENT_JWT_SECRET);
-        const [users] = await db.query('SELECT * FROM users WHERE id = ? AND refreshToken = ?', [decoded.userId, token]);
-
-        if (users.length === 0) {
-            return res.status(403).json({ message: "Refresh token inválido ou revogado." });
-        }
-
-        const user = users[0];
-        
-        const newAccessToken = jwt.sign({ userId: user.id, role: user.role }, CURRENT_JWT_SECRET, { expiresIn: '15m' });
-        const newRefreshToken = jwt.sign({ userId: user.id }, CURRENT_JWT_SECRET, { expiresIn: '7d' });
-
-        await db.query('UPDATE users SET refreshToken = ? WHERE id = ?', [newRefreshToken, user.id]);
-
-        res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
-
-    } catch (error) {
-        return res.status(403).json({ message: "Refresh token inválido ou expirado." });
     }
 });
 
@@ -254,7 +248,7 @@ app.post('/api/auth/register', async (req, res) => {
 // --- AUTHENTICATION GATEWAY ---
 // All subsequent /api routes defined below this line are protected.
 // =================================================================
-app.use('/api', authenticateToken);
+app.use('/api', checkSession);
 
 
 // =================================================================
@@ -264,15 +258,14 @@ app.use('/api', authenticateToken);
 const protectedRouter = express.Router();
 
 protectedRouter.post('/auth/logout', async (req, res) => {
-    try {
-        const userId = req.user.userId;
-        await db.query('UPDATE users SET refreshToken = NULL WHERE id = ?', [userId]);
-        await logActivity(userId, 'Logout', 'Usuário deslogado.');
-        res.status(200).json({ message: 'Logout bem-sucedido.' });
-    } catch (error) {
-        console.error("Logout error:", error);
-        res.status(500).json({ message: 'Falha ao fazer logout.' });
+    const cookies = parseCookies(req);
+    const sessionId = cookies.sessionId;
+    if (sessionId && sessions[sessionId]) {
+        delete sessions[sessionId];
     }
+    await logActivity(req.user.userId, 'Logout', 'Usuário deslogado.');
+    res.clearCookie('sessionId');
+    res.status(200).json({ message: 'Logout bem-sucedido.' });
 });
 
 protectedRouter.get('/auth/session', async (req, res) => {
