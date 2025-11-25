@@ -118,6 +118,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const refetchData = useCallback(async (loggedInUser: User | null) => {
+      // Ensure we don't fetch data if there is no user logged in
+      if (!loggedInUser) return;
+
       try {
         const dataPromises: Promise<any>[] = [
             api.getStudents(),
@@ -131,7 +134,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             api.getNews(),
         ];
 
-        if (loggedInUser?.role === 'general_admin') {
+        if (loggedInUser.role === 'general_admin') {
             dataPromises.push(api.getAllThemeSettings());
         }
 
@@ -147,7 +150,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setActivityLogs(results[7]);
         setNews(results[8]);
 
-        if (loggedInUser?.role === 'general_admin' && results.length > 9) {
+        if (loggedInUser.role === 'general_admin' && results.length > 9) {
              setThemeSettingsState(results[9] as ThemeSettings);
         }
 
@@ -197,30 +200,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const initializeApp = async () => {
         setLoading(true);
         try {
-            // First, attempt to load public theme settings. This should not block the app
-            // from checking the user's session if it fails.
+            // 1. Load Public Settings (No auth required)
             try {
                 const settings = await api.getThemeSettings();
                 setThemeSettingsState(settings);
             } catch (error) {
                 console.warn("Could not load public theme settings, using defaults.", error);
-                // The app will proceed with the 'initialThemeSettings'.
             }
 
-            // Next, validate the session via the secure cookie. This is the main check
-            // to determine if a user is already logged in.
-            const validatedUser = await api.validateSession();
-            setUser(validatedUser); // Set the user in the context
-            await refetchData(validatedUser); // Fetch all data associated with the user
+            // 2. Validate Session (Auth required)
+            // This call might return 401 if not logged in, which is expected.
+            let validatedUser: User | null = null;
+            try {
+                validatedUser = await api.validateSession();
+            } catch (e) {
+                // If it's a 401/403, it just means the user isn't logged in.
+                // We swallow the error here so we don't trigger 'handleApiError' notifications.
+                // The user remains null.
+            }
+
+            // 3. If user exists, fetch protected data
+            if (validatedUser) {
+                setUser(validatedUser); 
+                await refetchData(validatedUser); 
+            } else {
+                console.log("No active session found on startup.");
+            }
             
         } catch (error) {
-            // A 401 error from validateSession is expected if the user is not logged in.
-            // We only need to handle unexpected errors (e.g., server down).
-            if (error instanceof Error && (error.message.includes('401') || error.message.includes('Não autenticado'))) {
-                console.log("No active session found on startup.");
-            } else {
-                handleApiError(error, 'initializeApp');
-            }
+            handleApiError(error, 'initializeApp');
         } finally {
             setLoading(false);
         }

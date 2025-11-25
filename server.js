@@ -1,7 +1,7 @@
 /**
  * ==============================================================================
  *           Backend Server for Jiu-Jitsu Hub SAAS (server.js)
- *           Refatorado para Sessões Persistentes e Roteamento Correto
+ *           Refatorado para Sessões Persistentes, Cookies Compatíveis e Roteamento Seguro
  * ==============================================================================
  */
 
@@ -17,6 +17,7 @@ const {
   DATABASE_URL,
   PORT = 3001,
   FRONTEND_URL,
+  NODE_ENV
 } = process.env;
 
 if (!FRONTEND_URL) {
@@ -30,7 +31,7 @@ const app = express();
 // --- Middleware ---
 const corsOptions = {
   origin: FRONTEND_URL,
-  credentials: true,
+  credentials: true, // Essential for cookies to work
 };
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
@@ -75,27 +76,26 @@ const logActivity = async (actorId, action, details) => {
   }
 };
 
+// Robust Cookie Parser using Regex
 const parseCookies = (req) => {
     const list = {};
     const cookieHeader = req.headers?.cookie;
     if (!cookieHeader) return list;
-    cookieHeader.split(`;`).forEach(function(cookie) {
-        let [ name, ...rest] = cookie.split(`=`);
-        name = name?.trim();
-        if (!name) return;
-        const value = rest.join(`=`).trim();
-        if (!value) return;
-        list[name] = decodeURIComponent(value);
+
+    cookieHeader.replace(/\s+/g, '').split(';').forEach((cookie) => {
+        const [name, ...rest] = cookie.split('=');
+        list[name] = decodeURIComponent(rest.join('='));
     });
     return list;
 }
 
 // --- Session Management (Persistent via DB) ---
-// This replaces the in-memory store with database queries to the 'sessions' table.
 
 const createSession = async (user) => {
     const sessionId = uuidv4();
-    const expires = new Date(Date.now() + 20 * 60 * 1000); // 20 minutes
+    // 20 minutes expiration
+    const expires = new Date(Date.now() + 20 * 60 * 1000); 
+    
     await db.query(
         'INSERT INTO sessions (sessionId, userId, expires) VALUES (?, ?, ?)',
         [sessionId, user.id, expires]
@@ -104,17 +104,22 @@ const createSession = async (user) => {
 };
 
 const validateSession = async (sessionId) => {
+    if (!sessionId) return null;
+
     const [[session]] = await db.query('SELECT * FROM sessions WHERE sessionId = ?', [sessionId]);
     
     if (!session) return null;
     
-    if (new Date() > new Date(session.expires)) {
+    const now = new Date();
+    const expiry = new Date(session.expires);
+
+    if (now > expiry) {
         await db.query('DELETE FROM sessions WHERE sessionId = ?', [sessionId]);
         return null;
     }
 
-    // Refresh session
-    const newExpires = new Date(Date.now() + 20 * 60 * 1000);
+    // Refresh session (Extend by 20 mins)
+    const newExpires = new Date(now.getTime() + 20 * 60 * 1000);
     await db.query('UPDATE sessions SET expires = ? WHERE sessionId = ?', [newExpires, sessionId]);
     
     // Get user details
@@ -123,16 +128,19 @@ const validateSession = async (sessionId) => {
 };
 
 const destroySession = async (sessionId) => {
-    await db.query('DELETE FROM sessions WHERE sessionId = ?', [sessionId]);
+    if (sessionId) {
+        await db.query('DELETE FROM sessions WHERE sessionId = ?', [sessionId]);
+    }
 };
 
-// Middleware to protect routes
+// --- Auth Middleware ---
 const checkSession = async (req, res, next) => {
     try {
         const cookies = parseCookies(req);
         const sessionId = cookies.sessionId;
         
         if (!sessionId) {
+            // Explicit error for debugging frontend issues
             return res.status(401).json({ message: 'Não autenticado (sem cookie).' });
         }
 
@@ -168,7 +176,7 @@ publicRouter.get('/settings', async (req, res) => {
     try {
         const publicFields = 'logoUrl, systemName, primaryColor, secondaryColor, backgroundColor, cardBackgroundColor, buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2, useGradient, theme, publicPageEnabled, heroHtml, aboutHtml, branchesHtml, footerHtml, customCss, customJs, socialLoginEnabled, googleClientId, facebookAppId, copyrightText, systemVersion, reminderDaysBeforeDue, overdueDaysAfterDue, monthlyFeeAmount';
         const [rows] = await db.query(`SELECT ${publicFields} FROM theme_settings WHERE id = 1`);
-        // Return defaults if no settings found (handling fresh install)
+        
         if (!rows || rows.length === 0) {
              return res.json({
                  systemName: 'Jiu-Jitsu Hub',
@@ -187,19 +195,35 @@ publicRouter.get('/settings', async (req, res) => {
 publicRouter.post('/auth/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
+    
     try {
-        const [[user]] = await db.query('SELECT u.*, a.password as academy_password, s.password as student_password FROM users u LEFT JOIN academies a ON u.academyId = a.id LEFT JOIN students s ON u.studentId = s.id WHERE u.email = ? OR s.cpf = ?', [username, username.replace(/\D/g, '')]);
+        const cleanUsername = username.includes('@') ? username : username.replace(/\D/g, '');
         
-        if (!user) return res.status(401).json({ message: 'Credenciais inválidas.' }); // Generic error for security
+        const [[user]] = await db.query(
+            'SELECT u.*, a.password as academy_password, s.password as student_password FROM users u LEFT JOIN academies a ON u.academyId = a.id LEFT JOIN students s ON u.studentId = s.id WHERE u.email = ? OR s.cpf = ?', 
+            [cleanUsername, cleanUsername]
+        );
+        
+        if (!user) return res.status(401).json({ message: 'Credenciais inválidas.' });
         
         const passwordHash = user.role === 'student' ? user.student_password : user.academy_password;
+        
         if (!passwordHash || !(await bcrypt.compare(password, passwordHash))) {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
         const { sessionId, expires } = await createSession(user);
 
-        res.cookie('sessionId', sessionId, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', expires });
+        // IMPORTANT: Cookie Settings
+        res.cookie('sessionId', sessionId, {
+            httpOnly: true,
+            // Only set secure to true if we are SURE we are on HTTPS in production.
+            // Setting it to true on HTTP will cause the browser to reject the cookie.
+            secure: process.env.NODE_ENV === 'production', 
+            sameSite: 'Lax', // 'Lax' is safer than 'Strict' for navigation/redirects
+            expires
+        });
+        
         await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
         
         const { academy_password, student_password, refreshToken, ...userResponse } = user;
@@ -235,7 +259,12 @@ publicRouter.post('/auth/register', async (req, res) => {
         const [[newUser]] = await connection.query('SELECT id, name, email, role, academyId FROM users WHERE id = ?', [userId]);
         const { sessionId, expires } = await createSession(newUser);
 
-        res.cookie('sessionId', sessionId, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', expires });
+        res.cookie('sessionId', sessionId, { 
+            httpOnly: true, 
+            secure: process.env.NODE_ENV === 'production', 
+            sameSite: 'Lax', 
+            expires 
+        });
         res.status(201).json(newUser);
     } catch (error) {
         await connection.rollback();
@@ -250,7 +279,10 @@ publicRouter.get('/auth/session', async (req, res) => {
     try {
         const cookies = parseCookies(req);
         const sessionId = cookies.sessionId;
-        if (!sessionId) return res.status(401).json({ message: 'Sem sessão.' });
+        
+        if (!sessionId) {
+            return res.status(401).json({ message: 'Sem sessão.' });
+        }
 
         const user = await validateSession(sessionId);
         if (user) {
@@ -260,6 +292,7 @@ publicRouter.get('/auth/session', async (req, res) => {
             res.status(401).json({ message: 'Sessão inválida.' });
         }
     } catch (error) {
+        console.error("Auth session error:", error);
         res.status(500).json({ message: 'Erro ao validar sessão.' });
     }
 });
