@@ -1,3 +1,4 @@
+
 /**
  * ==============================================================================
  *           Backend Server for Jiu-Jitsu Hub SAAS (server.js)
@@ -141,16 +142,17 @@ publicRouter.get('/settings', async (req, res) => {
 });
 
 publicRouter.post('/auth/login', async (req, res) => {
-    const emailOrCpf = req.body.emailOrCpf || req.body.username;
-    const pass = req.body.pass || req.body.password;
+    const { username, password } = req.body;
 
-    if (!emailOrCpf || !pass) {
-        return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
+    if (!username || !password) {
+        return res.status(400).json({ message: 'Please provide username and password' });
     }
 
     try {
         let user;
         let passwordHash;
+        
+        const emailOrCpf = username;
 
         if (emailOrCpf.includes('@')) {
             const [users] = await db.query('SELECT * FROM users WHERE email = ?', [emailOrCpf]);
@@ -178,7 +180,7 @@ publicRouter.post('/auth/login', async (req, res) => {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }
 
-        const isMatch = await bcrypt.compare(pass, passwordHash);
+        const isMatch = await bcrypt.compare(password, passwordHash);
         if (!isMatch) {
             return res.status(401).json({ message: 'Credenciais inválidas.' });
         }

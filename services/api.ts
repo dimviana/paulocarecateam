@@ -52,8 +52,8 @@ export const api = {
     return fetchWrapper<User>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ 
-          emailOrCpf: email, 
-          pass: password
+          username: email, 
+          password: password
         }),
     });
   },
