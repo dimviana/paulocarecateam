@@ -197,25 +197,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const initializeApp = async () => {
         setLoading(true);
         try {
+            // First, attempt to load public theme settings. This should not block the app
+            // from checking the user's session if it fails.
             try {
-                // Fetch public settings for initial styling (login page, etc.)
                 const settings = await api.getThemeSettings();
                 setThemeSettingsState(settings);
             } catch (error) {
-                console.error("Failed to load settings, using defaults:", error);
+                console.warn("Could not load public theme settings, using defaults.", error);
+                // The app will proceed with the 'initialThemeSettings'.
             }
+
+            // Next, validate the session via the secure cookie. This is the main check
+            // to determine if a user is already logged in.
+            const validatedUser = await api.validateSession();
+            setUser(validatedUser); // Set the user in the context
+            await refetchData(validatedUser); // Fetch all data associated with the user
             
-            // Validate session via cookie
-            try {
-              const validatedUser = await api.validateSession();
-              setUser(validatedUser);
-              await refetchData(validatedUser);
-            } catch (validationError) {
-              console.log("No active session found during app init.");
-              // This is an expected outcome if the user is not logged in.
-            }
         } catch (error) {
-            handleApiError(error, 'initializeApp');
+            // A 401 error from validateSession is expected if the user is not logged in.
+            // We only need to handle unexpected errors (e.g., server down).
+            if (error instanceof Error && (error.message.includes('401') || error.message.includes('Não autenticado'))) {
+                console.log("No active session found on startup.");
+            } else {
+                handleApiError(error, 'initializeApp');
+            }
         } finally {
             setLoading(false);
         }
