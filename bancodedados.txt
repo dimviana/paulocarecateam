@@ -133,7 +133,8 @@ CREATE TABLE IF NOT EXISTS users (
     `role` VARCHAR(255) CHECK(`role` IN ('general_admin', 'academy_admin', 'student')), -- Papel do usuário.
     academyId TEXT, -- FK para academies (se for admin de academia)
     studentId TEXT, -- FK para students (se for aluno)
-    birthDate DATE -- Data de nascimento
+    birthDate DATE, -- Data de nascimento
+    refreshToken TEXT -- Token de atualização para JWT
 );
 
 -- -----------------------------------------------------
@@ -158,16 +159,6 @@ CREATE TABLE IF NOT EXISTS news_articles (
     content TEXT NOT NULL, -- Conteúdo da notícia
     imageUrl TEXT, -- URL da imagem da notícia
     `date` DATE NOT NULL -- Data de publicação.
-);
-
--- -----------------------------------------------------
--- Tabela: sessions
--- Armazena as sessões ativas dos usuários (Cookies)
--- -----------------------------------------------------
-CREATE TABLE IF NOT EXISTS sessions (
-    sid VARCHAR(255) PRIMARY KEY,
-    userId VARCHAR(255) NOT NULL,
-    expires BIGINT NOT NULL
 );
 
 -- -----------------------------------------------------

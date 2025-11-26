@@ -6,8 +6,8 @@ const { getDb } = require('../config/db');
 
 const { JWT_SECRET } = process.env;
 
-// Gera um token JWT
-const generateToken = (user) => {
+// Generate Access Token (Short lived: 15m)
+const generateAccessToken = (user) => {
     return jwt.sign(
         { 
             id: user.id, 
@@ -18,31 +18,42 @@ const generateToken = (user) => {
             name: user.name
         }, 
         JWT_SECRET, 
-        { expiresIn: '24h' }
+        { expiresIn: '15m' } 
+    );
+};
+
+// Generate Refresh Token (Long lived: 7d)
+const generateRefreshToken = (user) => {
+    return jwt.sign(
+        { id: user.id },
+        JWT_SECRET,
+        { expiresIn: '7d' }
     );
 };
 
 const getSession = async (req, res) => {
-    // Com JWT, a validação é feita no middleware ou no front decodificando o token.
-    // Este endpoint serve para validar se o token atual ainda é válido e retornar dados frescos.
+    // Logic handled largely by middleware which attaches req.user if token is valid
+    // If the request reaches here, the token in header was valid
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) return res.json({ user: null });
 
-    jwt.verify(token, JWT_SECRET, async (err, decoded) => {
-        if (err) return res.json({ user: null });
+    // We rely on middleware to verify, but we can double check DB existence
+    try {
+        const db = getDb();
+        // Using decoded ID from middleware
+        const userId = req.user ? req.user.id : null;
+        if (!userId) return res.json({ user: null });
+
+        const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [userId]);
+        if (!user) return res.json({ user: null });
         
-        // Opcional: Buscar dados frescos do banco para garantir que o usuário não foi deletado
-        try {
-            const db = getDb();
-            const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [decoded.id]);
-            if (!user) return res.json({ user: null });
-            res.json({ user });
-        } catch (e) {
-            res.json({ user: null });
-        }
-    });
+        res.json({ user });
+    } catch (e) {
+        console.error("Session check error:", e);
+        res.json({ user: null });
+    }
 };
 
 const login = async (req, res) => {
@@ -79,7 +90,12 @@ const login = async (req, res) => {
             return res.status(401).json({ message: 'Senha incorreta.' });
         }
 
-        const token = generateToken(user);
+        // Generate Tokens
+        const accessToken = generateAccessToken(user);
+        const refreshToken = generateRefreshToken(user);
+
+        // Save Refresh Token to DB
+        await db.query('UPDATE users SET refreshToken = ? WHERE id = ?', [refreshToken, user.id]);
 
         const userData = { 
             id: user.id, 
@@ -90,11 +106,34 @@ const login = async (req, res) => {
             studentId: user.studentId 
         };
 
-        res.json({ user: userData, token });
+        res.json({ user: userData, token: accessToken, refreshToken });
 
     } catch (e) {
         console.error('Login Error:', e);
         res.status(500).json({ message: 'Erro no servidor durante o login.' });
+    }
+};
+
+const refreshToken = async (req, res) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.sendStatus(401);
+
+    try {
+        const db = getDb();
+        // Find user with this refresh token
+        const [[user]] = await db.query('SELECT * FROM users WHERE refreshToken = ?', [refreshToken]);
+        if (!user) return res.status(403).json({ message: "Invalid Refresh Token" });
+
+        jwt.verify(refreshToken, JWT_SECRET, async (err, decoded) => {
+            if (err) return res.status(403).json({ message: "Expired Refresh Token" });
+            
+            // Generate new Access Token
+            const accessToken = generateAccessToken(user);
+            res.json({ token: accessToken });
+        });
+    } catch (e) {
+        console.error(e);
+        res.sendStatus(500);
     }
 };
 
@@ -128,9 +167,12 @@ const register = async (req, res) => {
         await conn.commit();
         
         const [[newUser]] = await conn.query('SELECT id, name, email, role, academyId FROM users WHERE id = ?', [userId]);
-        const token = generateToken(newUser);
+        
+        const accessToken = generateAccessToken(newUser);
+        const refreshToken = generateRefreshToken(newUser);
+        await db.query('UPDATE users SET refreshToken = ? WHERE id = ?', [refreshToken, newUser.id]);
 
-        res.status(201).json({ user: newUser, token });
+        res.status(201).json({ user: newUser, token: accessToken, refreshToken });
 
     } catch (e) { 
         await conn.rollback(); 
@@ -140,9 +182,21 @@ const register = async (req, res) => {
 };
 
 const logout = async (req, res) => {
-    // Com JWT stateless, o logout é feito no cliente (apagando o token).
-    // Opcionalmente, o servidor pode implementar uma "blacklist" de tokens, mas para este escopo, apenas retornamos sucesso.
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (token) {
+        try {
+            const decoded = jwt.decode(token);
+            if (decoded && decoded.id) {
+                const db = getDb();
+                await db.query('UPDATE users SET refreshToken = NULL WHERE id = ?', [decoded.id]);
+            }
+        } catch(e) {
+            // Ignore errors on logout
+        }
+    }
     res.json({ message: 'Logged out successfully' });
 };
 
-module.exports = { getSession, login, register, logout };
+module.exports = { getSession, login, register, logout, refreshToken };

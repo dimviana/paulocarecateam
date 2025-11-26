@@ -3,9 +3,16 @@ import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Attenda
 
 const API_URL = '/api';
 
+// Helper interface for Login response
+interface LoginResponse {
+    user: User;
+    token: string;
+    refreshToken: string;
+}
+
 /**
  * A generic wrapper around the Fetch API.
- * STATELESS: Uses Bearer Token in headers (JWT).
+ * Uses JWT (Access + Refresh Tokens).
  */
 async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_URL}${endpoint}`;
@@ -16,22 +23,60 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
     };
     
     // Get token from LocalStorage
-    const token = localStorage.getItem('authToken');
+    let token = localStorage.getItem('authToken');
     
-    // Logic to determine if we should attach the token.
-    // We explicitly SKIP the token for the public settings endpoint to prevent 401 errors
-    // if the token is expired/invalid when the app initializes.
-    const isPublicEndpoint = endpoint === '/settings';
+    // Attach token if valid and not a public endpoint that we want to be careful about
+    const isPublicEndpoint = endpoint === '/settings' || endpoint === '/auth/login' || endpoint === '/auth/refresh';
     
-    // Sanitize token: ensure it exists, isn't the string "undefined" or "null", and has reasonable length
-    if (!isPublicEndpoint && token && token !== 'undefined' && token !== 'null' && token.length > 10) {
+    if (!isPublicEndpoint && token && token !== 'undefined' && token !== 'null') {
         headers['Authorization'] = `Bearer ${token}`;
     }
     
-    const response = await fetch(url, { 
+    let response = await fetch(url, { 
         ...options, 
         headers
     });
+
+    // Handle Token Expiration (403 Forbidden usually, but sometimes 401)
+    if (response.status === 403 || response.status === 401) {
+        // Prevent infinite loop
+        if (endpoint === '/auth/refresh' || endpoint === '/auth/login') {
+             window.dispatchEvent(new Event('session-expired'));
+             throw new Error("Session expired");
+        }
+
+        // Try to refresh
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (refreshToken) {
+            try {
+                const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken })
+                });
+
+                if (refreshResponse.ok) {
+                    const data = await refreshResponse.json();
+                    localStorage.setItem('authToken', data.token);
+                    
+                    // Retry original request with new token
+                    const newHeaders = { ...headers, 'Authorization': `Bearer ${data.token}` };
+                    response = await fetch(url, { ...options, headers: newHeaders });
+                } else {
+                    // Refresh failed
+                    throw new Error("Refresh failed");
+                }
+            } catch (e) {
+                window.dispatchEvent(new Event('session-expired'));
+                throw new Error("Session expired");
+            }
+        } else {
+             // No refresh token available
+             if (!isPublicEndpoint) {
+                 window.dispatchEvent(new Event('session-expired'));
+             }
+        }
+    }
 
     if (!response.ok) {
         let errorMessage = `HTTP error! status: ${response.status}`;
@@ -41,16 +86,6 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         } catch (e) {
             errorMessage = response.statusText;
         }
-        
-        // Handle Auth Errors
-        if (response.status === 401 || response.status === 403) {
-            // Don't trigger global logout/session-expired if it's just the public settings endpoint failing
-            // This prevents a redirect loop if settings fail to load.
-            if (!endpoint.includes('/settings')) {
-                window.dispatchEvent(new Event('session-expired'));
-            }
-        }
-        
         throw new Error(errorMessage);
     }
     
@@ -59,12 +94,6 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
     }
 
     return response.json() as Promise<T>;
-}
-
-// Helper interface for Login response
-interface LoginResponse {
-    user: User;
-    token: string;
 }
 
 export const api = {
@@ -79,6 +108,7 @@ export const api = {
     
     if (response.token) {
         localStorage.setItem('authToken', response.token);
+        if (response.refreshToken) localStorage.setItem('refreshToken', response.refreshToken);
     }
     return response.user;
   },
@@ -91,6 +121,7 @@ export const api = {
 
     if (response.token) {
         localStorage.setItem('authToken', response.token);
+        if (response.refreshToken) localStorage.setItem('refreshToken', response.refreshToken);
     }
     return response.user;
   },
@@ -98,8 +129,11 @@ export const api = {
   logout: async (): Promise<void> => {
       try {
         await fetchWrapper('/auth/logout', { method: 'POST' });
+      } catch (e) {
+          console.warn("Logout server call failed", e);
       } finally {
         localStorage.removeItem('authToken');
+        localStorage.removeItem('refreshToken');
       }
   },
 
@@ -111,7 +145,8 @@ export const api = {
           const response = await fetchWrapper<{user: User | null}>('/auth/session');
           return response.user;
       } catch (e) {
-          localStorage.removeItem('authToken');
+          // If 403/401 happened, fetchWrapper might have tried to refresh. 
+          // If it still fails, we assume invalid.
           return null;
       }
   },
@@ -131,6 +166,7 @@ export const api = {
 
     if (response.token) {
         localStorage.setItem('authToken', response.token);
+        if (response.refreshToken) localStorage.setItem('refreshToken', response.refreshToken);
     }
     return response.user;
   },

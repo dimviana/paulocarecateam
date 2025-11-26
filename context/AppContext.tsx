@@ -83,8 +83,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const handleApiError = useCallback((error: any, context: string) => {
     console.error(`API Error in ${context}:`, error);
-    // Ignorar erros 401 silenciosos (sessão expirada é tratada pelo event listener)
-    if (error?.message?.includes('401') || error?.message?.includes('Não autenticado') || error?.message?.includes('Token')) return;
+    if (error?.message?.includes('401') || error?.message?.includes('Não autenticado') || error?.message?.includes('Token') || error?.message?.includes('Session expired')) return;
 
     let message = 'Falha de Conexão';
     let details = 'Verifique sua conexão.';
@@ -97,52 +96,41 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const logout = useCallback(async () => {
     try {
-      await api.logout(); // Clears server session if any, deletes local token
+      await api.logout();
     } catch(e) {
       console.warn("Logout server call failed", e);
-      localStorage.removeItem('authToken'); // Ensure token is gone
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('refreshToken');
     }
     setUser(null);
   }, []);
 
-  // Improved refetchData using Promise.allSettled to avoid cascading failures
   const refetchData = useCallback(async (loggedInUser: User | null) => {
       if (!loggedInUser || !loggedInUser.id) return;
 
       try {
-        // Fix: Explicitly type promises array to allow mixed Promise types
         const promises: Promise<any>[] = [
-            api.getStudents(),       // 0
-            api.getAcademies(),      // 1
-            api.getGraduations(),    // 2
-            api.getSchedules(),      // 3
-            api.getUsers(),          // 4
-            api.getAttendanceRecords(), // 5
-            api.getProfessors(),     // 6
-            api.getActivityLogs(),   // 7
-            api.getNews(),           // 8
+            api.getStudents(),
+            api.getAcademies(),
+            api.getGraduations(),
+            api.getSchedules(),
+            api.getUsers(),
+            api.getAttendanceRecords(),
+            api.getProfessors(),
+            api.getActivityLogs(),
+            api.getNews(),
         ];
 
-        // Add settings only for admin
         const isAdmin = loggedInUser.role === 'general_admin';
         if (isAdmin) {
-            promises.push(api.getAllThemeSettings()); // 9
+            promises.push(api.getAllThemeSettings());
         }
 
         const results = await Promise.allSettled(promises);
 
-        // Helper to safely get value with explicit typing
         const getVal = <T,>(result: PromiseSettledResult<any> | undefined, fallback: T): T => 
             result && result.status === 'fulfilled' ? result.value : fallback;
 
-        // Helper to log errors
-        results.forEach((res, idx) => {
-            if (res.status === 'rejected') {
-                console.warn(`Failed to fetch data at index ${idx}:`, res.reason);
-            }
-        });
-
-        // Use generic casting for state updates
         setStudents(getVal<Student[]>(results[0], []));
         setAcademies(getVal<Academy[]>(results[1], []));
         setGraduations(getVal<Graduation[]>(results[2], []));
@@ -158,15 +146,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
 
       } catch (error) {
-          // This catch block catches errors in the logic itself, not the API calls (handled by allSettled)
           handleApiError(error, 'refetchData');
       }
   }, [handleApiError]);
 
   useEffect(() => {
     const handleSessionExpired = () => {
-        console.warn("Token expired (401/403). Logging out.");
+        console.warn("Token expired. Logging out.");
         localStorage.removeItem('authToken');
+        localStorage.removeItem('refreshToken');
         setUser(null); 
     };
     window.addEventListener('session-expired', handleSessionExpired);
@@ -203,7 +191,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const initializeApp = async () => {
         setLoading(true);
         try {
-            // 1. Load public settings (No Auth) - Fail silently to show login
+            // 1. Load public settings (No Auth)
             try {
                 const settings = await api.getThemeSettings();
                 setThemeSettingsState(settings);
@@ -211,15 +199,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 console.warn("Could not load settings (using defaults)", error);
             }
 
-            // 2. Validate Token - Fail silently
-            try {
-                const validatedUser = await api.validateSession();
-                if (validatedUser) {
-                    setUser(validatedUser);
-                    await refetchData(validatedUser);
+            // 2. Validate Token
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                try {
+                    const validatedUser = await api.validateSession();
+                    if (validatedUser) {
+                        setUser(validatedUser);
+                        // Don't await refetch here to unblock UI faster, handle in background
+                        refetchData(validatedUser);
+                    } else {
+                        // Token invalid
+                        localStorage.removeItem('authToken');
+                        localStorage.removeItem('refreshToken');
+                    }
+                } catch (e) {
+                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('refreshToken');
                 }
-            } catch (e) {
-                // Not logged in or token invalid, expected behavior
             }
         } catch (error) {
             console.error("Critical Init error", error);
@@ -228,7 +225,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
     initializeApp();
-  }, [refetchData]);
+  }, []); // Empty dependency array to run once on mount
 
   useEffect(() => { localStorage.setItem('showcasedComponents', JSON.stringify(showcasedComponents)); }, [showcasedComponents]);
   useEffect(() => { document.documentElement.classList.remove('dark'); }, []);

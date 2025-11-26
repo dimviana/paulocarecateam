@@ -2,7 +2,7 @@
 /**
  * ==============================================================================
  *           Backend Server for Jiu-Jitsu Hub SAAS
- *           MVC ARCHITECTURE
+ *           MVC ARCHITECTURE - STATELESS JWT
  * ==============================================================================
  */
 
@@ -17,9 +17,9 @@ const { PORT = 3001 } = process.env;
 const app = express();
 app.set('trust proxy', 1);
 
-// CORS Configuration - Relaxed for stability
+// CORS Configuration
 app.use(cors({
-  origin: '*', // Allow all origins to prevent 401/CORS errors
+  origin: '*', // Allow all origins for development; restrict in production if needed
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id']
 }));

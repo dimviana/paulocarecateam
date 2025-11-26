@@ -17,10 +17,11 @@ const router = express.Router();
 router.get('/settings', settingsController.getPublicSettings);
 
 // Authentication
-router.get('/auth/session', authController.getSession); // Check session status
 router.post('/auth/login', authController.login);
 router.post('/auth/register', authController.register);
+router.post('/auth/refresh', authController.refreshToken); // NEW: Refresh Token
 router.post('/auth/logout', authController.logout);
+router.get('/auth/session', authController.getSession); // Check session status (validates JWT)
 router.post('/auth/google', (req, res) => res.status(501).json({message: "Not configured"}));
 
 // ==============================================================================
