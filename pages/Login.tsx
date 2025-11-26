@@ -84,6 +84,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSave, onClose }) => {
     if (!result.success) {
       setError(result.message || 'Ocorreu um erro no cadastro.');
     }
+    // Note: On success, the parent component handles closing or redirection via auth state change
     setLoading(false);
   };
 

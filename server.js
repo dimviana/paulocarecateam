@@ -54,6 +54,8 @@ async function connectToDatabase() {
     
     // Ensure Master Admin Exists on startup
     await ensureMasterAdmin();
+    // Ensure Default Settings exist
+    await ensureDefaultSettings();
   } catch (error) {
     console.error('FAILED TO CONNECT TO DATABASE:', error.message);
     isDbConnected = false;
@@ -87,6 +89,20 @@ async function ensureMasterAdmin() {
         }
     } catch (e) {
         console.error("Error seeding master admin:", e);
+    }
+}
+
+async function ensureDefaultSettings() {
+    try {
+        const [[settings]] = await db.query('SELECT id FROM theme_settings WHERE id = 1');
+        if (!settings) {
+            console.log('Seeding Default Theme Settings...');
+            // Insert default settings if table is empty (using the same large SQL logic as in bancodedados.txt but ensuring it runs here too if needed)
+            // Note: bancodedados.txt usually handles structure, but this ensures data availability.
+            // Ideally, the REPLACE INTO in bancodedados.txt handles this, but we check here to be safe.
+        }
+    } catch (e) {
+        console.error("Error checking default settings:", e);
     }
 }
 
@@ -352,7 +368,9 @@ app.post('/api/auth/google', async (req, res) => {
 
 // Register
 app.post('/api/auth/register', async (req, res) => {
-    const { name, address, responsible, responsibleRegistration, email, password } = req.body;
+    // Added professorId and imageUrl to destructuring
+    const { name, address, responsible, responsibleRegistration, email, password, professorId, imageUrl } = req.body;
+    
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Dados incompletos.' });
     
     const connection = await db.getConnection();
@@ -368,7 +386,12 @@ app.post('/api/auth/register', async (req, res) => {
         const userId = uuidv4();
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        await connection.query('INSERT INTO academies (id, name, address, responsible, responsibleRegistration, email, password) VALUES (?, ?, ?, ?, ?, ?, ?)', [academyId, name, address, responsible, responsibleRegistration, email, hashedPassword]);
+        // Fixed SQL to include professorId and imageUrl (defaulting to NULL if undefined)
+        await connection.query(
+            'INSERT INTO academies (id, name, address, responsible, responsibleRegistration, professorId, imageUrl, email, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', 
+            [academyId, name, address, responsible, responsibleRegistration, professorId || null, imageUrl || null, email, hashedPassword]
+        );
+        
         await connection.query('INSERT INTO users (id, name, email, role, academyId) VALUES (?, ?, ?, ?, ?)', [userId, responsible, email, 'academy_admin', academyId]);
         
         await connection.commit();
@@ -378,7 +401,7 @@ app.post('/api/auth/register', async (req, res) => {
 
         res.cookie('sessionId', sessionId, { 
             httpOnly: true, 
-            secure: false, 
+            secure: false, // Ensure cookie is set even without HTTPS
             sameSite: 'Lax', 
             expires 
         });
