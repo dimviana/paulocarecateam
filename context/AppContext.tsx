@@ -84,7 +84,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const handleApiError = useCallback((error: any, context: string) => {
     console.error(`API Error in ${context}:`, error);
 
-    // Don't show notification for 401, as it will trigger a logout via event listener.
     if (error?.message?.includes('401') || error?.message?.includes('Não autenticado')) {
       return;
     }
@@ -101,26 +100,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
              message = 'Erro no Servidor';
              details = `Ocorreu um erro inesperado. Detalhes: ${error.message}`;
         }
-    } else if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        // This is a classic network error, the default message is appropriate.
     }
     
     setNotification({ type: 'error', message, details });
   }, []);
 
+  // Logout now just clears local storage and state
   const logout = useCallback(async () => {
     try {
-        await api.logout(); // Invalidate session on server
+        await api.logout(); 
     } catch (e) {
         console.warn("Logout request failed, clearing local state anyway.", e);
     }
+    localStorage.removeItem('currentUser');
     setUser(null);
   }, []);
 
   const refetchData = useCallback(async (loggedInUser: User | null) => {
-      // Strict check: Ensure we don't fetch data if there is no valid user logged in
       if (!loggedInUser || !loggedInUser.id) {
-          // console.log("Skipping refetchData: No user logged in.");
           return;
       }
 
@@ -163,16 +160,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [handleApiError]);
 
   useEffect(() => {
-    // Global listener to handle logout when any API call returns 401.
     const handleSessionExpired = () => {
-        console.warn("Session expired or invalid. Clearing user state.");
-        setUser(null);
+        console.warn("Session expired (Header rejected). Clearing user state.");
+        logout();
     };
     window.addEventListener('session-expired', handleSessionExpired);
     return () => {
         window.removeEventListener('session-expired', handleSessionExpired);
     };
-  }, []);
+  }, [logout]);
 
 
   useEffect(() => {
@@ -203,7 +199,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const initializeApp = async () => {
         setLoading(true);
         try {
-            // 1. Load Public Settings (No auth required)
             try {
                 const settings = await api.getThemeSettings();
                 setThemeSettingsState(settings);
@@ -211,27 +206,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 console.warn("Could not load public theme settings, using defaults.", error);
             }
 
-            // 2. Validate Session
-            let validatedUser: User | null = null;
-            try {
-                // Now this returns User | null, it doesn't throw 401 on failure
-                validatedUser = await api.validateSession();
-            } catch (e) {
-                // Silence expected auth errors during initialization
-                // console.warn("Session validation error:", e);
-            }
-
-            // 3. If user exists, fetch protected data
-            if (validatedUser) {
-                setUser(validatedUser); 
-                await refetchData(validatedUser); 
-            } else {
-                // Normal state for first load if not logged in
-                // console.log("No active session found on startup.");
+            // Check LocalStorage for user
+            const storedUser = localStorage.getItem('currentUser');
+            if (storedUser) {
+                try {
+                    const parsedUser = JSON.parse(storedUser);
+                    if (parsedUser && parsedUser.id) {
+                        setUser(parsedUser);
+                        await refetchData(parsedUser);
+                    }
+                } catch (e) {
+                    console.error("Invalid user in local storage", e);
+                    localStorage.removeItem('currentUser');
+                }
             }
             
         } catch (error) {
-            // Only handle non-auth errors here if critical
             handleApiError(error, 'initializeApp');
         } finally {
             setLoading(false);
@@ -247,8 +237,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const loggedInUser = await api.login(email, password);
       if (loggedInUser) {
+        // Save to LocalStorage
+        localStorage.setItem('currentUser', JSON.stringify(loggedInUser));
         setUser(loggedInUser);
-        // Ensure data is fetched before resolving
         await refetchData(loggedInUser);
         return true;
       }
@@ -279,6 +270,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const loggedInUser = await api.loginGoogle(token);
       if (loggedInUser) {
+        localStorage.setItem('currentUser', JSON.stringify(loggedInUser));
         setUser(loggedInUser);
         await refetchData(loggedInUser);
         return true;
@@ -297,6 +289,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
         const newUser = await api.registerAcademy(data);
         if (newUser) {
+          localStorage.setItem('currentUser', JSON.stringify(newUser));
           setUser(newUser);
           await refetchData(newUser);
           return { success: true };

@@ -1,3 +1,4 @@
+
 -- Esquema do Banco de Dados para o Jiu-Jitsu Hub SAAS (MySQL)
 
 -- -----------------------------------------------------
@@ -134,17 +135,6 @@ CREATE TABLE IF NOT EXISTS users (
     studentId TEXT, -- FK para students (se for aluno)
     birthDate DATE, -- Data de nascimento (para aniversariantes do dia)
     refreshToken TEXT -- Armazena o refresh token (legado, mantido por compatibilidade)
-);
-
--- -----------------------------------------------------
--- Tabela: sessions
--- Armazena as sessões ativas dos usuários para persistência.
--- -----------------------------------------------------
-CREATE TABLE IF NOT EXISTS sessions (
-    sessionId VARCHAR(255) PRIMARY KEY, -- ID do cookie de sessão
-    userId VARCHAR(255) NOT NULL, -- ID do usuário logado
-    expires DATETIME NOT NULL, -- Data de expiração da sessão
-    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- -----------------------------------------------------

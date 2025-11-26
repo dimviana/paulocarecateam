@@ -1,7 +1,8 @@
+
 /**
  * ==============================================================================
  *           Backend Server for Jiu-Jitsu Hub SAAS (server.js)
- *           FLATTENED ROUTES & MANUAL SESSION MANAGEMENT (ROBUST VERSION)
+ *           STATELESS AUTHENTICATION (No Sessions/Cookies)
  * ==============================================================================
  */
 
@@ -17,7 +18,6 @@ const {
   DATABASE_URL,
   PORT = 3001,
   FRONTEND_URL,
-  JWT_SECRET // Used as salt/secret concept if needed, but primarily using DB sessions
 } = process.env;
 
 if (!FRONTEND_URL) {
@@ -34,9 +34,9 @@ app.set('trust proxy', 1);
 // --- Middleware ---
 const corsOptions = {
   origin: FRONTEND_URL,
-  credentials: true, // Essential for cookies to work across origins/ports
+  credentials: false, // No cookies needed
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'] // Allow custom user ID header
 };
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
@@ -176,105 +176,28 @@ const logActivity = async (actorId, action, details) => {
   }
 };
 
-// --- Session Management (Manual MySQL) ---
-
-// 1. Cookie Parser (Regex based for robustness)
-const parseCookies = (req) => {
-    const list = {};
-    const cookieHeader = req.headers.cookie;
-    if (!cookieHeader) return list;
-
-    cookieHeader.split(';').forEach(function(cookie) {
-        const parts = cookie.split('=');
-        // Handle potential extra spaces and decoding
-        list[parts.shift().trim()] = decodeURI(parts.join('='));
-    });
-    return list;
-};
-
-// 2. Create Session
-const createSession = async (user) => {
-    const sessionId = uuidv4();
-    // 20 minutes expiration
-    const expires = new Date(Date.now() + 20 * 60 * 1000); 
-    const expiresStr = expires.toISOString().slice(0, 19).replace('T', ' ');
-
-    await db.query(
-        'INSERT INTO sessions (sessionId, userId, expires) VALUES (?, ?, ?)',
-        [sessionId, user.id, expiresStr]
-    );
-    return { sessionId };
-};
-
-// 3. Validate Session
-const validateSession = async (sessionId) => {
-    if (!sessionId) return null;
-
-    const [[session]] = await db.query('SELECT * FROM sessions WHERE sessionId = ?', [sessionId]);
-    
-    if (!session) return null;
-    
-    const now = new Date();
-    const expiry = new Date(session.expires);
-
-    // Expired?
-    if (now > expiry) {
-        await db.query('DELETE FROM sessions WHERE sessionId = ?', [sessionId]);
-        return null;
-    }
-
-    // Refresh (Extend by 20 mins)
-    const newExpires = new Date(now.getTime() + 20 * 60 * 1000);
-    const newExpiresStr = newExpires.toISOString().slice(0, 19).replace('T', ' ');
-    
-    await db.query('UPDATE sessions SET expires = ? WHERE sessionId = ?', [newExpiresStr, sessionId]);
-    
-    // Get User
-    const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [session.userId]);
-    return user;
-};
-
-// 4. Destroy Session
-const destroySession = async (sessionId) => {
-    if (sessionId) {
-        await db.query('DELETE FROM sessions WHERE sessionId = ?', [sessionId]);
-    }
-};
-
-// 5. Helper to set Cookie
-const setSessionCookie = (res, sessionId) => {
-    // Using maxAge (ms) is safer than expires (Date) due to client/server clock drift
-    res.cookie('sessionId', sessionId, {
-        httpOnly: true,
-        secure: false, // FIXED: Ensure false for non-HTTPS dev/local environments to allow cookie save
-        sameSite: 'Lax', // FIXED: 'Lax' is better for navigation compatibility than 'Strict'
-        maxAge: 20 * 60 * 1000, // 20 minutes
-        path: '/' // FIXED: CRITICAL! Ensures cookie is sent for ALL api routes
-    });
-};
-
-// --- Middleware: Authentication ---
+// --- Middleware: Authentication (Header Based, No Sessions) ---
 const requireAuth = async (req, res, next) => {
     try {
-        const cookies = parseCookies(req);
-        const sessionId = cookies.sessionId;
+        // Get User ID directly from header (Client-Side State)
+        const userId = req.headers['x-user-id'];
         
-        if (!sessionId) {
-            // console.log('[Auth] Blocked: No session cookie.');
-            return res.status(401).json({ message: 'Não autenticado (sem cookie).' });
+        if (!userId) {
+            return res.status(401).json({ message: 'Não autenticado (Header ausente).' });
         }
 
-        const user = await validateSession(sessionId);
+        // Validate user existence in DB (just to be safe, no session checks)
+        const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [userId]);
+
         if (!user) {
-            // console.log(`[Auth] Blocked: Invalid session ${sessionId}`);
-            return res.status(401).json({ message: 'Sessão inválida ou expirada.' });
+            return res.status(401).json({ message: 'Usuário inválido.' });
         }
 
         req.user = { userId: user.id, ...user };
         next();
     } catch (error) {
-        console.error("Session error:", error);
-        res.status(500).json({ message: "Erro ao validar sessão." });
+        console.error("Auth error:", error);
+        res.status(500).json({ message: "Erro ao validar usuário." });
     }
 };
 
@@ -282,8 +205,6 @@ const requireAuth = async (req, res, next) => {
 // =================================================================
 // --- API ROUTES (FLATTENED)
 // =================================================================
-// Routes are defined explicitly (e.g., /api/settings) to avoid
-// routing ambiguities with nested routers.
 
 // --- PUBLIC ROUTES ---
 
@@ -295,7 +216,6 @@ app.get('/api/settings', async (req, res) => {
         const [rows] = await db.query(`SELECT ${publicFields} FROM theme_settings WHERE id = 1`);
         
         if (!rows || rows.length === 0) {
-             // Should not happen due to ensureDefaultSettings, but safety net
              return res.json({ systemName: 'Jiu-Jitsu Hub (Default)' });
         }
         res.json(rows[0]);
@@ -305,30 +225,7 @@ app.get('/api/settings', async (req, res) => {
     }
 });
 
-// 2. Session Check
-app.get('/api/auth/session', async (req, res) => {
-    try {
-        const cookies = parseCookies(req);
-        const sessionId = cookies.sessionId;
-        
-        if (!sessionId) {
-            return res.json({ user: null });
-        }
-
-        const user = await validateSession(sessionId);
-        if (user) {
-            res.json({ user });
-        } else {
-            res.clearCookie('sessionId', { path: '/' });
-            res.json({ user: null });
-        }
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Erro interno.' });
-    }
-});
-
-// 3. Login
+// 2. Login (Username/Password Check Only)
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
@@ -361,12 +258,10 @@ app.post('/api/auth/login', async (req, res) => {
         const isValid = await bcrypt.compare(password, passwordHash);
         if (!isValid) return res.status(401).json({ message: 'Senha incorreta.' });
 
-        // Create Session
-        const { sessionId } = await createSession(user);
-        setSessionCookie(res, sessionId);
-        
+        // Log activity
         await logActivity(user.id, 'Login', 'Usuário logado.');
         
+        // Return user (Frontend will store it)
         const { refreshToken, ...safeUser } = user;
         res.json(safeUser);
     } catch (error) {
@@ -375,7 +270,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// 4. Google Login
+// 3. Google Login
 app.post('/api/auth/google', async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(400).json({ message: 'Token required' });
@@ -388,9 +283,6 @@ app.post('/api/auth/google', async (req, res) => {
         const [[user]] = await db.query('SELECT * FROM users WHERE email = ?', [payload.email]);
         if (!user) return res.status(404).json({ message: 'USER_NOT_FOUND' });
 
-        const { sessionId } = await createSession(user);
-        setSessionCookie(res, sessionId);
-
         await logActivity(user.id, 'Login Google', 'Login via Google.');
         const { refreshToken, ...safeUser } = user;
         res.json(safeUser);
@@ -400,9 +292,8 @@ app.post('/api/auth/google', async (req, res) => {
     }
 });
 
-// 5. Register Academy
+// 4. Register Academy
 app.post('/api/auth/register', async (req, res) => {
-    // Added missing fields to destructuring to avoid undefined in query
     const { name, address, responsible, responsibleRegistration, email, password, professorId, imageUrl } = req.body;
     
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Dados obrigatórios faltando.' });
@@ -420,7 +311,6 @@ app.post('/api/auth/register', async (req, res) => {
         const userId = uuidv4();
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        // FIXED SQL: Explicitly include all columns
         await connection.query(
             `INSERT INTO academies (id, name, address, responsible, responsibleRegistration, professorId, imageUrl, email, password) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
@@ -430,8 +320,8 @@ app.post('/api/auth/register', async (req, res) => {
                 address, 
                 responsible, 
                 responsibleRegistration, 
-                professorId || null, // Handle optional
-                imageUrl || null,    // Handle optional
+                professorId || null,
+                imageUrl || null,
                 email, 
                 hashedPassword
             ]
@@ -442,11 +332,7 @@ app.post('/api/auth/register', async (req, res) => {
         
         await connection.commit();
 
-        // Auto Login
         const [[newUser]] = await connection.query('SELECT id, name, email, role, academyId FROM users WHERE id = ?', [userId]);
-        const { sessionId } = await createSession(newUser);
-        setSessionCookie(res, sessionId);
-
         res.status(201).json(newUser);
     } catch (error) {
         await connection.rollback();
@@ -457,11 +343,8 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-// 6. Logout
+// 5. Logout (Simple OK)
 app.post('/api/auth/logout', async (req, res) => {
-    const cookies = parseCookies(req);
-    if (cookies.sessionId) await destroySession(cookies.sessionId);
-    res.clearCookie('sessionId', { path: '/' });
     res.json({ message: 'Logout ok' });
 });
 
@@ -474,7 +357,6 @@ app.get('/api/students', requireAuth, async (req, res) => {
         const [students] = await db.query('SELECT * FROM students');
         const [payments] = await db.query('SELECT * FROM payment_history ORDER BY `date` DESC');
         
-        // Efficiently attach payments
         const paymentsMap = {};
         payments.forEach(p => {
             if (!paymentsMap[p.studentId]) paymentsMap[p.studentId] = [];
@@ -611,7 +493,6 @@ app.post('/api/students/:studentId/payment', requireAuth, async (req, res) => {
     res.json(s);
 });
 
-// Helper for academy save
 const handleSaveAcademy = async (req, res) => {
     const data = req.body;
     const isNew = !req.params.id;

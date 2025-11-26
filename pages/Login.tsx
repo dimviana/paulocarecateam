@@ -84,7 +84,6 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSave, onClose }) => {
     if (!result.success) {
       setError(result.message || 'Ocorreu um erro no cadastro.');
     }
-    // Note: On success, the parent component handles closing or redirection via auth state change
     setLoading(false);
   };
 
@@ -134,7 +133,6 @@ const Login: React.FC = () => {
     try {
         const success = await loginGoogle(response.credential);
         if (!success) {
-            // If success is false but no specific error thrown, it might be a generic error.
             // Note: loginGoogle inside context will throw specific errors for 404.
         }
     } catch (err: any) {
@@ -168,10 +166,7 @@ const Login: React.FC = () => {
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    // If user is typing digits and it resembles a CPF start, apply mask
-    // We check if the input DOES NOT contain '@' to assume it might be a CPF
     if (!val.includes('@')) {
-       // If only numbers or standard CPF chars, apply mask
        if (/^[\d.-]*$/.test(val)) {
            setEmail(formatCPF(val));
            return;
@@ -183,7 +178,6 @@ const Login: React.FC = () => {
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     
-    // Basic validation before sending
     const isCpf = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(email);
     if (isCpf && !validateCPF(email)) {
         setError('CPF inválido. Verifique os números digitados.');
@@ -196,14 +190,12 @@ const Login: React.FC = () => {
     try {
         const success = await login(email, password);
         if (!success) {
-            // The context's login function now handles errors, including 404s.
-            // We can check the error message if needed, but for now, a generic message is fine.
             setError('Credenciais inválidas ou usuário não encontrado.');
-            setPassword(''); // Clear password on failure
+            setPassword('');
         }
     } catch (err) {
         setError('Erro de conexão com o servidor.');
-        setPassword(''); // Clear password on failure
+        setPassword(''); 
     }
     setLoading(false);
   };
@@ -212,18 +204,16 @@ const Login: React.FC = () => {
     const result = await registerAcademy(data);
     if (result.success) {
         setIsRegisterModalOpen(false);
-        // The user is now logged in via context, navigation will happen automatically.
     }
     return result;
   };
   
-  // If app is initializing (validating token), show loading instead of login form
   if (appLoading) {
       return (
           <div className="min-h-screen flex items-center justify-center bg-[var(--theme-bg)]">
               <div className="text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--theme-accent)] mx-auto mb-4"></div>
-                  <p className="text-[var(--theme-text-primary)]">Validando sessão...</p>
+                  <p className="text-[var(--theme-text-primary)]">Carregando sistema...</p>
               </div>
           </div>
       );

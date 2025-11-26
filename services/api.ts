@@ -4,22 +4,34 @@ import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Attenda
 const API_URL = '/api';
 
 /**
- * A generic wrapper around the Fetch API that includes credentials (cookies)
- * for session-based authentication.
- * @param endpoint The API endpoint to call (e.g., '/students').
- * @param options The standard `fetch` options object.
- * @returns A promise that resolves with the JSON response.
+ * A generic wrapper around the Fetch API.
+ * Instead of cookies, it injects 'x-user-id' header from localStorage.
  */
 async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_URL}${endpoint}`;
     
+    // Get current user from local storage to send ID
+    const storedUser = localStorage.getItem('currentUser');
+    let userIdHeader = {};
+    if (storedUser) {
+        try {
+            const user = JSON.parse(storedUser);
+            if (user && user.id) {
+                userIdHeader = { 'x-user-id': user.id };
+            }
+        } catch (e) {
+            console.error("Failed to parse user from storage", e);
+        }
+    }
+
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
+        ...userIdHeader,
         ...options.headers,
     };
     
-    // 'credentials: include' tells the browser to send cookies with the request.
-    const response = await fetch(url, { ...options, headers, credentials: 'include' });
+    // credentials: 'include' REMOVED. We are using headers now.
+    const response = await fetch(url, { ...options, headers });
 
     if (!response.ok) {
         let errorMessage = `HTTP error! status: ${response.status}`;
@@ -30,8 +42,6 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
             errorMessage = response.statusText;
         }
         
-        // If the session is invalid, the server will respond with 401.
-        // We can dispatch a global event for the app to handle logout.
         if (response.status === 401) {
             window.dispatchEvent(new Event('session-expired'));
         }
@@ -48,7 +58,6 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
 
 export const api = {
   login: (email: string, password: string): Promise<User> => {
-    // The backend now returns the user object directly and sets a session cookie.
     return fetchWrapper<User>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ 
@@ -59,7 +68,6 @@ export const api = {
   },
 
   loginGoogle: (token: string): Promise<User> => {
-    // Assuming the Google login endpoint would also return a user and set a cookie.
     return fetchWrapper<User>('/auth/google', {
         method: 'POST',
         body: JSON.stringify({ token }),
@@ -67,14 +75,12 @@ export const api = {
   },
   
   logout: (): Promise<void> => {
-      // The server will clear the session cookie.
       return fetchWrapper('/auth/logout', { method: 'POST' });
   },
 
-  // Modified to handle the response { user: User | null } from backend
+  // No server-side session validation anymore. Client manages state.
   validateSession: async (): Promise<User | null> => {
-      const response = await fetchWrapper<{ user: User | null }>('/auth/session');
-      return response.user;
+      return null; 
   },
 
   registerAcademy: (data: { 
@@ -85,7 +91,6 @@ export const api = {
     email: string; 
     password?: string; 
   }): Promise<User> => {
-    // This public route now logs the user in and returns the user object.
     return fetchWrapper<User>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),
