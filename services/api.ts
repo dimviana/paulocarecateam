@@ -5,7 +5,7 @@ const API_URL = '/api';
 
 /**
  * A generic wrapper around the Fetch API.
- * Instead of cookies, it injects 'x-user-id' header from localStorage.
+ * INJECTS USER ID FROM LOCAL STORAGE INTO HEADER.
  */
 async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_URL}${endpoint}`;
@@ -19,9 +19,6 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
             const user = JSON.parse(storedUser);
             if (user && user.id) {
                 userIdHeader = { 'x-user-id': user.id };
-            } else {
-                // Warn if we found data but no ID, which might cause 'Header ausente'
-                // console.warn('Found stored user but no ID property'); 
             }
         } catch (e) {
             console.error("Failed to parse user from storage", e);
@@ -47,7 +44,6 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         }
         
         if (response.status === 401) {
-            // If the backend says unauthorized (e.g., invalid user ID), clear session
             window.dispatchEvent(new Event('session-expired'));
         }
         

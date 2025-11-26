@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS graduations (
     name TEXT NOT NULL, -- Nome da faixa (ex: Branca, Azul, Preta)
     color VARCHAR(255) NOT NULL, -- Cor em hexadecimal (ex: #FFFFFF)
     minTimeInMonths INTEGER, -- Tempo mínimo em meses para a próxima graduação
-    `rank` INTEGER NOT NULL, -- Ordem hierárquica da faixa. `rank` é uma palavra reservada, então é escapada.
+    `rank` INTEGER NOT NULL, -- Ordem hierárquica da faixa.
     type VARCHAR(255) CHECK(type IN ('adult', 'kids')), -- Se é uma faixa de adulto ou infantil
     minAge INTEGER, -- Idade mínima para faixas infantis
     maxAge INTEGER -- Idade máxima para faixas infantis
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS students (
 CREATE TABLE IF NOT EXISTS payment_history (
     id VARCHAR(255) PRIMARY KEY, -- Identificador único do pagamento
     studentId TEXT, -- FK para a tabela students
-    `date` DATE NOT NULL, -- Data em que o pagamento foi efetuado. `date` é palavra reservada.
+    `date` DATE NOT NULL, -- Data em que o pagamento foi efetuado.
     amount REAL NOT NULL -- Valor do pagamento
 );
 
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS attendance_records (
     id VARCHAR(255) PRIMARY KEY, -- Identificador único do registro de frequência
     studentId TEXT, -- FK para a tabela students
     scheduleId TEXT, -- FK para a tabela class_schedules
-    `date` DATE NOT NULL, -- Data da aula. `date` é palavra reservada.
+    `date` DATE NOT NULL, -- Data da aula.
     status VARCHAR(255) CHECK(status IN ('present', 'absent')) -- Status da presença
 );
 
@@ -130,11 +130,10 @@ CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(255) PRIMARY KEY, -- Identificador único do usuário
     name TEXT NOT NULL, -- Nome do usuário
     email VARCHAR(255) UNIQUE, -- Email de login
-    `role` VARCHAR(255) CHECK(`role` IN ('general_admin', 'academy_admin', 'student')), -- Papel do usuário. `role` é palavra reservada.
+    `role` VARCHAR(255) CHECK(`role` IN ('general_admin', 'academy_admin', 'student')), -- Papel do usuário.
     academyId TEXT, -- FK para academies (se for admin de academia)
     studentId TEXT, -- FK para students (se for aluno)
-    birthDate DATE, -- Data de nascimento (para aniversariantes do dia)
-    refreshToken TEXT -- Armazena o refresh token (legado, mantido por compatibilidade)
+    birthDate DATE -- Data de nascimento
 );
 
 -- -----------------------------------------------------
@@ -145,7 +144,7 @@ CREATE TABLE IF NOT EXISTS activity_logs (
     id VARCHAR(255) PRIMARY KEY, -- Identificador único do log
     actorId TEXT, -- FK para a tabela users (quem realizou a ação)
     action TEXT NOT NULL, -- Tipo de ação (ex: 'Login', 'Update Student')
-    `timestamp` DATETIME NOT NULL, -- Data e hora da ação. `timestamp` é palavra reservada.
+    `timestamp` DATETIME NOT NULL, -- Data e hora da ação.
     details TEXT -- Descrição detalhada da ação
 );
 
@@ -158,16 +157,15 @@ CREATE TABLE IF NOT EXISTS news_articles (
     title TEXT NOT NULL, -- Título da notícia
     content TEXT NOT NULL, -- Conteúdo da notícia
     imageUrl TEXT, -- URL da imagem da notícia
-    `date` DATE NOT NULL -- Data de publicação. `date` é palavra reservada.
+    `date` DATE NOT NULL -- Data de publicação.
 );
 
 -- -----------------------------------------------------
 -- Tabela: theme_settings
 -- Armazena todas as configurações de personalização do sistema.
--- Geralmente terá apenas uma linha.
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS theme_settings (
-    id INTEGER PRIMARY KEY AUTO_INCREMENT, -- Chave primária auto-incremento, mais idiomático para MySQL
+    id INTEGER PRIMARY KEY AUTO_INCREMENT,
     logoUrl TEXT,
     systemName TEXT,
     primaryColor TEXT,
@@ -200,7 +198,7 @@ CREATE TABLE IF NOT EXISTS theme_settings (
     systemVersion TEXT
 );
 
--- Insere uma linha de configurações padrão para garantir que a aplicação sempre encontre os dados.
+-- Configurações padrão
 REPLACE INTO theme_settings (id, logoUrl, systemName, primaryColor, secondaryColor, backgroundColor, cardBackgroundColor, buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2, useGradient, reminderDaysBeforeDue, overdueDaysAfterDue, theme, monthlyFeeAmount, publicPageEnabled, heroHtml, aboutHtml, branchesHtml, footerHtml, customCss, customJs, socialLoginEnabled, googleClientId, facebookAppId, pixKey, pixHolderName, copyrightText, systemVersion) VALUES
 (1,
 'https://tailwindui.com/img/logos/mark.svg?color=amber&shade=500',
@@ -214,102 +212,22 @@ REPLACE INTO theme_settings (id, logoUrl, systemName, primaryColor, secondaryCol
 '#64748b',
 '#f9a825',
 '#475569',
-1,
-5,
-5,
-'light',
-150.00,
-1,
-'<div class="relative bg-white text-slate-800 text-center py-20 px-4 overflow-hidden" style="background-image: url(''https://images.unsplash.com/photo-1581009137052-c40971b51c69?q=80&w=2070&auto=format&fit=crop''); background-size: cover; background-position: center;">
-    <div class="absolute inset-0 bg-white/50 backdrop-blur-sm"></div>
-    <div class="relative z-10 container mx-auto">
-        <h1 class="text-5xl font-bold mb-4 animate-fade-in-down">Jiu-Jitsu: Arte, Disciplina, Respeito</h1>
-        <p class="text-xl text-slate-600 animate-fade-in-up">Transforme sua vida dentro e fora do tatame. Junte-se à nossa família.</p>
-        <a href="#filiais" class="mt-8 inline-block bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-8 rounded-lg transition duration-300">Encontre uma Academia</a>
-    </div>
-</div>',
-'<div id="quem-somos" class="py-16 bg-slate-50 px-4">
-    <div class="container mx-auto text-center">
-        <h2 class="text-4xl font-bold text-amber-600 mb-6">Quem Somos</h2>
-        <p class="text-lg text-slate-600 max-w-3xl mx-auto">
-            Somos mais do que uma academia, somos uma comunidade unida pela paixão pelo Jiu-Jitsu. Com instrutores de classe mundial e um ambiente acolhedor, nossa missão é capacitar cada aluno a atingir seu potencial máximo, promovendo saúde, autoconfiança e respeito mútuo.
-        </p>
-    </div>
-</div>',
-'<div id="filiais" class="py-16 bg-white px-4">
-    <div class="container mx-auto text-center">
-        <h2 class="text-4xl font-bold text-amber-600 mb-10">Nossas Filiais</h2>
-        <p class="text-slate-600">Aqui você pode listar suas academias. Este conteúdo é totalmente personalizável na área de configurações!</p>
-        <!-- Exemplo: <div class="mt-4 p-4 bg-slate-100 rounded"><h3>Nome da Academia</h3><p>Endereço</p></div> -->
-    </div>
-</div>',
-'<div class="py-8 bg-slate-100 text-center text-slate-500">
-    <p>{{{copyright_line}}}</p>
-    <p>Desenvolvido com a Arte Suave em mente.</p>
-</div>',
-'@keyframes fade-in-down {
-    0% {
-        opacity: 0;
-        transform: translateY(-20px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-@keyframes fade-in-up {
-    0% {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-.animate-fade-in-down {
-    animation: fade-in-down 1s ease-out forwards;
-}
-.animate-fade-in-up {
-    animation: fade-in-up 1s ease-out 0.5s forwards;
-}
-html {
-    scroll-behavior: smooth;
-}',
+1, 5, 5, 'light', 150.00, 1,
+'<div class="relative bg-white text-slate-800 text-center py-20 px-4 overflow-hidden" style="background-image: url(\'https://images.unsplash.com/photo-1581009137052-c40971b51c69?q=80&w=2070&auto=format&fit=crop\'); background-size: cover; background-position: center;"> <div class="absolute inset-0 bg-white/50 backdrop-blur-sm"></div> <div class="relative z-10 container mx-auto"> <h1 class="text-5xl font-bold mb-4 animate-fade-in-down">Jiu-Jitsu: Arte, Disciplina, Respeito</h1> <p class="text-xl text-slate-600 animate-fade-in-up">Transforme sua vida dentro e fora do tatame. Junte-se à nossa família.</p> <a href="#filiais" class="mt-8 inline-block bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-8 rounded-lg transition duration-300">Encontre uma Academia</a> </div> </div>',
+'<div id="quem-somos" class="py-16 bg-slate-50 px-4"> <div class="container mx-auto text-center"> <h2 class="text-4xl font-bold text-amber-600 mb-6">Quem Somos</h2> <p class="text-lg text-slate-600 max-w-3xl mx-auto"> Somos mais do que uma academia, somos uma comunidade unida pela paixão pelo Jiu-Jitsu. Com instrutores de classe mundial e um ambiente acolhedor, nossa missão é capacitar cada aluno a atingir seu potencial máximo, promovendo saúde, autoconfiança e respeito mútuo. </p> </div> </div>',
+'<div id="filiais" class="py-16 bg-white px-4"> <div class="container mx-auto text-center"> <h2 class="text-4xl font-bold text-amber-600 mb-10">Nossas Filiais</h2> <p class="text-slate-600">Aqui você pode listar suas academias. Este conteúdo é totalmente personalizável na área de configurações!</p> </div> </div>',
+'<div class="py-8 bg-slate-100 text-center text-slate-500"> <p>{{{copyright_line}}}</p> <p>Desenvolvido com a Arte Suave em mente.</p> </div>',
+'@keyframes fade-in-down { 0% { opacity: 0; transform: translateY(-20px); } 100% { opacity: 1; transform: translateY(0); } } @keyframes fade-in-up { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } } .animate-fade-in-down { animation: fade-in-down 1s ease-out forwards; } .animate-fade-in-up { animation: fade-in-up 1s ease-out 0.5s forwards; } html { scroll-behavior: smooth; }',
 '// console.log("Custom JS loaded!");',
-1,
-'',
-'',
-'',
-'',
-'ABILDEVELOPER',
-'1.2.0'
+1, '', '', '', '', 'ABILDEVELOPER', '1.2.0'
 );
 
-
--- -----------------------------------------------------
--- Script de Inserção do Administrador Geral
--- Cria um usuário 'general_admin' para o sistema.
--- Senha: dvsviana154
--- -----------------------------------------------------
+-- Admin Geral
 DELETE FROM users WHERE email = 'androiddiviana@gmail.com';
 DELETE FROM academies WHERE email = 'androiddiviana@gmail.com';
 
 INSERT INTO academies (id, name, email, password, responsible, responsibleRegistration)
-VALUES (
-    'master_admin_academy_01', 
-    'Academia Master', 
-    'androiddiviana@gmail.com', 
-    '$2a$10$iUslz.2nCqK.xQ.9l6kHKe/p5F/T9L9N.EMjok0JzR.Y.7oG3H19C', 
-    'Admin Geral', 
-    '000.000.000-00'
-);
+VALUES ('master_admin_academy_01', 'Academia Master', 'androiddiviana@gmail.com', '$2a$10$iUslz.2nCqK.xQ.9l6kHKe/p5F/T9L9N.EMjok0JzR.Y.7oG3H19C', 'Admin Geral', '000.000.000-00');
 
 INSERT INTO users (id, name, email, role, academyId)
-VALUES (
-    'master_admin_user_01', 
-    'Admin Geral', 
-    'androiddiviana@gmail.com', 
-    'general_admin', 
-    'master_admin_academy_01'
-);
+VALUES ('master_admin_user_01', 'Admin Geral', 'androiddiviana@gmail.com', 'general_admin', 'master_admin_academy_01');
