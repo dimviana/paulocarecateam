@@ -33,8 +33,7 @@ app.set('trust proxy', 1);
 
 // --- Middleware ---
 const corsOptions = {
-  origin: FRONTEND_URL,
-  credentials: false, // No cookies needed
+  origin: '*', // FIX: Allow any origin to prevent browser from stripping custom headers during preflight
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'] // Allow custom user ID header
 };
@@ -183,6 +182,7 @@ const requireAuth = async (req, res, next) => {
         const userId = req.headers['x-user-id'];
         
         if (!userId) {
+            console.log('AUTH FAIL: No x-user-id header received. Headers:', req.headers);
             return res.status(401).json({ message: 'Não autenticado (Header ausente).' });
         }
 
@@ -631,7 +631,7 @@ app.use((req, res) => {
   if (isDbConnected) {
       app.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
-        console.log(`Allowed Origin: ${FRONTEND_URL}`);
+        console.log(`Allowed Origin: * (CORS Relaxed)`);
       });
   } else {
       console.error("Server failed to start due to database connection error.");

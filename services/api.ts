@@ -12,12 +12,16 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
     
     // Get current user from local storage to send ID
     const storedUser = localStorage.getItem('currentUser');
-    let userIdHeader = {};
+    let userIdHeader: Record<string, string> = {};
+    
     if (storedUser) {
         try {
             const user = JSON.parse(storedUser);
             if (user && user.id) {
                 userIdHeader = { 'x-user-id': user.id };
+            } else {
+                // Warn if we found data but no ID, which might cause 'Header ausente'
+                // console.warn('Found stored user but no ID property'); 
             }
         } catch (e) {
             console.error("Failed to parse user from storage", e);
@@ -43,6 +47,7 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         }
         
         if (response.status === 401) {
+            // If the backend says unauthorized (e.g., invalid user ID), clear session
             window.dispatchEvent(new Event('session-expired'));
         }
         
