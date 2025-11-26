@@ -70,7 +70,9 @@ JJH_PM2_PROCESS_NAME="jiujitsu-hub-backend"
 
 # --- Helper Functions ---
 check_command() {
-    command -v $1 >/dev/null 2>&1
+    command -v $1 >/dev/null <<EOF
+EOF
+2>&1
 }
 
 # --- Generic Functions ---
@@ -266,6 +268,45 @@ EOF
     echo -e "${GREEN}-> Nginx configurado.${NC}"
 }
 
+# --- SSL MANAGEMENT FUNCTIONS ---
+
+regenerate_ssl_gb() {
+    echo -e "\n${YELLOW}--- GERENCIANDO SSL: $GB_APP_NAME ---${NC}"
+    echo "-> Tentando remover certificados existentes..."
+    
+    # Tenta remover pelo nome do frontend (padrão do certbot quando é o primeiro domínio)
+    sudo certbot delete --cert-name "$GB_FRONTEND_DOMAIN" --non-interactive 2>/dev/null
+    # Tenta remover pelo nome do backend caso tenha sido gerado separadamente
+    sudo certbot delete --cert-name "$GB_BACKEND_DOMAIN" --non-interactive 2>/dev/null
+    
+    echo "-> Gerando novo certificado SSL (Multidomínio)..."
+    sudo certbot --nginx -d "$GB_FRONTEND_DOMAIN" -d "$GB_BACKEND_DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL"
+    
+    if [ $? -eq 0 ]; then
+        sudo systemctl restart nginx
+        echo -e "${GREEN}-> SSL recriado com sucesso para $GB_FRONTEND_DOMAIN e $GB_BACKEND_DOMAIN${NC}"
+    else
+        echo -e "${RED}ERRO: Falha ao gerar SSL.${NC}"
+    fi
+}
+
+regenerate_ssl_jjh() {
+    echo -e "\n${YELLOW}--- GERENCIANDO SSL: $JJH_APP_NAME ---${NC}"
+    echo "-> Tentando remover certificados existentes..."
+    
+    sudo certbot delete --cert-name "$JJH_DOMAIN" --non-interactive 2>/dev/null
+    
+    echo "-> Gerando novo certificado SSL..."
+    sudo certbot --nginx -d "$JJH_DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL"
+    
+    if [ $? -eq 0 ]; then
+        sudo systemctl restart nginx
+        echo -e "${GREEN}-> SSL recriado com sucesso para $JJH_DOMAIN${NC}"
+    else
+        echo -e "${RED}ERRO: Falha ao gerar SSL.${NC}"
+    fi
+}
+
 # --- FINAL MESSAGE FUNCTIONS ---
 
 print_success_message_two_domains() {
@@ -400,10 +441,12 @@ show_main_menu() {
         echo "  7) Remover Jiu-Jitsu Hub"
         echo "  8) Remover AMBOS os sistemas"
         echo
-        echo "  9) Sair"
+        echo "  9) Gerar/Recriar SSL Gerencia Boleto"
+        echo "  10) Gerar/Recriar SSL Jiu-Jitsu Hub"
+        echo "  11) Sair"
         echo
 
-        read -p "Opção [1-9]: " choice
+        read -p "Opção [1-11]: " choice
 
         case $choice in
             1) install_gb ;;
@@ -414,7 +457,9 @@ show_main_menu() {
             6) remove_system "$GB_FRONTEND_DOMAIN" "$GB_APP_DIR" "$GB_APP_NAME" "$GB_BACKEND_DOMAIN" ;;
             7) remove_system "$JJH_DOMAIN" "$JJH_APP_DIR" "$JJH_APP_NAME" ;;
             8) remove_system "$GB_FRONTEND_DOMAIN" "$GB_APP_DIR" "$GB_APP_NAME" "$GB_BACKEND_DOMAIN" ; remove_system "$JJH_DOMAIN" "$JJH_APP_DIR" "$JJH_APP_NAME" ;;
-            9) echo "Saindo."; exit 0 ;;
+            9) regenerate_ssl_gb ;;
+            10) regenerate_ssl_jjh ;;
+            11) echo "Saindo."; exit 0 ;;
             *) echo -e "${RED}Opção inválida. Tente novamente.${NC}" ;;
         esac
     done
