@@ -15,10 +15,16 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         ...options.headers,
     };
     
-    // Get token from LocalStorage and attach to header
+    // Get token from LocalStorage
     const token = localStorage.getItem('authToken');
-    // Strict check to ensure we don't send invalid token strings
-    if (token && token !== 'undefined' && token !== 'null' && token.length > 10) {
+    
+    // Logic to determine if we should attach the token.
+    // We explicitly SKIP the token for the public settings endpoint to prevent 401 errors
+    // if the token is expired/invalid when the app initializes.
+    const isPublicEndpoint = endpoint === '/settings';
+    
+    // Sanitize token: ensure it exists, isn't the string "undefined" or "null", and has reasonable length
+    if (!isPublicEndpoint && token && token !== 'undefined' && token !== 'null' && token.length > 10) {
         headers['Authorization'] = `Bearer ${token}`;
     }
     
@@ -36,8 +42,10 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
             errorMessage = response.statusText;
         }
         
+        // Handle Auth Errors
         if (response.status === 401 || response.status === 403) {
-            // Don't trigger global logout if it's just the settings endpoint failing
+            // Don't trigger global logout/session-expired if it's just the public settings endpoint failing
+            // This prevents a redirect loop if settings fail to load.
             if (!endpoint.includes('/settings')) {
                 window.dispatchEvent(new Event('session-expired'));
             }

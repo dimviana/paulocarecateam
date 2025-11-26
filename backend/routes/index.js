@@ -11,12 +11,13 @@ const router = express.Router();
 // ==============================================================================
 // PUBLIC ROUTES (No Authentication Required)
 // ==============================================================================
+// These routes MUST be defined before 'router.use(requireAuth)'
 
-// Settings (Required for Login Page)
+// Settings (Required for Login Page & Public Page)
 router.get('/settings', settingsController.getPublicSettings);
 
 // Authentication
-router.get('/auth/session', authController.getSession);
+router.get('/auth/session', authController.getSession); // Check session status
 router.post('/auth/login', authController.login);
 router.post('/auth/register', authController.register);
 router.post('/auth/logout', authController.logout);
@@ -25,13 +26,14 @@ router.post('/auth/google', (req, res) => res.status(501).json({message: "Not co
 // ==============================================================================
 // AUTHENTICATION BARRIER
 // ==============================================================================
+// All routes defined below this line will require a valid JWT token.
 router.use(requireAuth);
 
 // ==============================================================================
 // PROTECTED ROUTES (Require Valid Token)
 // ==============================================================================
 
-// Settings (Protected)
+// Settings (Protected - Admin Only)
 router.get('/settings/all', settingsController.getAllSettings);
 router.put('/settings', settingsController.updateSettings);
 
@@ -50,7 +52,7 @@ router.delete('/academies/:id', dataController.deleteAcademy);
 // Graduations
 router.get('/graduations', dataController.getGraduations);
 router.post('/graduations', dataController.createGraduation);
-router.put('/graduations/ranks', dataController.updateGraduationRanks); // Must be before :id
+router.put('/graduations/ranks', dataController.updateGraduationRanks);
 router.put('/graduations/:id', dataController.updateGraduation);
 router.delete('/graduations/:id', dataController.deleteGraduation);
 

@@ -6,16 +6,33 @@ const getPublicSettings = async (req, res) => {
     try {
         const db = getDb();
         const [rows] = await db.query(`SELECT * FROM theme_settings WHERE id = 1`);
-        res.json(rows[0] || {});
+        
+        // Return DB settings or empty object if not found
+        if (rows && rows.length > 0) {
+            res.json(rows[0]);
+        } else {
+            // Fallback if table exists but is empty
+            throw new Error("No settings found in DB");
+        }
     } catch (e) { 
-        console.error("Error fetching settings:", e);
-        // Fallback to prevent app crash on init
+        console.error("Error fetching settings (returning defaults):", e.message);
+        // Robust Fallback to prevent app crash on init or DB error
         res.json({
             systemName: 'Jiu-Jitsu Hub',
             primaryColor: '#f59e0b',
             secondaryColor: '#111827',
             logoUrl: 'https://tailwindui.com/img/logos/mark.svg?color=amber&shade=500',
-            publicPageEnabled: true
+            publicPageEnabled: true,
+            // Add other essential defaults to prevent UI glitches
+            backgroundColor: '#f8fafc',
+            cardBackgroundColor: '#ffffff',
+            buttonColor: '#f59e0b',
+            buttonTextColor: '#ffffff',
+            iconColor: '#64748b',
+            chartColor1: '#f9a825',
+            chartColor2: '#475569',
+            copyrightText: 'ABILDEVELOPER',
+            systemVersion: '1.0.0'
         }); 
     }
 };
