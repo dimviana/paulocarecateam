@@ -245,6 +245,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const loggedInUser = await api.login(email, password);
       if (loggedInUser) {
         setUser(loggedInUser);
+        // Ensure data is fetched before resolving
         await refetchData(loggedInUser);
         return true;
       }

@@ -185,7 +185,7 @@ const parseCookies = (req) => {
 
 const createSession = async (user) => {
     const sessionId = uuidv4();
-    // 20 minutes expiration
+    // 20 minutes expiration (Server side check)
     const expires = new Date(Date.now() + 20 * 60 * 1000); 
     
     // Format date for MySQL
@@ -208,6 +208,7 @@ const validateSession = async (sessionId) => {
     const now = new Date();
     const expiry = new Date(session.expires);
 
+    // Check expiry (Server Time)
     if (now > expiry) {
         await db.query('DELETE FROM sessions WHERE sessionId = ?', [sessionId]);
         return null;
@@ -237,12 +238,14 @@ const requireAuth = async (req, res, next) => {
         const sessionId = cookies.sessionId;
         
         if (!sessionId) {
+            console.log('[Auth] Blocked: No session cookie found.');
             return res.status(401).json({ message: 'Não autenticado (sem cookie).' });
         }
 
         const user = await validateSession(sessionId);
         
         if (!user) {
+            console.log(`[Auth] Blocked: Session invalid or expired. ID: ${sessionId}`);
             return res.status(401).json({ message: 'Sessão inválida ou expirada.' });
         }
 
@@ -344,11 +347,12 @@ app.post('/api/auth/login', async (req, res) => {
         // 4. Create Session
         const { sessionId, expires } = await createSession(user);
 
+        // Use maxAge instead of expires for better timezone compatibility
         res.cookie('sessionId', sessionId, {
             httpOnly: true,
-            secure: false, // Disabled for maximum compatibility in non-HTTPS environments
+            secure: false, 
             sameSite: 'Lax',
-            expires
+            maxAge: 20 * 60 * 1000 // 20 minutes in milliseconds
         });
         
         await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
@@ -386,9 +390,9 @@ app.post('/api/auth/google', async (req, res) => {
 
         res.cookie('sessionId', sessionId, {
             httpOnly: true,
-            secure: false, // Disabled for maximum compatibility
+            secure: false, 
             sameSite: 'Lax',
-            expires
+            maxAge: 20 * 60 * 1000 // 20 minutes
         });
 
         await logActivity(user.id, 'Login Google', 'Login via Google realizado.');
@@ -436,9 +440,9 @@ app.post('/api/auth/register', async (req, res) => {
 
         res.cookie('sessionId', sessionId, { 
             httpOnly: true, 
-            secure: false, // Ensure cookie is set even without HTTPS
+            secure: false, 
             sameSite: 'Lax', 
-            expires 
+            maxAge: 20 * 60 * 1000 // 20 minutes
         });
         res.status(201).json(newUser);
     } catch (error) {
