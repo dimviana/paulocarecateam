@@ -118,8 +118,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const refetchData = useCallback(async (loggedInUser: User | null) => {
-      // Ensure we don't fetch data if there is no user logged in
-      if (!loggedInUser) return;
+      // Strict check: Ensure we don't fetch data if there is no valid user logged in
+      if (!loggedInUser || !loggedInUser.id) return;
 
       try {
         const dataPromises: Promise<any>[] = [
@@ -214,7 +214,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 // Now this returns User | null, it doesn't throw 401 on failure
                 validatedUser = await api.validateSession();
             } catch (e) {
-                console.warn("Session validation error:", e);
+                // Silence expected auth errors during initialization
+                // console.warn("Session validation error:", e);
             }
 
             // 3. If user exists, fetch protected data
@@ -222,10 +223,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 setUser(validatedUser); 
                 await refetchData(validatedUser); 
             } else {
-                console.log("No active session found on startup.");
+                // Normal state for first load if not logged in
+                // console.log("No active session found on startup.");
             }
             
         } catch (error) {
+            // Only handle non-auth errors here if critical
             handleApiError(error, 'initializeApp');
         } finally {
             setLoading(false);
