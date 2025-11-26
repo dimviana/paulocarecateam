@@ -119,7 +119,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const refetchData = useCallback(async (loggedInUser: User | null) => {
       // Strict check: Ensure we don't fetch data if there is no valid user logged in
-      if (!loggedInUser || !loggedInUser.id) return;
+      if (!loggedInUser || !loggedInUser.id) {
+          // console.log("Skipping refetchData: No user logged in.");
+          return;
+      }
 
       try {
         const dataPromises: Promise<any>[] = [
