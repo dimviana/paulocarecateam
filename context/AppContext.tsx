@@ -84,7 +84,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const handleApiError = useCallback((error: any, context: string) => {
     console.error(`API Error in ${context}:`, error);
     // Ignorar erros 401 silenciosos (sessão expirada é tratada pelo event listener)
-    if (error?.message?.includes('401') || error?.message?.includes('Não autenticado')) return;
+    if (error?.message?.includes('401') || error?.message?.includes('Não autenticado') || error?.message?.includes('Token')) return;
 
     let message = 'Falha de Conexão';
     let details = 'Verifique sua conexão.';
@@ -97,9 +97,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const logout = useCallback(async () => {
     try {
-      await api.logout();
+      await api.logout(); // Clears server session if any, deletes local token
     } catch(e) {
-      console.warn("Logout failed on server, clearing local state anyway");
+      console.warn("Logout server call failed", e);
+      localStorage.removeItem('authToken'); // Ensure token is gone
     }
     setUser(null);
   }, []);
@@ -164,7 +165,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     const handleSessionExpired = () => {
-        console.warn("Session expired (401). Logging out.");
+        console.warn("Token expired (401/403). Logging out.");
+        localStorage.removeItem('authToken');
         setUser(null); 
     };
     window.addEventListener('session-expired', handleSessionExpired);
@@ -209,7 +211,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 console.warn("Could not load settings (using defaults)", error);
             }
 
-            // 2. Validate Session (Cookie) - Fail silently
+            // 2. Validate Token - Fail silently
             try {
                 const validatedUser = await api.validateSession();
                 if (validatedUser) {
@@ -217,7 +219,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     await refetchData(validatedUser);
                 }
             } catch (e) {
-                // Not logged in, expected behavior
+                // Not logged in or token invalid, expected behavior
             }
         } catch (error) {
             console.error("Critical Init error", error);

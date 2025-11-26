@@ -5,7 +5,7 @@ const API_URL = '/api';
 
 /**
  * A generic wrapper around the Fetch API.
- * STATEFUL: Uses credentials: 'include' to send/receive cookies.
+ * STATELESS: Uses Bearer Token in headers (JWT).
  */
 async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_URL}${endpoint}`;
@@ -15,12 +15,16 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         ...options.headers,
     };
     
-    // credentials: 'include' tells the browser to send cookies with the request.
-    // This is crucial for our Cookie-based Session Auth.
+    // Get token from LocalStorage and attach to header
+    const token = localStorage.getItem('authToken');
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     const response = await fetch(url, { 
         ...options, 
-        headers,
-        credentials: 'include' 
+        headers
+        // credentials: 'include' removed as we are using JWT Headers now
     });
 
     if (!response.ok) {
@@ -32,7 +36,7 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
             errorMessage = response.statusText;
         }
         
-        if (response.status === 401) {
+        if (response.status === 401 || response.status === 403) {
             window.dispatchEvent(new Event('session-expired'));
         }
         
@@ -46,38 +50,62 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
     return response.json() as Promise<T>;
 }
 
+// Helper interface for Login response
+interface LoginResponse {
+    user: User;
+    token: string;
+}
+
 export const api = {
-  login: (email: string, password: string): Promise<User> => {
-    return fetchWrapper<User>('/auth/login', {
+  login: async (email: string, password: string): Promise<User> => {
+    const response = await fetchWrapper<LoginResponse>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ 
           username: email, 
           password: password
         }),
     });
+    
+    if (response.token) {
+        localStorage.setItem('authToken', response.token);
+    }
+    return response.user;
   },
 
-  loginGoogle: (token: string): Promise<User> => {
-    return fetchWrapper<User>('/auth/google', {
+  loginGoogle: async (token: string): Promise<User> => {
+    const response = await fetchWrapper<LoginResponse>('/auth/google', {
         method: 'POST',
         body: JSON.stringify({ token }),
     });
+
+    if (response.token) {
+        localStorage.setItem('authToken', response.token);
+    }
+    return response.user;
   },
   
-  logout: (): Promise<void> => {
-      return fetchWrapper('/auth/logout', { method: 'POST' });
+  logout: async (): Promise<void> => {
+      try {
+        await fetchWrapper('/auth/logout', { method: 'POST' });
+      } finally {
+        localStorage.removeItem('authToken');
+      }
   },
 
   validateSession: async (): Promise<User | null> => {
+      const token = localStorage.getItem('authToken');
+      if (!token) return null;
+
       try {
           const response = await fetchWrapper<{user: User | null}>('/auth/session');
           return response.user;
       } catch (e) {
+          localStorage.removeItem('authToken');
           return null;
       }
   },
 
-  registerAcademy: (data: { 
+  registerAcademy: async (data: { 
     name: string; 
     address: string;
     responsible: string;
@@ -85,10 +113,15 @@ export const api = {
     email: string; 
     password?: string; 
   }): Promise<User> => {
-    return fetchWrapper<User>('/auth/register', {
+    const response = await fetchWrapper<LoginResponse>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),
     });
+
+    if (response.token) {
+        localStorage.setItem('authToken', response.token);
+    }
+    return response.user;
   },
 
   getStudents: (): Promise<Student[]> => fetchWrapper<Student[]>('/students'),
