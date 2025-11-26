@@ -5,35 +5,23 @@ const API_URL = '/api';
 
 /**
  * A generic wrapper around the Fetch API.
- * INJECTS USER ID FROM LOCAL STORAGE INTO HEADER.
- * STATELESS: Does NOT use cookies.
+ * STATEFUL: Uses credentials: 'include' to send/receive cookies.
  */
 async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_URL}${endpoint}`;
     
-    // Get current user from local storage to send ID header
-    const storedUser = localStorage.getItem('currentUser');
-    let userIdHeader: Record<string, string> = {};
-    
-    if (storedUser) {
-        try {
-            const user = JSON.parse(storedUser);
-            if (user && user.id) {
-                userIdHeader = { 'x-user-id': user.id };
-            }
-        } catch (e) {
-            console.error("Failed to parse user from storage", e);
-        }
-    }
-
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
-        ...userIdHeader,
         ...options.headers,
     };
     
-    // Note: credentials: 'include' REMOVED.
-    const response = await fetch(url, { ...options, headers });
+    // credentials: 'include' tells the browser to send cookies with the request.
+    // This is crucial for our Cookie-based Session Auth.
+    const response = await fetch(url, { 
+        ...options, 
+        headers,
+        credentials: 'include' 
+    });
 
     if (!response.ok) {
         let errorMessage = `HTTP error! status: ${response.status}`;
@@ -81,7 +69,12 @@ export const api = {
   },
 
   validateSession: async (): Promise<User | null> => {
-      return null; // Stateless - handled locally
+      try {
+          const response = await fetchWrapper<{user: User | null}>('/auth/session');
+          return response.user;
+      } catch (e) {
+          return null;
+      }
   },
 
   registerAcademy: (data: { 

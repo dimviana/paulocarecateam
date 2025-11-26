@@ -94,8 +94,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setNotification({ type: 'error', message, details });
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('currentUser');
+  const logout = useCallback(async () => {
+    try {
+      await api.logout();
+    } catch(e) {
+      console.warn("Logout failed on server, clearing local state anyway");
+    }
     setUser(null);
   }, []);
 
@@ -143,11 +147,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     const handleSessionExpired = () => {
         console.warn("Session expired (401). Logging out.");
-        logout();
+        setUser(null); // Clear local state to trigger re-login
     };
     window.addEventListener('session-expired', handleSessionExpired);
     return () => window.removeEventListener('session-expired', handleSessionExpired);
-  }, [logout]);
+  }, []);
 
 
   useEffect(() => {
@@ -179,7 +183,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const initializeApp = async () => {
         setLoading(true);
         try {
-            // 1. Always Try to load public settings
+            // 1. Load public settings (No Auth)
             try {
                 const settings = await api.getThemeSettings();
                 setThemeSettingsState(settings);
@@ -187,18 +191,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 console.warn("Could not load settings", error);
             }
 
-            // 2. Check Local Storage for User
-            const storedUserStr = localStorage.getItem('currentUser');
-            if (storedUserStr) {
-                try {
-                    const parsedUser = JSON.parse(storedUserStr);
-                    if (parsedUser && parsedUser.id) {
-                        setUser(parsedUser);
-                        await refetchData(parsedUser);
-                    }
-                } catch (e) {
-                    localStorage.removeItem('currentUser');
-                }
+            // 2. Validate Session (Cookie)
+            const validatedUser = await api.validateSession();
+            if (validatedUser) {
+                setUser(validatedUser);
+                await refetchData(validatedUser);
             }
         } catch (error) {
             console.error("Init error", error);
@@ -216,7 +213,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const loggedInUser = await api.login(email, password);
       if (loggedInUser) {
-        localStorage.setItem('currentUser', JSON.stringify(loggedInUser));
         setUser(loggedInUser);
         await refetchData(loggedInUser);
         return true;
@@ -231,7 +227,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const loggedInUser = await api.loginGoogle(token);
       if (loggedInUser) {
-        localStorage.setItem('currentUser', JSON.stringify(loggedInUser));
         setUser(loggedInUser);
         await refetchData(loggedInUser);
         return true;
@@ -247,7 +242,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
         const newUser = await api.registerAcademy(data);
         if (newUser) {
-          localStorage.setItem('currentUser', JSON.stringify(newUser));
           setUser(newUser);
           await refetchData(newUser);
           return { success: true };

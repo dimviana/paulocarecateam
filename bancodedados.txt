@@ -161,6 +161,16 @@ CREATE TABLE IF NOT EXISTS news_articles (
 );
 
 -- -----------------------------------------------------
+-- Tabela: sessions
+-- Armazena as sessões ativas dos usuários (Cookies)
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS sessions (
+    sid VARCHAR(255) PRIMARY KEY,
+    userId VARCHAR(255) NOT NULL,
+    expires BIGINT NOT NULL
+);
+
+-- -----------------------------------------------------
 -- Tabela: theme_settings
 -- Armazena todas as configurações de personalização do sistema.
 -- -----------------------------------------------------
@@ -218,8 +228,7 @@ REPLACE INTO theme_settings (id, logoUrl, systemName, primaryColor, secondaryCol
 '<div id="filiais" class="py-16 bg-white px-4"> <div class="container mx-auto text-center"> <h2 class="text-4xl font-bold text-amber-600 mb-10">Nossas Filiais</h2> <p class="text-slate-600">Aqui você pode listar suas academias. Este conteúdo é totalmente personalizável na área de configurações!</p> </div> </div>',
 '<div class="py-8 bg-slate-100 text-center text-slate-500"> <p>{{{copyright_line}}}</p> <p>Desenvolvido com a Arte Suave em mente.</p> </div>',
 '@keyframes fade-in-down { 0% { opacity: 0; transform: translateY(-20px); } 100% { opacity: 1; transform: translateY(0); } } @keyframes fade-in-up { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } } .animate-fade-in-down { animation: fade-in-down 1s ease-out forwards; } .animate-fade-in-up { animation: fade-in-up 1s ease-out 0.5s forwards; } html { scroll-behavior: smooth; }',
-'// console.log("Custom JS loaded!");',
-1, '', '', '', '', 'ABILDEVELOPER', '1.2.0'
+'// console.log("Custom JS loaded!");', 1, '', '', '', '', 'ABILDEVELOPER', '1.2.0'
 );
 
 -- Admin Geral

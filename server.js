@@ -2,7 +2,7 @@
 /**
  * ==============================================================================
  *           Backend Server for Jiu-Jitsu Hub SAAS (server.js)
- *           STATELESS ARCHITECTURE (Header-Based Auth x-user-id)
+ *           STATEFUL ARCHITECTURE (Cookies + MySQL Sessions)
  *           FLATTENED ROUTES (Explicit endpoints to fix 404s)
  * ==============================================================================
  */
@@ -17,17 +17,26 @@ const { v4: uuidv4 } = require('uuid');
 // --- Environment Variables ---
 const {
   DATABASE_URL,
-  PORT = 3001
+  PORT = 3001,
+  FRONTEND_URL
 } = process.env;
 
 // --- Express App ---
 const app = express();
 app.set('trust proxy', 1);
 
-// CORS: Allow all origins for stateless auth to prevent header stripping.
-// Safe here because we rely on a custom header + internal DB validation, not cookies.
+// CORS: MUST allow credentials and specific origin for cookies to work.
 app.use(cors({
-  origin: '*', 
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    // Allow specific frontend origin (can add more logic if needed)
+    if (origin === FRONTEND_URL || origin.includes('localhost') || origin.includes('abildeveloper.com.br')) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id']
 }));
@@ -50,7 +59,7 @@ async function connectToDatabase() {
   }
 }
 
-// Ensure Theme Settings exist in DB so frontend doesn't get 404/Empty
+// Ensure Theme Settings exist in DB
 async function ensureDefaultSettings() {
     try {
         const [[settings]] = await db.query('SELECT id FROM theme_settings WHERE id = 1');
@@ -71,31 +80,69 @@ async function ensureDefaultSettings() {
     } catch (e) { console.error("Seeding error:", e); }
 }
 
-// --- Middleware: Auth Check (Stateless) ---
+// --- Helper: Cookie Parser (Regex to avoid deps) ---
+const parseCookies = (cookieHeader) => {
+    const list = {};
+    if (!cookieHeader) return list;
+    cookieHeader.split(';').forEach(function(cookie) {
+        let parts = cookie.split('=');
+        list[parts.shift().trim()] = decodeURI(parts.join('='));
+    });
+    return list;
+}
+
+// --- Middleware: Auth Check (Stateful - via DB Sessions) ---
 const requireAuth = async (req, res, next) => {
     if (req.method === 'OPTIONS') return next();
 
     try {
-        const userId = req.headers['x-user-id'];
-        
-        if (!userId) {
-            console.log(`[Auth] Blocked ${req.method} ${req.path}: Missing x-user-id header`);
-            return res.status(401).json({ message: 'Não autenticado (Header ausente).' });
+        // 1. Get Cookie
+        const cookies = parseCookies(req.headers.cookie);
+        const sessionId = cookies['sessionId'];
+
+        if (!sessionId) {
+            console.log('[Auth] No cookie found');
+            return res.status(401).json({ message: 'Não autenticado (Sem cookie).' });
         }
 
-        // Verify if user exists in DB
-        const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [userId]);
+        // 2. Check DB for Session
+        const [[session]] = await db.query('SELECT * FROM sessions WHERE sid = ?', [sessionId]);
         
-        if (!user) {
-            console.log(`[Auth] Blocked ${req.method} ${req.path}: Invalid User ID ${userId}`);
-            return res.status(401).json({ message: 'Usuário inválido ou removido.' });
+        if (!session) {
+            console.log('[Auth] Session not found in DB');
+            return res.status(401).json({ message: 'Sessão inválida.' });
         }
+
+        if (session.expires < Date.now()) {
+            console.log('[Auth] Session expired');
+            await db.query('DELETE FROM sessions WHERE sid = ?', [sessionId]);
+            return res.status(401).json({ message: 'Sessão expirada.' });
+        }
+
+        // 3. Get User Info
+        const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [session.userId]);
+        if (!user) {
+             return res.status(401).json({ message: 'Usuário da sessão não encontrado.' });
+        }
+
+        // 4. Extend Session (Rolling Expiration) - 20 mins
+        const newExpires = Date.now() + (20 * 60 * 1000);
+        await db.query('UPDATE sessions SET expires = ? WHERE sid = ?', [newExpires, sessionId]);
+        
+        // Set cookie again to update browser expiration
+        res.cookie('sessionId', sessionId, {
+            httpOnly: true,
+            secure: false, // Set true if HTTPS is guaranteed
+            sameSite: 'Lax',
+            path: '/',
+            maxAge: 20 * 60 * 1000 
+        });
 
         req.user = user;
         next();
     } catch (error) {
         console.error("Auth Middleware Error:", error);
-        res.status(500).json({ message: "Erro de autenticação." });
+        res.status(500).json({ message: "Erro de autenticação no servidor." });
     }
 };
 
@@ -103,7 +150,7 @@ const requireAuth = async (req, res, next) => {
 // ROUTES (Public)
 // =============================================================================
 
-// Public Settings (Always allowed)
+// Public Settings
 app.get('/api/settings', async (req, res) => {
     try {
         const [rows] = await db.query(`SELECT * FROM theme_settings WHERE id = 1`);
@@ -114,9 +161,22 @@ app.get('/api/settings', async (req, res) => {
     }
 });
 
-// Dummy session check for frontend initialization compatibility
-app.get('/api/auth/session', (req, res) => {
-    res.json({ user: null });
+// Check Session (Called by frontend on init)
+app.get('/api/auth/session', async (req, res) => {
+    try {
+        const cookies = parseCookies(req.headers.cookie);
+        const sessionId = cookies['sessionId'];
+        if (!sessionId) return res.json({ user: null });
+
+        const [[session]] = await db.query('SELECT * FROM sessions WHERE sid = ? AND expires > ?', [sessionId, Date.now()]);
+        if (!session) return res.json({ user: null });
+
+        const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [session.userId]);
+        res.json({ user: user || null });
+    } catch (e) {
+        console.error("Session Check Error:", e);
+        res.json({ user: null });
+    }
 });
 
 // Login
@@ -128,7 +188,7 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const cleanUsername = username.includes('@') ? username : username.replace(/\D/g, '');
         
-        // 1. Find User (Check Users table linked to Students/Academies)
+        // 1. Find User
         const [[user]] = await db.query(
             'SELECT u.* FROM users u LEFT JOIN students s ON u.studentId = s.id WHERE u.email = ? OR s.cpf = ?', 
             [cleanUsername, cleanUsername]
@@ -136,7 +196,7 @@ app.post('/api/auth/login', async (req, res) => {
         
         if (!user) return res.status(401).json({ message: 'Usuário não encontrado.' });
 
-        // 2. Verify Password
+        // 2. Verify Password based on Role
         let passwordHash = null;
         if (user.role === 'student' && user.studentId) {
              const [[student]] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
@@ -156,7 +216,21 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(401).json({ message: 'Senha incorreta.' });
         }
 
-        // 3. Success
+        // 3. Create Session
+        const sessionId = uuidv4();
+        const expiresAt = Date.now() + (20 * 60 * 1000); // 20 minutes
+        
+        await db.query('INSERT INTO sessions (sid, userId, expires) VALUES (?, ?, ?)', [sessionId, user.id, expiresAt]);
+
+        // 4. Set Cookie
+        res.cookie('sessionId', sessionId, {
+            httpOnly: true,
+            secure: false, // Important for HTTP environments
+            sameSite: 'Lax',
+            path: '/',
+            maxAge: 20 * 60 * 1000
+        });
+
         res.json({ 
             id: user.id, 
             name: user.name, 
@@ -174,29 +248,20 @@ app.post('/api/auth/login', async (req, res) => {
 
 // Register
 app.post('/api/auth/register', async (req, res) => {
-    console.log('[POST] /api/auth/register');
-    // Destructure explicitly to handle optional fields correctly
     const { name, address, responsible, responsibleRegistration, email, password, professorId, imageUrl } = req.body;
     
-    if (!email || !password || !name) {
-        return res.status(400).json({ message: 'Campos obrigatórios faltando.' });
-    }
+    if (!email || !password || !name) return res.status(400).json({ message: 'Campos obrigatórios faltando.' });
 
     const conn = await db.getConnection();
     try {
         await conn.beginTransaction();
-        
         const [[existing]] = await conn.query('SELECT id FROM users WHERE email = ?', [email]);
-        if (existing) { 
-            await conn.rollback(); 
-            return res.status(400).json({ message: 'Email já existe.' }); 
-        }
+        if (existing) { await conn.rollback(); return res.status(400).json({ message: 'Email já existe.' }); }
 
         const academyId = uuidv4();
         const userId = uuidv4();
         const hash = await bcrypt.hash(password, 10);
 
-        // Fix: Use NULL for undefined/empty optional fields
         await conn.query(
             'INSERT INTO academies (id, name, address, responsible, responsibleRegistration, professorId, imageUrl, email, password) VALUES (?,?,?,?,?,?,?,?,?)', 
             [academyId, name, address, responsible, responsibleRegistration, professorId || null, imageUrl || null, email, hash]
@@ -209,30 +274,39 @@ app.post('/api/auth/register', async (req, res) => {
         
         await conn.commit();
         
+        // Auto Login after Register
+        const sessionId = uuidv4();
+        const expiresAt = Date.now() + (20 * 60 * 1000);
+        await db.query('INSERT INTO sessions (sid, userId, expires) VALUES (?, ?, ?)', [sessionId, userId, expiresAt]);
+
+        res.cookie('sessionId', sessionId, { httpOnly: true, secure: false, sameSite: 'Lax', path: '/', maxAge: 20 * 60 * 1000 });
+
         const [[newUser]] = await conn.query('SELECT id, name, email, role, academyId FROM users WHERE id = ?', [userId]);
         res.status(201).json(newUser);
 
     } catch (e) { 
-        console.error('Register Error:', e);
         await conn.rollback(); 
-        res.status(500).json({ message: 'Erro no cadastro: ' + e.message }); 
-    } finally { 
-        conn.release(); 
-    }
+        console.error(e);
+        res.status(500).json({ message: 'Erro no cadastro.' }); 
+    } finally { conn.release(); }
 });
 
-// Google Login Stub
+app.post('/api/auth/logout', async (req, res) => {
+    const cookies = parseCookies(req.headers.cookie);
+    const sessionId = cookies['sessionId'];
+    if (sessionId) {
+        await db.query('DELETE FROM sessions WHERE sid = ?', [sessionId]);
+    }
+    res.clearCookie('sessionId', { path: '/' });
+    res.json({ message: 'Logged out' });
+});
+
 app.post('/api/auth/google', async (req, res) => {
     res.status(501).json({message: "Google Auth not configured on backend yet."});
 });
 
-app.post('/api/auth/logout', (req, res) => {
-    res.json({ message: 'Logged out' });
-});
-
 // =============================================================================
-// PROTECTED ROUTES (Require x-user-id)
-// Defined EXPLICITLY (no routers) to avoid 404s
+// PROTECTED ROUTES (Require Cookie Session)
 // =============================================================================
 
 // Students
@@ -290,6 +364,9 @@ app.get('/api/academies', requireAuth, async (req, res) => {
         res.json(rows);
     } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
 });
+app.post('/api/academies', requireAuth, async (req, res) => {
+    res.status(501).json({message: "Use public register endpoint"});
+});
 app.put('/api/academies/:id', requireAuth, async (req, res) => {
     const d = req.body;
     try {
@@ -319,18 +396,18 @@ app.post('/api/graduations', requireAuth, async (req, res) => {
         res.json({...d, id});
     } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
 });
+app.put('/api/graduations/ranks', requireAuth, async (req, res) => {
+    try {
+        for(const item of req.body) await db.query('UPDATE graduations SET `rank`=? WHERE id=?', [item.rank, item.id]);
+        res.json({success:true});
+    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
+});
 app.put('/api/graduations/:id', requireAuth, async (req, res) => {
     const d = req.body;
     try {
         await db.query('UPDATE graduations SET name=?, color=?, minTimeInMonths=?, `rank`=?, type=?, minAge=?, maxAge=? WHERE id=?',
             [d.name,d.color,d.minTimeInMonths,d.rank,d.type,d.minAge,d.maxAge,req.params.id]);
         res.json(d);
-    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
-});
-app.put('/api/graduations/ranks', requireAuth, async (req, res) => {
-    try {
-        for(const item of req.body) await db.query('UPDATE graduations SET `rank`=? WHERE id=?', [item.rank, item.id]);
-        res.json({success:true});
     } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
 });
 app.delete('/api/graduations/:id', requireAuth, async (req, res) => {
@@ -421,7 +498,7 @@ app.get('/api/news', requireAuth, async (req, res) => {
     res.json(rows);
 });
 
-// Settings (Protected Full Access)
+// Settings
 app.get('/api/settings/all', requireAuth, async (req, res) => {
     const [[rows]] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
     res.json(rows);

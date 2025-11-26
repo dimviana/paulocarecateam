@@ -23,13 +23,6 @@ const formatCPF = (value: string): string => {
   return value.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').replace(/(-\d{2})\d+?$/, '$1');
 };
 
-const validateCPF = (cpf: string): boolean => {
-    if (typeof cpf !== 'string') return false;
-    cpf = cpf.replace(/[^\d]+/g, '');
-    if (cpf.length !== 11 || !!cpf.match(/(\d)\1{10}/)) return false;
-    return true; // simplified for brevity, full check in AppContext if needed
-};
-
 interface RegisterFormProps {
   onSave: (data: any) => Promise<{ success: boolean; message?: string }>;
   onClose: () => void;
