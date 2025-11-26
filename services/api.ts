@@ -6,7 +6,7 @@ const API_URL = '/api';
 /**
  * A generic wrapper around the Fetch API.
  * INJECTS USER ID FROM LOCAL STORAGE INTO HEADER.
- * STATELESS: Does NOT use cookies (credentials: include removed).
+ * STATELESS: Does NOT use cookies.
  */
 async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_URL}${endpoint}`;
@@ -32,7 +32,7 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         ...options.headers,
     };
     
-    // credentials: 'include' IS REMOVED because we are using header-based stateless auth.
+    // Note: credentials: 'include' REMOVED.
     const response = await fetch(url, { ...options, headers });
 
     if (!response.ok) {
@@ -80,10 +80,8 @@ export const api = {
       return fetchWrapper('/auth/logout', { method: 'POST' });
   },
 
-  // No server-side session validation endpoint needed in stateless.
-  // We handle state locally.
   validateSession: async (): Promise<User | null> => {
-      return null; 
+      return null; // Stateless - handled locally
   },
 
   registerAcademy: (data: { 
