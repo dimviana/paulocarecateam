@@ -83,7 +83,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const handleApiError = useCallback((error: any, context: string) => {
     console.error(`API Error in ${context}:`, error);
-    if (error?.message?.includes('401') || error?.message?.includes('Não autenticado') || error?.message?.includes('Token') || error?.message?.includes('Session expired')) return;
+    if (error?.message?.includes('401') || error?.message?.includes('403') || 
+        (context === 'getThemeSettings' && error?.message?.includes('404'))) {
+        return;
+    }
 
     let message = 'Falha de Conexão';
     let details = 'Verifique sua conexão.';
@@ -131,6 +134,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const getVal = <T,>(result: PromiseSettledResult<any> | undefined, fallback: T): T => 
             result && result.status === 'fulfilled' ? result.value : fallback;
 
+        results.forEach((res, idx) => {
+            if (res.status === 'rejected') {
+                console.warn(`Failed to fetch data at index ${idx}:`, res.reason);
+            }
+        });
+
         setStudents(getVal<Student[]>(results[0], []));
         setAcademies(getVal<Academy[]>(results[1], []));
         setGraduations(getVal<Graduation[]>(results[2], []));
@@ -152,7 +161,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     const handleSessionExpired = () => {
-        console.warn("Token expired. Logging out.");
+        console.warn("Token expired (401/403). Logging out.");
         localStorage.removeItem('authToken');
         localStorage.removeItem('refreshToken');
         setUser(null); 
@@ -206,10 +215,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     const validatedUser = await api.validateSession();
                     if (validatedUser) {
                         setUser(validatedUser);
-                        // Don't await refetch here to unblock UI faster, handle in background
-                        refetchData(validatedUser);
+                        // We await refetchData here to ensure data is ready before hiding loading screen
+                        await refetchData(validatedUser);
                     } else {
-                        // Token invalid
                         localStorage.removeItem('authToken');
                         localStorage.removeItem('refreshToken');
                     }
@@ -225,7 +233,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
     initializeApp();
-  }, []); // Empty dependency array to run once on mount
+  }, []); 
 
   useEffect(() => { localStorage.setItem('showcasedComponents', JSON.stringify(showcasedComponents)); }, [showcasedComponents]);
   useEffect(() => { document.documentElement.classList.remove('dark'); }, []);
@@ -234,6 +242,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const loggedInUser = await api.login(email, password);
       if (loggedInUser) {
+        // Important: Set User AND await data fetch before returning true
+        // This ensures Login.tsx waits for data before redirecting
         setUser(loggedInUser);
         await refetchData(loggedInUser);
         return true;

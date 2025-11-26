@@ -16,12 +16,11 @@ const router = express.Router();
 // Settings (Required for Login Page & Public Page)
 router.get('/settings', settingsController.getPublicSettings);
 
-// Authentication
+// Authentication Public Endpoints
 router.post('/auth/login', authController.login);
 router.post('/auth/register', authController.register);
-router.post('/auth/refresh', authController.refreshToken); // NEW: Refresh Token
+router.post('/auth/refresh', authController.refreshToken); // Refresh Token Endpoint
 router.post('/auth/logout', authController.logout);
-router.get('/auth/session', authController.getSession); // Check session status (validates JWT)
 router.post('/auth/google', (req, res) => res.status(501).json({message: "Not configured"}));
 
 // ==============================================================================
@@ -33,6 +32,9 @@ router.use(requireAuth);
 // ==============================================================================
 // PROTECTED ROUTES (Require Valid Token)
 // ==============================================================================
+
+// Session Check (Now protected to trigger auto-refresh if token is expired)
+router.get('/auth/session', authController.getSession);
 
 // Settings (Protected - Admin Only)
 router.get('/settings/all', settingsController.getAllSettings);

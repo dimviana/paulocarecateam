@@ -12,7 +12,7 @@ interface LoginResponse {
 
 /**
  * A generic wrapper around the Fetch API.
- * Uses JWT (Access + Refresh Tokens).
+ * STATELESS: Uses Bearer Token in headers (JWT).
  */
 async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_URL}${endpoint}`;
@@ -25,7 +25,9 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
     // Get token from LocalStorage
     let token = localStorage.getItem('authToken');
     
-    // Attach token if valid and not a public endpoint that we want to be careful about
+    // Check if we should attach the token.
+    // We explicitly SKIP the token for the public settings endpoint to prevent 401 errors
+    // if the token is expired when the app initializes.
     const isPublicEndpoint = endpoint === '/settings' || endpoint === '/auth/login' || endpoint === '/auth/refresh';
     
     if (!isPublicEndpoint && token && token !== 'undefined' && token !== 'null') {

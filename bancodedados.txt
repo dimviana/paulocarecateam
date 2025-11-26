@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS users (
     academyId TEXT, -- FK para academies (se for admin de academia)
     studentId TEXT, -- FK para students (se for aluno)
     birthDate DATE, -- Data de nascimento
-    refreshToken TEXT -- Token de atualização para JWT
+    refreshToken TEXT -- Token de atualização para JWT (Segurança)
 );
 
 -- -----------------------------------------------------
@@ -222,7 +222,7 @@ REPLACE INTO theme_settings (id, logoUrl, systemName, primaryColor, secondaryCol
 '// console.log("Custom JS loaded!");', 1, '', '', '', '', 'ABILDEVELOPER', '1.2.0'
 );
 
--- Admin Geral
+-- Admin Geral (Credentials seeded in server.js logic but structure must support it)
 DELETE FROM users WHERE email = 'androiddiviana@gmail.com';
 DELETE FROM academies WHERE email = 'androiddiviana@gmail.com';
 

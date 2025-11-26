@@ -12,7 +12,7 @@ const generateAccessToken = (user) => {
         { 
             id: user.id, 
             email: user.email, 
-            role: user.role,
+            role: user.role, 
             academyId: user.academyId,
             studentId: user.studentId,
             name: user.name
@@ -32,27 +32,20 @@ const generateRefreshToken = (user) => {
 };
 
 const getSession = async (req, res) => {
-    // Logic handled largely by middleware which attaches req.user if token is valid
-    // If the request reaches here, the token in header was valid
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) return res.json({ user: null });
-
-    // We rely on middleware to verify, but we can double check DB existence
+    // Route is protected, so req.user is already populated by authMiddleware
     try {
         const db = getDb();
-        // Using decoded ID from middleware
-        const userId = req.user ? req.user.id : null;
-        if (!userId) return res.json({ user: null });
-
+        const userId = req.user.id;
+        
+        // Fetch fresh user data from DB to ensure role/status hasn't changed
         const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [userId]);
-        if (!user) return res.json({ user: null });
+        
+        if (!user) return res.status(401).json({ user: null });
         
         res.json({ user });
     } catch (e) {
         console.error("Session check error:", e);
-        res.json({ user: null });
+        res.status(500).json({ user: null });
     }
 };
 
@@ -63,8 +56,10 @@ const login = async (req, res) => {
 
     try {
         const db = getDb();
+        // Allow login via Email or CPF (numbers only)
         const cleanUsername = username.includes('@') ? username : username.replace(/\D/g, '');
         
+        // Search in Users table (linked to Students or Academies)
         const [[user]] = await db.query(
             'SELECT u.* FROM users u LEFT JOIN students s ON u.studentId = s.id WHERE u.email = ? OR s.cpf = ?', 
             [cleanUsername, cleanUsername]
@@ -72,20 +67,19 @@ const login = async (req, res) => {
         
         if (!user) return res.status(401).json({ message: 'Usuário não encontrado.' });
 
+        // Retrieve password hash based on role
         let passwordHash = null;
+        
         if (user.role === 'student' && user.studentId) {
              const [[student]] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
              passwordHash = student?.password;
-        } else {
+        } else if (user.role === 'academy_admin' || user.role === 'general_admin') {
+             // Admins usually have their password in the academies table or passed from seed
              const [[academy]] = await db.query('SELECT password FROM academies WHERE email = ?', [user.email]);
              passwordHash = academy?.password;
         }
 
-        if (!passwordHash && user.role === 'general_admin') {
-             const [[seedAcademy]] = await db.query('SELECT password FROM academies WHERE email = ?', [user.email]);
-             passwordHash = seedAcademy?.password;
-        }
-
+        // Verify Password
         if (!passwordHash || !(await bcrypt.compare(password, passwordHash))) {
             return res.status(401).json({ message: 'Senha incorreta.' });
         }
@@ -94,7 +88,7 @@ const login = async (req, res) => {
         const accessToken = generateAccessToken(user);
         const refreshToken = generateRefreshToken(user);
 
-        // Save Refresh Token to DB
+        // Save Refresh Token to DB for security (Revocation capability)
         await db.query('UPDATE users SET refreshToken = ? WHERE id = ?', [refreshToken, user.id]);
 
         const userData = { 
@@ -120,7 +114,7 @@ const refreshToken = async (req, res) => {
 
     try {
         const db = getDb();
-        // Find user with this refresh token
+        // Validate Refresh Token existence in DB (Security check)
         const [[user]] = await db.query('SELECT * FROM users WHERE refreshToken = ?', [refreshToken]);
         if (!user) return res.status(403).json({ message: "Invalid Refresh Token" });
 
@@ -187,6 +181,7 @@ const logout = async (req, res) => {
     
     if (token) {
         try {
+            // Decode token to get user ID without verifying expiration (logout should work even if expired)
             const decoded = jwt.decode(token);
             if (decoded && decoded.id) {
                 const db = getDb();
