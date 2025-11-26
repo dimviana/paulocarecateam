@@ -83,6 +83,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const handleApiError = useCallback((error: any, context: string) => {
     console.error(`API Error in ${context}:`, error);
+    // Ignorar erros 401 silenciosos (sessão expirada é tratada pelo event listener)
     if (error?.message?.includes('401') || error?.message?.includes('Não autenticado')) return;
 
     let message = 'Falha de Conexão';
@@ -103,43 +104,60 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setUser(null);
   }, []);
 
+  // Improved refetchData using Promise.allSettled to avoid cascading failures
   const refetchData = useCallback(async (loggedInUser: User | null) => {
       if (!loggedInUser || !loggedInUser.id) return;
 
       try {
-        const dataPromises: Promise<any>[] = [
-            api.getStudents(),
-            api.getAcademies(),
-            api.getGraduations(),
-            api.getSchedules(),
-            api.getUsers(),
-            api.getAttendanceRecords(),
-            api.getProfessors(),
-            api.getActivityLogs(),
-            api.getNews(),
+        // Fix: Explicitly type promises array to allow mixed Promise types
+        const promises: Promise<any>[] = [
+            api.getStudents(),       // 0
+            api.getAcademies(),      // 1
+            api.getGraduations(),    // 2
+            api.getSchedules(),      // 3
+            api.getUsers(),          // 4
+            api.getAttendanceRecords(), // 5
+            api.getProfessors(),     // 6
+            api.getActivityLogs(),   // 7
+            api.getNews(),           // 8
         ];
 
-        if (loggedInUser.role === 'general_admin') {
-            dataPromises.push(api.getAllThemeSettings());
+        // Add settings only for admin
+        const isAdmin = loggedInUser.role === 'general_admin';
+        if (isAdmin) {
+            promises.push(api.getAllThemeSettings()); // 9
         }
 
-        const results = await Promise.all(dataPromises);
+        const results = await Promise.allSettled(promises);
 
-        setStudents(results[0]);
-        setAcademies(results[1]);
-        setGraduations(results[2]);
-        setSchedules(results[3]);
-        setUsers(results[4]);
-        setAttendanceRecords(results[5]);
-        setProfessors(results[6]);
-        setActivityLogs(results[7]);
-        setNews(results[8]);
+        // Helper to safely get value with explicit typing
+        const getVal = <T,>(result: PromiseSettledResult<any> | undefined, fallback: T): T => 
+            result && result.status === 'fulfilled' ? result.value : fallback;
 
-        if (loggedInUser.role === 'general_admin' && results.length > 9) {
-             setThemeSettingsState(results[9] as ThemeSettings);
+        // Helper to log errors
+        results.forEach((res, idx) => {
+            if (res.status === 'rejected') {
+                console.warn(`Failed to fetch data at index ${idx}:`, res.reason);
+            }
+        });
+
+        // Use generic casting for state updates
+        setStudents(getVal<Student[]>(results[0], []));
+        setAcademies(getVal<Academy[]>(results[1], []));
+        setGraduations(getVal<Graduation[]>(results[2], []));
+        setSchedules(getVal<ClassSchedule[]>(results[3], []));
+        setUsers(getVal<User[]>(results[4], []));
+        setAttendanceRecords(getVal<AttendanceRecord[]>(results[5], []));
+        setProfessors(getVal<Professor[]>(results[6], []));
+        setActivityLogs(getVal<ActivityLog[]>(results[7], []));
+        setNews(getVal<NewsArticle[]>(results[8], []));
+
+        if (isAdmin && results[9] && results[9].status === 'fulfilled') {
+             setThemeSettingsState(results[9].value as ThemeSettings);
         }
 
       } catch (error) {
+          // This catch block catches errors in the logic itself, not the API calls (handled by allSettled)
           handleApiError(error, 'refetchData');
       }
   }, [handleApiError]);
@@ -147,7 +165,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     const handleSessionExpired = () => {
         console.warn("Session expired (401). Logging out.");
-        setUser(null); // Clear local state to trigger re-login
+        setUser(null); 
     };
     window.addEventListener('session-expired', handleSessionExpired);
     return () => window.removeEventListener('session-expired', handleSessionExpired);
@@ -183,22 +201,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const initializeApp = async () => {
         setLoading(true);
         try {
-            // 1. Load public settings (No Auth)
+            // 1. Load public settings (No Auth) - Fail silently to show login
             try {
                 const settings = await api.getThemeSettings();
                 setThemeSettingsState(settings);
             } catch (error) {
-                console.warn("Could not load settings", error);
+                console.warn("Could not load settings (using defaults)", error);
             }
 
-            // 2. Validate Session (Cookie)
-            const validatedUser = await api.validateSession();
-            if (validatedUser) {
-                setUser(validatedUser);
-                await refetchData(validatedUser);
+            // 2. Validate Session (Cookie) - Fail silently
+            try {
+                const validatedUser = await api.validateSession();
+                if (validatedUser) {
+                    setUser(validatedUser);
+                    await refetchData(validatedUser);
+                }
+            } catch (e) {
+                // Not logged in, expected behavior
             }
         } catch (error) {
-            console.error("Init error", error);
+            console.error("Critical Init error", error);
         } finally {
             setLoading(false);
         }

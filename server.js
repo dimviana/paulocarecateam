@@ -28,9 +28,7 @@ app.set('trust proxy', 1);
 // CORS: MUST allow credentials and specific origin for cookies to work.
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl)
     if (!origin) return callback(null, true);
-    // Allow specific frontend origin (can add more logic if needed)
     if (origin === FRONTEND_URL || origin.includes('localhost') || origin.includes('abildeveloper.com.br')) {
       return callback(null, true);
     }
@@ -50,7 +48,7 @@ async function connectToDatabase() {
   try {
     if (!DATABASE_URL) throw new Error("DATABASE_URL missing");
     const pool = mysql.createPool(DATABASE_URL);
-    await pool.query('SELECT 1'); // Test connection
+    await pool.query('SELECT 1');
     db = pool;
     console.log('Connected to MySQL successfully.');
     await ensureDefaultSettings();
@@ -80,7 +78,7 @@ async function ensureDefaultSettings() {
     } catch (e) { console.error("Seeding error:", e); }
 }
 
-// --- Helper: Cookie Parser (Regex to avoid deps) ---
+// --- Helper: Cookie Parser (Regex) ---
 const parseCookies = (cookieHeader) => {
     const list = {};
     if (!cookieHeader) return list;
@@ -91,48 +89,44 @@ const parseCookies = (cookieHeader) => {
     return list;
 }
 
-// --- Middleware: Auth Check (Stateful - via DB Sessions) ---
+// --- Middleware: Auth Check (Stateful) ---
 const requireAuth = async (req, res, next) => {
     if (req.method === 'OPTIONS') return next();
 
     try {
-        // 1. Get Cookie
         const cookies = parseCookies(req.headers.cookie);
         const sessionId = cookies['sessionId'];
 
         if (!sessionId) {
-            console.log('[Auth] No cookie found');
+            console.log(`[Auth Fail] No sessionId cookie. Route: ${req.path}`);
             return res.status(401).json({ message: 'Não autenticado (Sem cookie).' });
         }
 
-        // 2. Check DB for Session
         const [[session]] = await db.query('SELECT * FROM sessions WHERE sid = ?', [sessionId]);
         
         if (!session) {
-            console.log('[Auth] Session not found in DB');
+            console.log(`[Auth Fail] Session not found in DB. SID: ${sessionId}`);
             return res.status(401).json({ message: 'Sessão inválida.' });
         }
 
         if (session.expires < Date.now()) {
-            console.log('[Auth] Session expired');
+            console.log('[Auth Fail] Session expired in DB');
             await db.query('DELETE FROM sessions WHERE sid = ?', [sessionId]);
             return res.status(401).json({ message: 'Sessão expirada.' });
         }
 
-        // 3. Get User Info
         const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [session.userId]);
         if (!user) {
              return res.status(401).json({ message: 'Usuário da sessão não encontrado.' });
         }
 
-        // 4. Extend Session (Rolling Expiration) - 20 mins
+        // Rolling Expiration (20 mins)
         const newExpires = Date.now() + (20 * 60 * 1000);
         await db.query('UPDATE sessions SET expires = ? WHERE sid = ?', [newExpires, sessionId]);
         
-        // Set cookie again to update browser expiration
         res.cookie('sessionId', sessionId, {
             httpOnly: true,
-            secure: false, // Set true if HTTPS is guaranteed
+            secure: false, // Adjust for HTTPS environment
             sameSite: 'Lax',
             path: '/',
             maxAge: 20 * 60 * 1000 
@@ -147,11 +141,13 @@ const requireAuth = async (req, res, next) => {
 };
 
 // =============================================================================
-// ROUTES (Public)
+// ROUTES
 // =============================================================================
 
-// Public Settings
+// 1. PUBLIC ROUTES (Must come before requireAuth)
+
 app.get('/api/settings', async (req, res) => {
+    console.log('[GET] /api/settings');
     try {
         const [rows] = await db.query(`SELECT * FROM theme_settings WHERE id = 1`);
         res.json(rows[0] || {});
@@ -161,8 +157,8 @@ app.get('/api/settings', async (req, res) => {
     }
 });
 
-// Check Session (Called by frontend on init)
 app.get('/api/auth/session', async (req, res) => {
+    // Public route to check session status without 401 error
     try {
         const cookies = parseCookies(req.headers.cookie);
         const sessionId = cookies['sessionId'];
@@ -179,7 +175,6 @@ app.get('/api/auth/session', async (req, res) => {
     }
 });
 
-// Login
 app.post('/api/auth/login', async (req, res) => {
     console.log('[POST] /api/auth/login');
     const { username, password } = req.body;
@@ -188,7 +183,7 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const cleanUsername = username.includes('@') ? username : username.replace(/\D/g, '');
         
-        // 1. Find User
+        // Find User
         const [[user]] = await db.query(
             'SELECT u.* FROM users u LEFT JOIN students s ON u.studentId = s.id WHERE u.email = ? OR s.cpf = ?', 
             [cleanUsername, cleanUsername]
@@ -196,7 +191,7 @@ app.post('/api/auth/login', async (req, res) => {
         
         if (!user) return res.status(401).json({ message: 'Usuário não encontrado.' });
 
-        // 2. Verify Password based on Role
+        // Verify Password based on Role
         let passwordHash = null;
         if (user.role === 'student' && user.studentId) {
              const [[student]] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
@@ -216,16 +211,14 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(401).json({ message: 'Senha incorreta.' });
         }
 
-        // 3. Create Session
+        // Create Session
         const sessionId = uuidv4();
-        const expiresAt = Date.now() + (20 * 60 * 1000); // 20 minutes
-        
+        const expiresAt = Date.now() + (20 * 60 * 1000); 
         await db.query('INSERT INTO sessions (sid, userId, expires) VALUES (?, ?, ?)', [sessionId, user.id, expiresAt]);
 
-        // 4. Set Cookie
         res.cookie('sessionId', sessionId, {
             httpOnly: true,
-            secure: false, // Important for HTTP environments
+            secure: false,
             sameSite: 'Lax',
             path: '/',
             maxAge: 20 * 60 * 1000
@@ -246,8 +239,8 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// Register
 app.post('/api/auth/register', async (req, res) => {
+    console.log('[POST] /api/auth/register');
     const { name, address, responsible, responsibleRegistration, email, password, professorId, imageUrl } = req.body;
     
     if (!email || !password || !name) return res.status(400).json({ message: 'Campos obrigatórios faltando.' });
@@ -274,7 +267,6 @@ app.post('/api/auth/register', async (req, res) => {
         
         await conn.commit();
         
-        // Auto Login after Register
         const sessionId = uuidv4();
         const expiresAt = Date.now() + (20 * 60 * 1000);
         await db.query('INSERT INTO sessions (sid, userId, expires) VALUES (?, ?, ?)', [sessionId, userId, expiresAt]);
@@ -302,15 +294,14 @@ app.post('/api/auth/logout', async (req, res) => {
 });
 
 app.post('/api/auth/google', async (req, res) => {
-    res.status(501).json({message: "Google Auth not configured on backend yet."});
+    res.status(501).json({message: "Google Auth not configured."});
 });
 
-// =============================================================================
-// PROTECTED ROUTES (Require Cookie Session)
-// =============================================================================
+// 2. PROTECTED ROUTES (Explicit Definitions)
 
 // Students
 app.get('/api/students', requireAuth, async (req, res) => {
+    console.log('[GET] /api/students');
     try {
         const [rows] = await db.query('SELECT * FROM students');
         const [pay] = await db.query('SELECT * FROM payment_history');
@@ -321,7 +312,7 @@ app.get('/api/students', requireAuth, async (req, res) => {
             try{ r.medals=JSON.parse(r.medals) } catch(e){ r.medals={gold:0,silver:0,bronze:0} } 
         });
         res.json(rows);
-    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
+    } catch(e) { console.error(e); res.status(500).json({message: "Error fetching students"}); }
 });
 app.post('/api/students', requireAuth, async (req, res) => {
     const d = req.body; const id = uuidv4(); const uid = uuidv4();
@@ -331,7 +322,7 @@ app.post('/api/students', requireAuth, async (req, res) => {
             [id,d.name,d.email,hash,d.birthDate,d.cpf,d.fjjpe_registration,d.phone,d.address,d.beltId,d.academyId,d.firstGraduationDate,'unpaid',d.paymentDueDateDay,d.stripes,d.isCompetitor,d.lastCompetition,JSON.stringify(d.medals),d.imageUrl]);
         await db.query('INSERT INTO users (id,name,email,role,studentId,birthDate,academyId) VALUES (?,?,?,?,?,?,?)', [uid,d.name,d.email,'student',id,d.birthDate,d.academyId]);
         res.json({...d, id});
-    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
+    } catch(e) { console.error(e); res.status(500).json({message: "Error creating student"}); }
 });
 app.put('/api/students/:id', requireAuth, async (req, res) => {
     const d = req.body;
@@ -339,7 +330,7 @@ app.put('/api/students/:id', requireAuth, async (req, res) => {
         await db.query('UPDATE students SET name=?, email=?, birthDate=?, cpf=?, fjjpe_registration=?, phone=?, address=?, beltId=?, academyId=?, firstGraduationDate=?, paymentDueDateDay=?, stripes=?, isCompetitor=?, lastCompetition=?, medals=?, imageUrl=? WHERE id=?',
             [d.name,d.email,d.birthDate,d.cpf,d.fjjpe_registration,d.phone,d.address,d.beltId,d.academyId,d.firstGraduationDate,d.paymentDueDateDay,d.stripes,d.isCompetitor,d.lastCompetition,JSON.stringify(d.medals),d.imageUrl,req.params.id]);
         res.json(d);
-    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
+    } catch(e) { console.error(e); res.status(500).json({message: "Error updating student"}); }
 });
 app.post('/api/students/:id/payment', requireAuth, async (req, res) => {
     const { status, amount } = req.body;
@@ -347,25 +338,23 @@ app.post('/api/students/:id/payment', requireAuth, async (req, res) => {
         await db.query('UPDATE students SET paymentStatus=? WHERE id=?', [status, req.params.id]);
         if(status === 'paid') await db.query('INSERT INTO payment_history (id, studentId, date, amount) VALUES (?,?,?,?)', [uuidv4(), req.params.id, new Date(), amount]);
         res.json({success: true});
-    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
+    } catch(e) { console.error(e); res.status(500).json({message: "Error updating payment"}); }
 });
 app.delete('/api/students/:id', requireAuth, async (req, res) => {
     try {
         await db.query('DELETE FROM students WHERE id=?', [req.params.id]);
         await db.query('DELETE FROM users WHERE studentId=?', [req.params.id]);
         res.json({success: true});
-    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
+    } catch(e) { console.error(e); res.status(500).json({message: "Error deleting student"}); }
 });
 
 // Academies
 app.get('/api/academies', requireAuth, async (req, res) => {
+    console.log('[GET] /api/academies');
     try {
         const [rows] = await db.query('SELECT * FROM academies WHERE id != ?', ['master_admin_academy_01']);
         res.json(rows);
-    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
-});
-app.post('/api/academies', requireAuth, async (req, res) => {
-    res.status(501).json({message: "Use public register endpoint"});
+    } catch(e) { console.error(e); res.status(500).json({message: "Error fetching academies"}); }
 });
 app.put('/api/academies/:id', requireAuth, async (req, res) => {
     const d = req.body;
@@ -373,20 +362,22 @@ app.put('/api/academies/:id', requireAuth, async (req, res) => {
         await db.query('UPDATE academies SET name=?, address=?, responsible=?, responsibleRegistration=?, professorId=?, imageUrl=?, email=? WHERE id=?',
             [d.name,d.address,d.responsible,d.responsibleRegistration,d.professorId,d.imageUrl,d.email,req.params.id]);
         res.json(d);
-    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
+    } catch(e) { console.error(e); res.status(500).json({message: "Error updating academy"}); }
 });
 app.delete('/api/academies/:id', requireAuth, async (req, res) => {
     try {
         await db.query('DELETE FROM academies WHERE id=?', [req.params.id]);
         await db.query('DELETE FROM users WHERE academyId=?', [req.params.id]);
         res.json({success: true});
-    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
+    } catch(e) { console.error(e); res.status(500).json({message: "Error deleting academy"}); }
 });
 
 // Graduations
 app.get('/api/graduations', requireAuth, async (req, res) => {
-    const [rows] = await db.query('SELECT * FROM graduations');
-    res.json(rows);
+    try {
+        const [rows] = await db.query('SELECT * FROM graduations');
+        res.json(rows);
+    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
 });
 app.post('/api/graduations', requireAuth, async (req, res) => {
     const d = req.body; const id = uuidv4();
@@ -417,9 +408,11 @@ app.delete('/api/graduations/:id', requireAuth, async (req, res) => {
 
 // Schedules
 app.get('/api/schedules', requireAuth, async (req, res) => {
-    const [rows] = await db.query('SELECT cs.*, GROUP_CONCAT(sa.assistantId) as assistantIds FROM class_schedules cs LEFT JOIN schedule_assistants sa ON cs.id = sa.scheduleId GROUP BY cs.id');
-    rows.forEach(r => r.assistantIds = r.assistantIds ? r.assistantIds.split(',') : []);
-    res.json(rows);
+    try {
+        const [rows] = await db.query('SELECT cs.*, GROUP_CONCAT(sa.assistantId) as assistantIds FROM class_schedules cs LEFT JOIN schedule_assistants sa ON cs.id = sa.scheduleId GROUP BY cs.id');
+        rows.forEach(r => r.assistantIds = r.assistantIds ? r.assistantIds.split(',') : []);
+        res.json(rows);
+    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
 });
 app.post('/api/schedules', requireAuth, async (req, res) => {
     const d = req.body; const id = uuidv4();
@@ -447,8 +440,10 @@ app.delete('/api/schedules/:id', requireAuth, async (req, res) => {
 
 // Attendance
 app.get('/api/attendance', requireAuth, async (req, res) => {
-    const [rows] = await db.query('SELECT * FROM attendance_records');
-    res.json(rows);
+    try {
+        const [rows] = await db.query('SELECT * FROM attendance_records');
+        res.json(rows);
+    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
 });
 app.post('/api/attendance', requireAuth, async (req, res) => {
     const d = req.body; const id = uuidv4();
@@ -460,8 +455,10 @@ app.post('/api/attendance', requireAuth, async (req, res) => {
 
 // Professors
 app.get('/api/professors', requireAuth, async (req, res) => {
-    const [rows] = await db.query('SELECT * FROM professors');
-    res.json(rows);
+    try {
+        const [rows] = await db.query('SELECT * FROM professors');
+        res.json(rows);
+    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
 });
 app.post('/api/professors', requireAuth, async (req, res) => {
     const d = req.body; const id = uuidv4();
@@ -486,22 +483,30 @@ app.delete('/api/professors/:id', requireAuth, async (req, res) => {
 
 // Users & Logs & News
 app.get('/api/users', requireAuth, async (req, res) => {
-    const [rows] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users');
-    res.json(rows);
+    try {
+        const [rows] = await db.query('SELECT id, name, email, role, academyId, studentId, birthDate FROM users');
+        res.json(rows);
+    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
 });
 app.get('/api/logs', requireAuth, async (req, res) => {
-    const [rows] = await db.query('SELECT * FROM activity_logs ORDER BY timestamp DESC LIMIT 100');
-    res.json(rows);
+    try {
+        const [rows] = await db.query('SELECT * FROM activity_logs ORDER BY timestamp DESC LIMIT 100');
+        res.json(rows);
+    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
 });
 app.get('/api/news', requireAuth, async (req, res) => {
-    const [rows] = await db.query('SELECT * FROM news_articles');
-    res.json(rows);
+    try {
+        const [rows] = await db.query('SELECT * FROM news_articles');
+        res.json(rows);
+    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
 });
 
-// Settings
+// Settings Protected
 app.get('/api/settings/all', requireAuth, async (req, res) => {
-    const [[rows]] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
-    res.json(rows);
+    try {
+        const [[rows]] = await db.query('SELECT * FROM theme_settings WHERE id = 1');
+        res.json(rows);
+    } catch(e) { console.error(e); res.status(500).json({message: "Error"}); }
 });
 app.put('/api/settings', requireAuth, async (req, res) => {
     const d = req.body;
