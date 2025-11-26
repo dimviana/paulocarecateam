@@ -83,6 +83,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const handleApiError = useCallback((error: any, context: string) => {
     console.error(`API Error in ${context}:`, error);
+    // Ignore 401s here as they are handled globally via event listener
     if (error?.message?.includes('401') || error?.message?.includes('Não autenticado')) return;
 
     let message = 'Falha de Conexão';
@@ -97,9 +98,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const logout = useCallback(() => {
     localStorage.removeItem('currentUser');
     setUser(null);
+    // Optional: call api.logout() if backend needs to know, but it's stateless now
   }, []);
 
   const refetchData = useCallback(async (loggedInUser: User | null) => {
+      // STRICT GUARD: Never fetch data without a user
       if (!loggedInUser || !loggedInUser.id) return;
 
       try {
@@ -174,28 +177,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     `;
   }, [themeSettings]);
 
+  // --- INITIALIZATION ---
   useEffect(() => {
     const initializeApp = async () => {
         setLoading(true);
         try {
-            // 1. Get Settings
+            // 1. Always Try to load public settings
             try {
                 const settings = await api.getThemeSettings();
                 setThemeSettingsState(settings);
             } catch (error) {
-                console.warn("Could not load settings", error);
+                console.warn("Could not load settings (API might be down or CORS issue)", error);
             }
 
-            // 2. Check Local Storage
-            const storedUser = localStorage.getItem('currentUser');
-            if (storedUser) {
+            // 2. Check Local Storage for User
+            const storedUserStr = localStorage.getItem('currentUser');
+            if (storedUserStr) {
                 try {
-                    const parsedUser = JSON.parse(storedUser);
+                    const parsedUser = JSON.parse(storedUserStr);
                     if (parsedUser && parsedUser.id) {
                         setUser(parsedUser);
+                        // Only fetch data if we have a user
                         await refetchData(parsedUser);
                     }
                 } catch (e) {
+                    console.error("Invalid user in storage", e);
                     localStorage.removeItem('currentUser');
                 }
             }
@@ -222,7 +228,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       return false;
     } catch (error: any) {
-      // Pass explicit error message to Login component
       throw error;
     }
   };

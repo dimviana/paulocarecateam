@@ -6,11 +6,12 @@ const API_URL = '/api';
 /**
  * A generic wrapper around the Fetch API.
  * INJECTS USER ID FROM LOCAL STORAGE INTO HEADER.
+ * STATELESS: Does NOT use cookies (credentials: include removed).
  */
 async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_URL}${endpoint}`;
     
-    // Get current user from local storage to send ID
+    // Get current user from local storage to send ID header
     const storedUser = localStorage.getItem('currentUser');
     let userIdHeader: Record<string, string> = {};
     
@@ -31,7 +32,7 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         ...options.headers,
     };
     
-    // credentials: 'include' REMOVED. We are using headers now.
+    // credentials: 'include' IS REMOVED because we are using header-based stateless auth.
     const response = await fetch(url, { ...options, headers });
 
     if (!response.ok) {
@@ -79,7 +80,8 @@ export const api = {
       return fetchWrapper('/auth/logout', { method: 'POST' });
   },
 
-  // No server-side session validation anymore. Client manages state.
+  // No server-side session validation endpoint needed in stateless.
+  // We handle state locally.
   validateSession: async (): Promise<User | null> => {
       return null; 
   },
