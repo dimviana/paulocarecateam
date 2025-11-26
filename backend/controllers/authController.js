@@ -32,21 +32,38 @@ const generateRefreshToken = (user) => {
 };
 
 const getSession = async (req, res) => {
-    // Route is protected, so req.user is already populated by authMiddleware
-    try {
-        const db = getDb();
-        const userId = req.user.id;
-        
-        // Fetch fresh user data from DB to ensure role/status hasn't changed
-        const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [userId]);
-        
-        if (!user) return res.status(401).json({ user: null });
-        
-        res.json({ user });
-    } catch (e) {
-        console.error("Session check error:", e);
-        res.status(500).json({ user: null });
+    // Since this route is now PUBLIC, we must manually check for the token
+    // If token exists and is valid => return User
+    // If token missing or invalid => return { user: null } (HTTP 200)
+    
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+        return res.json({ user: null });
     }
+
+    jwt.verify(token, JWT_SECRET, async (err, decoded) => {
+        if (err) {
+            // Token invalid/expired - just say no user found, don't error out
+            return res.json({ user: null });
+        }
+
+        try {
+            const db = getDb();
+            const userId = decoded.id;
+            
+            // Fetch fresh user data
+            const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [userId]);
+            
+            if (!user) return res.json({ user: null });
+            
+            res.json({ user });
+        } catch (e) {
+            console.error("Session check error:", e);
+            res.status(500).json({ user: null });
+        }
+    });
 };
 
 const login = async (req, res) => {
