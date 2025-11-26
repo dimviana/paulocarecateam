@@ -208,15 +208,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 console.warn("Could not load public theme settings, using defaults.", error);
             }
 
-            // 2. Validate Session (Auth required)
-            // This call might return 401 if not logged in, which is expected.
+            // 2. Validate Session
             let validatedUser: User | null = null;
             try {
+                // Now this returns User | null, it doesn't throw 401 on failure
                 validatedUser = await api.validateSession();
             } catch (e) {
-                // If it's a 401/403, it just means the user isn't logged in.
-                // We swallow the error here so we don't trigger 'handleApiError' notifications.
-                // The user remains null.
+                console.warn("Session validation error:", e);
             }
 
             // 3. If user exists, fetch protected data

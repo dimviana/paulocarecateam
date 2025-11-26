@@ -188,21 +188,23 @@ app.get('/api/settings', async (req, res) => {
     }
 });
 
+// Rota de verificação de sessão: retorna o usuário se logado, ou null se não logado (sem erro 401)
 app.get('/api/auth/session', async (req, res) => {
     try {
         const cookies = parseCookies(req);
         const sessionId = cookies.sessionId;
         
         if (!sessionId) {
-            return res.status(401).json({ message: 'Sem sessão.' });
+            return res.json({ user: null }); // Não retorna 401 para evitar erro no console na inicialização
         }
 
         const user = await validateSession(sessionId);
         if (user) {
-            res.json(user);
+            res.json({ user });
         } else {
+            // Sessão inválida, limpa o cookie e retorna null
             res.clearCookie('sessionId');
-            res.status(401).json({ message: 'Sessão inválida.' });
+            res.json({ user: null });
         }
     } catch (error) {
         console.error("Auth session error:", error);
@@ -217,19 +219,37 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const cleanUsername = username.includes('@') ? username : username.replace(/\D/g, '');
         
+        // 1. Identificar o usuário na tabela users
         const [[user]] = await db.query(
-            'SELECT u.*, a.password as academy_password, s.password as student_password FROM users u LEFT JOIN academies a ON u.academyId = a.id LEFT JOIN students s ON u.studentId = s.id WHERE u.email = ? OR s.cpf = ?', 
+            'SELECT u.* FROM users u LEFT JOIN students s ON u.studentId = s.id WHERE u.email = ? OR s.cpf = ?', 
             [cleanUsername, cleanUsername]
         );
         
-        if (!user) return res.status(401).json({ message: 'Credenciais inválidas.' });
+        if (!user) return res.status(401).json({ message: 'Usuário não encontrado.' });
         
-        const passwordHash = user.role === 'student' ? user.student_password : user.academy_password;
-        
-        if (!passwordHash || !(await bcrypt.compare(password, passwordHash))) {
-            return res.status(401).json({ message: 'Credenciais inválidas.' });
+        let passwordHash = null;
+
+        // 2. Buscar a senha na tabela correta baseada no papel
+        if (user.role === 'student' && user.studentId) {
+             const [[student]] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
+             passwordHash = student?.password;
+        } else if (user.academyId) {
+             // Admins (general ou academy)
+             const [[academy]] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
+             passwordHash = academy?.password;
         }
 
+        if (!passwordHash) {
+             return res.status(401).json({ message: 'Credenciais inconsistentes.' });
+        }
+        
+        // 3. Validar senha
+        const isValid = await bcrypt.compare(password, passwordHash);
+        if (!isValid) {
+            return res.status(401).json({ message: 'Senha incorreta.' });
+        }
+
+        // 4. Criar sessão
         const { sessionId, expires } = await createSession(user);
 
         res.cookie('sessionId', sessionId, {
@@ -241,7 +261,7 @@ app.post('/api/auth/login', async (req, res) => {
         
         await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
         
-        const { academy_password, student_password, refreshToken, ...userResponse } = user;
+        const { refreshToken, ...userResponse } = user;
         res.json(userResponse);
     } catch (error) {
         console.error("Login error:", error);

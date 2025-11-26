@@ -71,7 +71,11 @@ export const api = {
       return fetchWrapper('/auth/logout', { method: 'POST' });
   },
 
-  validateSession: (): Promise<User> => fetchWrapper<User>('/auth/session'),
+  // Modified to handle the response { user: User | null } from backend
+  validateSession: async (): Promise<User | null> => {
+      const response = await fetchWrapper<{ user: User | null }>('/auth/session');
+      return response.user;
+  },
 
   registerAcademy: (data: { 
     name: string; 
