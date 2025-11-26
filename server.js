@@ -352,7 +352,8 @@ app.post('/api/auth/login', async (req, res) => {
             httpOnly: true,
             secure: false, 
             sameSite: 'Lax',
-            maxAge: 20 * 60 * 1000 // 20 minutes in milliseconds
+            maxAge: 20 * 60 * 1000, // 20 minutes in milliseconds
+            path: '/' // CRITICAL: Ensures cookie is sent to all routes
         });
         
         await logActivity(user.id, 'Login', 'Usuário logado com sucesso.');
@@ -392,7 +393,8 @@ app.post('/api/auth/google', async (req, res) => {
             httpOnly: true,
             secure: false, 
             sameSite: 'Lax',
-            maxAge: 20 * 60 * 1000 // 20 minutes
+            maxAge: 20 * 60 * 1000, // 20 minutes
+            path: '/'
         });
 
         await logActivity(user.id, 'Login Google', 'Login via Google realizado.');
@@ -442,7 +444,8 @@ app.post('/api/auth/register', async (req, res) => {
             httpOnly: true, 
             secure: false, 
             sameSite: 'Lax', 
-            maxAge: 20 * 60 * 1000 // 20 minutes
+            maxAge: 20 * 60 * 1000, // 20 minutes
+            path: '/'
         });
         res.status(201).json(newUser);
     } catch (error) {
@@ -461,7 +464,7 @@ app.post('/api/auth/logout', async (req, res) => {
     if (sessionId) {
         await destroySession(sessionId);
     }
-    res.clearCookie('sessionId');
+    res.clearCookie('sessionId', { path: '/' });
     res.json({ message: 'Logout realizado.' });
 });
 
