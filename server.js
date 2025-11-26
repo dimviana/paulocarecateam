@@ -28,6 +28,9 @@ if (!FRONTEND_URL) {
 // --- Express App Initialization ---
 const app = express();
 
+// Essential for Nginx Reverse Proxy
+app.set('trust proxy', 1);
+
 // --- Middleware ---
 const corsOptions = {
   origin: FRONTEND_URL,
@@ -48,10 +51,43 @@ async function connectToDatabase() {
     db = pool;
     console.log('Successfully connected to the MySQL database.');
     isDbConnected = true;
+    
+    // Ensure Master Admin Exists on startup
+    await ensureMasterAdmin();
   } catch (error) {
     console.error('FAILED TO CONNECT TO DATABASE:', error.message);
     isDbConnected = false;
   }
+}
+
+async function ensureMasterAdmin() {
+    try {
+        const email = 'androiddiviana@gmail.com';
+        // Check if user exists
+        const [[user]] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+        
+        if (!user) {
+            console.log('Seeding Master Admin...');
+            const academyId = 'master_admin_academy_01';
+            const userId = 'master_admin_user_01';
+            const passwordHash = await bcrypt.hash('dvsviana154', 10);
+            
+            // Create Academy
+            await db.query(`
+                INSERT INTO academies (id, name, email, password, responsible, responsibleRegistration)
+                VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE id=id
+            `, [academyId, 'Academia Master', email, passwordHash, 'Admin Geral', '000.000.000-00']);
+
+            // Create User
+            await db.query(`
+                INSERT INTO users (id, name, email, role, academyId)
+                VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE id=id
+            `, [userId, 'Admin Geral', email, 'general_admin', academyId]);
+            console.log('Master Admin created.');
+        }
+    } catch (e) {
+        console.error("Error seeding master admin:", e);
+    }
 }
 
 const checkDbConnection = (req, res, next) => {
@@ -79,7 +115,7 @@ const logActivity = async (actorId, action, details) => {
   }
 };
 
-// Robust Cookie Parser (Manual Implementation to avoid dependencies)
+// Robust Cookie Parser
 const parseCookies = (req) => {
     const list = {};
     const cookieHeader = req.headers?.cookie;
@@ -101,9 +137,12 @@ const createSession = async (user) => {
     // 20 minutes expiration
     const expires = new Date(Date.now() + 20 * 60 * 1000); 
     
+    // Format date for MySQL
+    const expiresStr = expires.toISOString().slice(0, 19).replace('T', ' ');
+
     await db.query(
         'INSERT INTO sessions (sessionId, userId, expires) VALUES (?, ?, ?)',
-        [sessionId, user.id, expires]
+        [sessionId, user.id, expiresStr]
     );
     return { sessionId, expires };
 };
@@ -125,7 +164,9 @@ const validateSession = async (sessionId) => {
 
     // Refresh session (Extend by 20 mins)
     const newExpires = new Date(now.getTime() + 20 * 60 * 1000);
-    await db.query('UPDATE sessions SET expires = ? WHERE sessionId = ?', [newExpires, sessionId]);
+    const newExpiresStr = newExpires.toISOString().slice(0, 19).replace('T', ' ');
+    
+    await db.query('UPDATE sessions SET expires = ? WHERE sessionId = ?', [newExpiresStr, sessionId]);
     
     // Get user details
     const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [session.userId]);
@@ -163,11 +204,12 @@ const requireAuth = async (req, res, next) => {
 };
 
 // =================================================================
-// --- FLATTENED ROUTES (Directly on app)
+// --- ROUTES (Flattened & Explicit)
 // =================================================================
 
 // --- 1. PUBLIC ROUTES ---
 
+// Public Settings
 app.get('/api/settings', async (req, res) => {
     try {
         const publicFields = 'logoUrl, systemName, primaryColor, secondaryColor, backgroundColor, cardBackgroundColor, buttonColor, buttonTextColor, iconColor, chartColor1, chartColor2, useGradient, theme, publicPageEnabled, heroHtml, aboutHtml, branchesHtml, footerHtml, customCss, customJs, socialLoginEnabled, googleClientId, facebookAppId, copyrightText, systemVersion, reminderDaysBeforeDue, overdueDaysAfterDue, monthlyFeeAmount';
@@ -188,21 +230,20 @@ app.get('/api/settings', async (req, res) => {
     }
 });
 
-// Rota de verificação de sessão: retorna o usuário se logado, ou null se não logado (sem erro 401)
+// Session Check
 app.get('/api/auth/session', async (req, res) => {
     try {
         const cookies = parseCookies(req);
         const sessionId = cookies.sessionId;
         
         if (!sessionId) {
-            return res.json({ user: null }); // Não retorna 401 para evitar erro no console na inicialização
+            return res.json({ user: null });
         }
 
         const user = await validateSession(sessionId);
         if (user) {
             res.json({ user });
         } else {
-            // Sessão inválida, limpa o cookie e retorna null
             res.clearCookie('sessionId');
             res.json({ user: null });
         }
@@ -212,6 +253,7 @@ app.get('/api/auth/session', async (req, res) => {
     }
 });
 
+// Login
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ message: 'Email/CPF e senha são obrigatórios.' });
@@ -219,7 +261,7 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const cleanUsername = username.includes('@') ? username : username.replace(/\D/g, '');
         
-        // 1. Identificar o usuário na tabela users
+        // 1. Identify User
         const [[user]] = await db.query(
             'SELECT u.* FROM users u LEFT JOIN students s ON u.studentId = s.id WHERE u.email = ? OR s.cpf = ?', 
             [cleanUsername, cleanUsername]
@@ -229,12 +271,11 @@ app.post('/api/auth/login', async (req, res) => {
         
         let passwordHash = null;
 
-        // 2. Buscar a senha na tabela correta baseada no papel
+        // 2. Get Password Hash
         if (user.role === 'student' && user.studentId) {
              const [[student]] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
              passwordHash = student?.password;
         } else if (user.academyId) {
-             // Admins (general ou academy)
              const [[academy]] = await db.query('SELECT password FROM academies WHERE id = ?', [user.academyId]);
              passwordHash = academy?.password;
         }
@@ -243,18 +284,18 @@ app.post('/api/auth/login', async (req, res) => {
              return res.status(401).json({ message: 'Credenciais inconsistentes.' });
         }
         
-        // 3. Validar senha
+        // 3. Validate Password
         const isValid = await bcrypt.compare(password, passwordHash);
         if (!isValid) {
             return res.status(401).json({ message: 'Senha incorreta.' });
         }
 
-        // 4. Criar sessão
+        // 4. Create Session
         const { sessionId, expires } = await createSession(user);
 
         res.cookie('sessionId', sessionId, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production', 
+            secure: false, // DISABLED SECURE TO FIX "NO COOKIE" ERROR IN MIXED ENVIRONMENTS
             sameSite: 'Lax',
             expires
         });
@@ -269,6 +310,47 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// Google Login
+app.post('/api/auth/google', async (req, res) => {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ message: 'Token is required' });
+
+    try {
+        // Verify token with Google
+        const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${token}`);
+        if (!response.ok) throw new Error('Invalid Google Token');
+        
+        const payload = await response.json();
+        const email = payload.email;
+
+        // Find user by email
+        const [[user]] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+
+        if (!user) {
+            return res.status(404).json({ message: 'USER_NOT_FOUND' });
+        }
+
+        // Create Session
+        const { sessionId, expires } = await createSession(user);
+
+        res.cookie('sessionId', sessionId, {
+            httpOnly: true,
+            secure: false, // Disabled for compatibility
+            sameSite: 'Lax',
+            expires
+        });
+
+        await logActivity(user.id, 'Login Google', 'Login via Google realizado.');
+        const { refreshToken, ...userResponse } = user;
+        res.json(userResponse);
+
+    } catch (error) {
+        console.error("Google Auth Error:", error);
+        res.status(401).json({ message: 'Falha na autenticação Google.' });
+    }
+});
+
+// Register
 app.post('/api/auth/register', async (req, res) => {
     const { name, address, responsible, responsibleRegistration, email, password } = req.body;
     if (!name || !responsible || !email || !password) return res.status(400).json({ message: 'Dados incompletos.' });
@@ -296,7 +378,7 @@ app.post('/api/auth/register', async (req, res) => {
 
         res.cookie('sessionId', sessionId, { 
             httpOnly: true, 
-            secure: process.env.NODE_ENV === 'production', 
+            secure: false, 
             sameSite: 'Lax', 
             expires 
         });
@@ -310,25 +392,31 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
+// Logout
 app.post('/api/auth/logout', async (req, res) => {
     const cookies = parseCookies(req);
     const sessionId = cookies.sessionId;
     if (sessionId) {
         await destroySession(sessionId);
     }
-    res.clearCookie('sessionId').json({ message: 'Logout realizado.' });
+    res.clearCookie('sessionId');
+    res.json({ message: 'Logout realizado.' });
 });
 
 // --- 2. PROTECTED ROUTES (Require Auth) ---
+
+// -- READ (GET) --
 
 app.get('/api/students', requireAuth, async (req, res) => {
     try {
         const [students] = await db.query('SELECT * FROM students');
         const [payments] = await db.query('SELECT * FROM payment_history ORDER BY `date` DESC');
+        
         const paymentsByStudent = payments.reduce((acc, p) => {
             (acc[p.studentId] = acc[p.studentId] || []).push(p);
             return acc;
         }, {});
+
         students.forEach(s => {
             s.paymentHistory = paymentsByStudent[s.id] || [];
             try { s.medals = JSON.parse(s.medals); } catch (e) { s.medals = { gold: 0, silver: 0, bronze: 0 }; }
@@ -402,7 +490,7 @@ app.get('/api/settings/all', requireAuth, async (req, res) => {
     } catch (e) { console.error(e); res.status(500).json({ message: "Erro ao buscar configurações completas." }); }
 });
 
-// --- Write Operations Handlers (Defined explicitly) ---
+// -- WRITE (POST/PUT) --
 
 app.put('/api/settings', requireAuth, async (req, res) => {
     if (req.user.role !== 'general_admin') return res.status(403).json({ message: "Acesso negado." });
@@ -447,6 +535,7 @@ const saveStudent = async (req, res) => {
 
 app.post('/api/students', requireAuth, saveStudent);
 app.put('/api/students/:id', requireAuth, saveStudent);
+
 app.post('/api/students/:studentId/payment', requireAuth, async (req, res) => {
     const { status, amount } = req.body;
     await db.query('UPDATE students SET paymentStatus = ? WHERE id = ?', [status, req.params.studentId]);
@@ -552,7 +641,7 @@ app.post('/api/attendance', requireAuth, async (req, res) => {
     } catch(e) { res.status(500).json({message: 'Erro ao salvar presença'}); }
 });
 
-// --- Delete Handlers (Explicit) ---
+// -- DELETE --
 
 const genericDelete = (tableName, beforeDelete) => async (req, res) => {
     const { id } = req.params;
