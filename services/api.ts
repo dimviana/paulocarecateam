@@ -2,7 +2,6 @@ import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, Attenda
 
 const API_URL = '/api';
 
-// Helper interface for Login response
 interface LoginResponse {
     user: User;
     token: string;
@@ -11,7 +10,7 @@ interface LoginResponse {
 
 /**
  * A generic wrapper around the Fetch API.
- * STATELESS: Uses Bearer Token in headers (JWT).
+ * IMPLEMENTS: Armazenamento e Envio do JWT.
  */
 async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_URL}${endpoint}`;
@@ -21,16 +20,16 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         ...options.headers,
     };
     
-    // Get token from LocalStorage
-    let token = localStorage.getItem('authToken');
+    // 2. ARMAZENAMENTO (Recuperação)
+    const token = localStorage.getItem('authToken');
     
-    // Check if we should attach the token.
-    // We explicitly SKIP the token for the public settings endpoint to prevent 401 errors
-    // if the token is expired when the app initializes.
-    // NOTE: /auth/session IS sent the token so the backend can validate it.
+    // Regra de negócio: Não enviar token para endpoints públicos para evitar falsos 401
+    // Mas envia para /auth/session para validação.
     const isPublicEndpoint = endpoint === '/settings' || endpoint === '/auth/login' || endpoint === '/auth/refresh';
     
     if (!isPublicEndpoint && token && token !== 'undefined' && token !== 'null') {
+        // 3. REQUISIÇÃO SUBSEQUENTE
+        // Anexa o JWT no cabeçalho Authorization
         headers['Authorization'] = `Bearer ${token}`;
     }
     
@@ -39,15 +38,13 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         headers
     });
 
-    // Handle Token Expiration (403 Forbidden usually, but sometimes 401)
+    // Lógica de Refresh Token (extensão do padrão básico)
     if (response.status === 403 || response.status === 401) {
-        // Prevent infinite loop
         if (endpoint === '/auth/refresh' || endpoint === '/auth/login') {
              window.dispatchEvent(new Event('session-expired'));
              throw new Error("Session expired");
         }
 
-        // Try to refresh
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
             try {
@@ -61,11 +58,10 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
                     const data = await refreshResponse.json();
                     localStorage.setItem('authToken', data.token);
                     
-                    // Retry original request with new token
+                    // Retry with new token
                     const newHeaders = { ...headers, 'Authorization': `Bearer ${data.token}` };
                     response = await fetch(url, { ...options, headers: newHeaders });
                 } else {
-                    // Refresh failed
                     throw new Error("Refresh failed");
                 }
             } catch (e) {
@@ -73,9 +69,6 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
                 throw new Error("Session expired");
             }
         } else {
-             // No refresh token available. 
-             // Only trigger logout if it's NOT the session check (which handles null gracefully)
-             // and NOT public endpoints.
              if (!isPublicEndpoint && endpoint !== '/auth/session') {
                  window.dispatchEvent(new Event('session-expired'));
              }
@@ -110,6 +103,8 @@ export const api = {
         }),
     });
     
+    // 2. ARMAZENAMENTO (Escrita)
+    // Armazena o token recebido do servidor
     if (response.token) {
         localStorage.setItem('authToken', response.token);
         if (response.refreshToken) localStorage.setItem('refreshToken', response.refreshToken);
@@ -149,19 +144,11 @@ export const api = {
           const response = await fetchWrapper<{user: User | null}>('/auth/session');
           return response.user;
       } catch (e) {
-          // If 403/401 happened and refresh failed, we assume invalid.
           return null;
       }
   },
 
-  registerAcademy: async (data: { 
-    name: string; 
-    address: string;
-    responsible: string;
-    responsibleRegistration: string;
-    email: string; 
-    password?: string; 
-  }): Promise<User> => {
+  registerAcademy: async (data: any): Promise<User> => {
     const response = await fetchWrapper<LoginResponse>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -174,6 +161,7 @@ export const api = {
     return response.user;
   },
 
+  // Endpoints protegidos (wrapper anexa o token automaticamente)
   getStudents: (): Promise<Student[]> => fetchWrapper<Student[]>('/students'),
   getAcademies: (): Promise<Academy[]> => fetchWrapper<Academy[]>('/academies'),
   getUsers: (): Promise<User[]> => fetchWrapper<User[]>('/users'),
@@ -191,7 +179,7 @@ export const api = {
     });
   },
   
-  saveStudent: (student: Omit<Student, 'id' | 'paymentStatus' | 'lastSeen' | 'paymentHistory'> & { id?: string }): Promise<Student> => {
+  saveStudent: (student: any): Promise<Student> => {
     const isNew = !student.id;
     const url = isNew ? '/students' : `/students/${student.id}`;
     const method = isNew ? 'POST' : 'PUT';
@@ -203,7 +191,7 @@ export const api = {
     return { success: true };
   },
 
-  saveAcademy: (academy: Omit<Academy, 'id'> & { id?: string }): Promise<Academy> => {
+  saveAcademy: (academy: any): Promise<Academy> => {
     const isNew = !academy.id;
     const url = isNew ? '/academies' : `/academies/${academy.id}`;
     const method = isNew ? 'POST' : 'PUT';
@@ -215,14 +203,14 @@ export const api = {
     return { success: true };
   },
 
-  saveGraduation: (grad: Omit<Graduation, 'id'> & { id?: string }): Promise<Graduation> => {
+  saveGraduation: (grad: any): Promise<Graduation> => {
     const isNew = !grad.id;
     const url = isNew ? '/graduations' : `/graduations/${grad.id}`;
     const method = isNew ? 'POST' : 'PUT';
     return fetchWrapper<Graduation>(url, { method, body: JSON.stringify(grad) });
   },
   
-  updateGraduationRanks: async (gradsWithNewRanks: { id: string, rank: number }[]): Promise<{ success: boolean }> => {
+  updateGraduationRanks: async (gradsWithNewRanks: any): Promise<{ success: boolean }> => {
     await fetchWrapper('/graduations/ranks', {
         method: 'PUT',
         body: JSON.stringify(gradsWithNewRanks),
@@ -235,7 +223,7 @@ export const api = {
     return { success: true };
   },
 
-  saveSchedule: (schedule: Omit<ClassSchedule, 'id'> & { id?: string }): Promise<ClassSchedule> => {
+  saveSchedule: (schedule: any): Promise<ClassSchedule> => {
     const isNew = !schedule.id;
     const url = isNew ? '/schedules' : `/schedules/${schedule.id}`;
     const method = isNew ? 'POST' : 'PUT';
@@ -247,7 +235,7 @@ export const api = {
     return { success: true };
   },
   
-  saveAttendanceRecord: (record: Omit<AttendanceRecord, 'id'> & { id?: string }): Promise<AttendanceRecord> => {
+  saveAttendanceRecord: (record: any): Promise<AttendanceRecord> => {
     return fetchWrapper<AttendanceRecord>('/attendance', {
         method: 'POST',
         body: JSON.stringify(record),
@@ -259,7 +247,7 @@ export const api = {
     return { success: true };
   },
 
-  saveProfessor: (prof: Omit<Professor, 'id'> & { id?: string }): Promise<Professor> => {
+  saveProfessor: (prof: any): Promise<Professor> => {
     const isNew = !prof.id;
     const url = isNew ? '/professors' : `/professors/${prof.id}`;
     const method = isNew ? 'POST' : 'PUT';

@@ -5,7 +5,8 @@ const { getDb } = require('../config/db');
 
 const { JWT_SECRET } = process.env;
 
-// Generate Access Token (Short lived: 15m)
+// 1. GERAÇÃO DE TOKEN (Server-side)
+// Cria um token assinado contendo as informações do usuário (payload)
 const generateAccessToken = (user) => {
     return jwt.sign(
         { 
@@ -17,11 +18,10 @@ const generateAccessToken = (user) => {
             name: user.name
         }, 
         JWT_SECRET, 
-        { expiresIn: '15m' } 
+        { expiresIn: '15m' } // Expiração curta para segurança
     );
 };
 
-// Generate Refresh Token (Long lived: 7d)
 const generateRefreshToken = (user) => {
     return jwt.sign(
         { id: user.id },
@@ -31,37 +31,28 @@ const generateRefreshToken = (user) => {
 };
 
 const getSession = async (req, res) => {
-    // Public endpoint with manual token verification
-    // Always returns 200 OK with { user: Object | null }
-    
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
         return res.json({ user: null });
     }
 
     try {
-        // Verify token synchronously.
+        // 4. VALIDAÇÃO DA ASSINATURA E EXPIRAÇÃO
+        // Verifica se o token foi assinado por nós e se ainda é válido
         const decoded = jwt.verify(token, JWT_SECRET);
         const userId = decoded.id;
 
         const db = getDb();
-        
-        // Fetch fresh user data
-        const [[user]] = await db.query(
-            'SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', 
-            [userId]
-        );
+        const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [userId]);
         
         if (!user) {
             return res.json({ user: null });
         }
         
         res.json({ user });
-
     } catch (e) {
-        // Token invalid, expired, or DB error - return null session without error status
         return res.json({ user: null });
     }
 };
@@ -73,10 +64,8 @@ const login = async (req, res) => {
 
     try {
         const db = getDb();
-        // Allow login via Email or CPF (clean non-digits for CPF check)
         const cleanUsername = username.includes('@') ? username : username.replace(/\D/g, '');
         
-        // Search in Users table. 
         const [[user]] = await db.query(
             `SELECT u.* 
              FROM users u 
@@ -87,35 +76,24 @@ const login = async (req, res) => {
         
         if (!user) return res.status(401).json({ message: 'Usuário não encontrado.' });
 
-        // Retrieve password hash based on role
         let passwordHash = null;
         
-        if (user.role === 'student') {
-             if (!user.studentId) return res.status(500).json({ message: 'Perfil de aluno desvinculado.' });
-             
+        if (user.role === 'student' && user.studentId) {
              const [[student]] = await db.query('SELECT password FROM students WHERE id = ?', [user.studentId]);
-             if (!student) return res.status(401).json({ message: 'Registro de aluno não encontrado.' });
-             
-             passwordHash = student.password;
+             passwordHash = student?.password;
         } else if (user.role === 'academy_admin' || user.role === 'general_admin') {
              const [[academy]] = await db.query('SELECT password FROM academies WHERE email = ?', [user.email]);
-             
-             if (!academy) {
-                 return res.status(401).json({ message: 'Registro de academia não encontrado.' });
-             }
-             
-             passwordHash = academy.password;
+             passwordHash = academy?.password;
         }
 
         if (!passwordHash || !(await bcrypt.compare(password, passwordHash))) {
             return res.status(401).json({ message: 'Senha incorreta.' });
         }
 
-        // Generate Tokens
+        // Gera o JWT após autenticação bem-sucedida
         const accessToken = generateAccessToken(user);
         const refreshToken = generateRefreshToken(user);
 
-        // Save Refresh Token to DB
         await db.query('UPDATE users SET refreshToken = ? WHERE id = ?', [refreshToken, user.id]);
 
         const userData = { 
@@ -127,6 +105,7 @@ const login = async (req, res) => {
             studentId: user.studentId 
         };
 
+        // Envia o token para o cliente
         res.json({ user: userData, token: accessToken, refreshToken });
 
     } catch (e) {
@@ -156,7 +135,6 @@ const refreshToken = async (req, res) => {
 };
 
 const register = async (req, res) => {
-    console.log('[POST] /api/auth/register');
     const { name, address, responsible, responsibleRegistration, email, password, professorId, imageUrl } = req.body;
     
     if (!email || !password || !name) return res.status(400).json({ message: 'Campos obrigatórios faltando.' });
@@ -194,7 +172,6 @@ const register = async (req, res) => {
 
     } catch (e) { 
         await conn.rollback(); 
-        console.error(e);
         res.status(500).json({ message: 'Erro no cadastro.' }); 
     } finally { conn.release(); }
 };
