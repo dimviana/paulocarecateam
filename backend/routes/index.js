@@ -8,20 +8,30 @@ const dataController = require('../controllers/dataController');
 
 const router = express.Router();
 
-// --- PUBLIC ROUTES ---
+// ==============================================================================
+// PUBLIC ROUTES (No Authentication Required)
+// ==============================================================================
+
+// Settings (Required for Login Page)
 router.get('/settings', settingsController.getPublicSettings);
+
+// Authentication
 router.get('/auth/session', authController.getSession);
 router.post('/auth/login', authController.login);
 router.post('/auth/register', authController.register);
 router.post('/auth/logout', authController.logout);
 router.post('/auth/google', (req, res) => res.status(501).json({message: "Not configured"}));
 
-// --- AUTHENTICATION BARRIER ---
+// ==============================================================================
+// AUTHENTICATION BARRIER
+// ==============================================================================
 router.use(requireAuth);
 
-// --- PROTECTED ROUTES ---
+// ==============================================================================
+// PROTECTED ROUTES (Require Valid Token)
+// ==============================================================================
 
-// Settings
+// Settings (Protected)
 router.get('/settings/all', settingsController.getAllSettings);
 router.put('/settings', settingsController.updateSettings);
 
@@ -40,7 +50,7 @@ router.delete('/academies/:id', dataController.deleteAcademy);
 // Graduations
 router.get('/graduations', dataController.getGraduations);
 router.post('/graduations', dataController.createGraduation);
-router.put('/graduations/ranks', dataController.updateGraduationRanks);
+router.put('/graduations/ranks', dataController.updateGraduationRanks); // Must be before :id
 router.put('/graduations/:id', dataController.updateGraduation);
 router.delete('/graduations/:id', dataController.deleteGraduation);
 
@@ -65,9 +75,9 @@ router.get('/users', dataController.getUsers);
 router.get('/logs', dataController.getLogs);
 router.get('/news', dataController.getNews);
 
-// 404 for API
+// 404 for Unknown API Routes
 router.use('/*', (req, res) => {
-    console.log(`[404] Route not found: ${req.originalUrl}`);
+    console.log(`[404] API Route not found: ${req.originalUrl}`);
     res.status(404).json({ message: `API endpoint ${req.originalUrl} not found` });
 });
 

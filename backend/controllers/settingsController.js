@@ -8,8 +8,15 @@ const getPublicSettings = async (req, res) => {
         const [rows] = await db.query(`SELECT * FROM theme_settings WHERE id = 1`);
         res.json(rows[0] || {});
     } catch (e) { 
-        console.error(e);
-        res.status(500).json({message: "Failed settings"}); 
+        console.error("Error fetching settings:", e);
+        // Fallback to prevent app crash on init
+        res.json({
+            systemName: 'Jiu-Jitsu Hub',
+            primaryColor: '#f59e0b',
+            secondaryColor: '#111827',
+            logoUrl: 'https://tailwindui.com/img/logos/mark.svg?color=amber&shade=500',
+            publicPageEnabled: true
+        }); 
     }
 };
 

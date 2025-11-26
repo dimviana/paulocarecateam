@@ -17,14 +17,14 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
     
     // Get token from LocalStorage and attach to header
     const token = localStorage.getItem('authToken');
-    if (token) {
+    // Strict check to ensure we don't send invalid token strings
+    if (token && token !== 'undefined' && token !== 'null' && token.length > 10) {
         headers['Authorization'] = `Bearer ${token}`;
     }
     
     const response = await fetch(url, { 
         ...options, 
         headers
-        // credentials: 'include' removed as we are using JWT Headers now
     });
 
     if (!response.ok) {
@@ -37,7 +37,10 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
         }
         
         if (response.status === 401 || response.status === 403) {
-            window.dispatchEvent(new Event('session-expired'));
+            // Don't trigger global logout if it's just the settings endpoint failing
+            if (!endpoint.includes('/settings')) {
+                window.dispatchEvent(new Event('session-expired'));
+            }
         }
         
         throw new Error(errorMessage);
@@ -94,7 +97,7 @@ export const api = {
 
   validateSession: async (): Promise<User | null> => {
       const token = localStorage.getItem('authToken');
-      if (!token) return null;
+      if (!token || token === 'undefined' || token === 'null') return null;
 
       try {
           const response = await fetchWrapper<{user: User | null}>('/auth/session');
