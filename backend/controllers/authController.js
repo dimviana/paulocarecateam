@@ -32,7 +32,7 @@ const generateRefreshToken = (user) => {
 
 const getSession = async (req, res) => {
     // Public endpoint with manual token verification
-    // Returns { user: Object } if valid, { user: null } if not.
+    // Always returns 200 OK with { user: Object | null }
     
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
@@ -42,7 +42,7 @@ const getSession = async (req, res) => {
     }
 
     try {
-        // Verify token synchronously. If invalid/expired, it throws an error.
+        // Verify token synchronously.
         const decoded = jwt.verify(token, JWT_SECRET);
         const userId = decoded.id;
 
@@ -61,8 +61,7 @@ const getSession = async (req, res) => {
         res.json({ user });
 
     } catch (e) {
-        // Token invalid, expired, or DB error
-        // console.log("Session verification failed:", e.message); // Optional debug
+        // Token invalid, expired, or DB error - return null session without error status
         return res.json({ user: null });
     }
 };
@@ -99,7 +98,6 @@ const login = async (req, res) => {
              
              passwordHash = student.password;
         } else if (user.role === 'academy_admin' || user.role === 'general_admin') {
-             // Admins verify against academies table using the email
              const [[academy]] = await db.query('SELECT password FROM academies WHERE email = ?', [user.email]);
              
              if (!academy) {
@@ -109,7 +107,6 @@ const login = async (req, res) => {
              passwordHash = academy.password;
         }
 
-        // Verify Password
         if (!passwordHash || !(await bcrypt.compare(password, passwordHash))) {
             return res.status(401).json({ message: 'Senha incorreta.' });
         }
@@ -144,14 +141,11 @@ const refreshToken = async (req, res) => {
 
     try {
         const db = getDb();
-        // Validate Refresh Token existence in DB
         const [[user]] = await db.query('SELECT * FROM users WHERE refreshToken = ?', [refreshToken]);
         if (!user) return res.status(403).json({ message: "Invalid Refresh Token" });
 
         jwt.verify(refreshToken, JWT_SECRET, async (err, decoded) => {
             if (err) return res.status(403).json({ message: "Expired Refresh Token" });
-            
-            // Generate new Access Token
             const accessToken = generateAccessToken(user);
             res.json({ token: accessToken });
         });

@@ -7,17 +7,19 @@ const dataController = require('../controllers/dataController');
 
 const router = express.Router();
 
+console.log('Initializing API Routes...');
+
 // ==============================================================================
 // PUBLIC ROUTES (No Authentication Required)
 // ==============================================================================
-// These routes MUST be defined before 'router.use(requireAuth)'
 
-// Settings (Required for Login Page & Public Page)
+// 1. Session Check (Must be first to allow app initialization)
+router.get('/auth/session', authController.getSession); 
+
+// 2. Settings (Required for Login Page)
 router.get('/settings', settingsController.getPublicSettings);
 
-// Authentication Public Endpoints
-// /auth/session is public so the frontend can check "am I logged in?" without triggering a 401 error if not.
-router.get('/auth/session', authController.getSession); 
+// 3. Authentication Actions
 router.post('/auth/login', authController.login);
 router.post('/auth/register', authController.register);
 router.post('/auth/refresh', authController.refreshToken); 
