@@ -1,4 +1,3 @@
-
 const express = require('express');
 const { requireAuth } = require('../middleware/authMiddleware');
 const authController = require('../controllers/authController');
@@ -17,7 +16,8 @@ const router = express.Router();
 router.get('/settings', settingsController.getPublicSettings);
 
 // Authentication Public Endpoints
-router.get('/auth/session', authController.getSession); // Now public to allow "soft" auth check
+// /auth/session is public so the frontend can check "am I logged in?" without triggering a 401 error if not.
+router.get('/auth/session', authController.getSession); 
 router.post('/auth/login', authController.login);
 router.post('/auth/register', authController.register);
 router.post('/auth/refresh', authController.refreshToken); 

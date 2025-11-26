@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { ThemeSettings, User, Student, Academy, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog, NewsArticle } from '../types';
 import { initialThemeSettings } from '../constants';
@@ -240,15 +239,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   
   const login = async (email: string, password: string) => {
     try {
-      const loggedInUser = await api.login(email, password);
-      if (loggedInUser) {
-        // Important: Set User AND await data fetch before returning true
-        // This ensures Login.tsx waits for data before redirecting
-        setUser(loggedInUser);
-        await refetchData(loggedInUser);
+      // 1. Perform Login (Server checks credentials and returns tokens)
+      // api.login saves the tokens to localStorage automatically
+      await api.login(email, password);
+      
+      // 2. Verify Session with the new token
+      // This ensures the token is correctly stored and accepted by the backend
+      const validatedUser = await api.validateSession();
+      
+      if (validatedUser) {
+        // 3. Set User State & Fetch Data
+        // This triggers the <Navigate> in Login.tsx
+        setUser(validatedUser);
+        await refetchData(validatedUser);
         return true;
+      } else {
+        // If validation failed immediately after login (shouldn't happen)
+        throw new Error("Falha ao validar sessão após login.");
       }
-      return false;
     } catch (error: any) {
       throw error;
     }
@@ -256,10 +264,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const loginGoogle = async (token: string) => {
     try {
-      const loggedInUser = await api.loginGoogle(token);
-      if (loggedInUser) {
-        setUser(loggedInUser);
-        await refetchData(loggedInUser);
+      await api.loginGoogle(token);
+      const validatedUser = await api.validateSession();
+      
+      if (validatedUser) {
+        setUser(validatedUser);
+        await refetchData(validatedUser);
         return true;
       }
       return false;

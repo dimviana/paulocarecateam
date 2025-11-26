@@ -1,4 +1,3 @@
-
 import { Student, Academy, User, NewsArticle, Graduation, ClassSchedule, AttendanceRecord, Professor, ActivityLog, ThemeSettings } from '../types';
 
 const API_URL = '/api';
@@ -28,6 +27,7 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
     // Check if we should attach the token.
     // We explicitly SKIP the token for the public settings endpoint to prevent 401 errors
     // if the token is expired when the app initializes.
+    // NOTE: /auth/session IS sent the token so the backend can validate it.
     const isPublicEndpoint = endpoint === '/settings' || endpoint === '/auth/login' || endpoint === '/auth/refresh';
     
     if (!isPublicEndpoint && token && token !== 'undefined' && token !== 'null') {
@@ -73,8 +73,10 @@ async function fetchWrapper<T>(endpoint: string, options: RequestInit = {}): Pro
                 throw new Error("Session expired");
             }
         } else {
-             // No refresh token available
-             if (!isPublicEndpoint) {
+             // No refresh token available. 
+             // Only trigger logout if it's NOT the session check (which handles null gracefully)
+             // and NOT public endpoints.
+             if (!isPublicEndpoint && endpoint !== '/auth/session') {
                  window.dispatchEvent(new Event('session-expired'));
              }
         }
@@ -147,8 +149,7 @@ export const api = {
           const response = await fetchWrapper<{user: User | null}>('/auth/session');
           return response.user;
       } catch (e) {
-          // If 403/401 happened, fetchWrapper might have tried to refresh. 
-          // If it still fails, we assume invalid.
+          // If 403/401 happened and refresh failed, we assume invalid.
           return null;
       }
   },
