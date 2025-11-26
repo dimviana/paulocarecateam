@@ -238,20 +238,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   
   const login = async (email: string, password: string) => {
     try {
-      // 1. Perform Login (Server checks credentials and returns tokens)
+      // 1. Perform Login
       await api.login(email, password);
       
-      // 2. Verify Session
+      // 2. Small delay to ensure token persistence in some envs
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // 3. Verify Session
       const validatedUser = await api.validateSession();
       
       if (validatedUser) {
-        // 3. Fetch Data FIRST
+        // 4. Fetch Data
         await refetchData(validatedUser);
-        
-        // 4. Set User State LAST (This triggers the redirect)
+        // 5. Update State (Redirects)
         setUser(validatedUser);
         return true;
       } else {
+        // If validation fails, we throw to show error on UI
         throw new Error("Falha ao validar sessão após login.");
       }
     } catch (error: any) {

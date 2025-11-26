@@ -41,26 +41,30 @@ const getSession = async (req, res) => {
         return res.json({ user: null });
     }
 
-    jwt.verify(token, JWT_SECRET, async (err, decoded) => {
-        if (err) {
+    try {
+        // Verify token synchronously. If invalid/expired, it throws an error.
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const userId = decoded.id;
+
+        const db = getDb();
+        
+        // Fetch fresh user data
+        const [[user]] = await db.query(
+            'SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', 
+            [userId]
+        );
+        
+        if (!user) {
             return res.json({ user: null });
         }
+        
+        res.json({ user });
 
-        try {
-            const db = getDb();
-            const userId = decoded.id;
-            
-            // Fetch fresh user data
-            const [[user]] = await db.query('SELECT id, name, email, role, academyId, studentId FROM users WHERE id = ?', [userId]);
-            
-            if (!user) return res.json({ user: null });
-            
-            res.json({ user });
-        } catch (e) {
-            console.error("Session check error:", e);
-            res.status(500).json({ user: null });
-        }
-    });
+    } catch (e) {
+        // Token invalid, expired, or DB error
+        // console.log("Session verification failed:", e.message); // Optional debug
+        return res.json({ user: null });
+    }
 };
 
 const login = async (req, res) => {
@@ -74,7 +78,6 @@ const login = async (req, res) => {
         const cleanUsername = username.includes('@') ? username : username.replace(/\D/g, '');
         
         // Search in Users table. 
-        // Join with students table to allow lookup by CPF even if user table only has email.
         const [[user]] = await db.query(
             `SELECT u.* 
              FROM users u 
@@ -100,7 +103,6 @@ const login = async (req, res) => {
              const [[academy]] = await db.query('SELECT password FROM academies WHERE email = ?', [user.email]);
              
              if (!academy) {
-                 // Fallback safety check
                  return res.status(401).json({ message: 'Registro de academia não encontrado.' });
              }
              
